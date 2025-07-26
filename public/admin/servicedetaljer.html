@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <title>Servicedetaljer</title>
+    <link rel="stylesheet" href="/admin/assets/css/admin.css">
+</head>
+<body style="padding: 30px;">
+    <h1>Servicedetaljer</h1>
+    <p>Denne siden vil vise detaljer for en spesifikk service.</p>
+    <p><a href="/admin/kunder.html">Tilbake til kundeoversikten</a></p>
+    <script>
+        const orderId = new URLSearchParams(window.location.search).get('id');
+        document.querySelector('h1').textContent += ` for Ordre: ${orderId}`;
+    </script>
+</body>
+</html>

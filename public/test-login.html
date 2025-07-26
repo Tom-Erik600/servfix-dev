@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ServiFix Login Test</title>
+    <style>
+        body { font-family: Arial; max-width: 400px; margin: 50px auto; }
+        input, button { display: block; width: 100%; margin: 10px 0; padding: 10px; }
+        #result { margin-top: 20px; padding: 10px; background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h1>ServiFix Login Test</h1>
+    
+    <input type="text" id="initials" placeholder="Initialer (f.eks TT)" value="TT">
+    <input type="password" id="password" placeholder="Passord" value="test123">
+    <input type="text" id="tenant" placeholder="Tenant (f.eks airtech)" value="airtech">
+    
+    <button onclick="login()">Logg inn</button>
+    <button onclick="checkAuth()">Sjekk auth</button>
+    <button onclick="getOrders()">Hent ordrer</button>
+    
+    <div id="result"></div>
+
+    <script>
+        const API = 'http://localhost:3000/api';
+        
+        async function login() {
+            const response = await fetch(`${API}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    initials: document.getElementById('initials').value,
+                    password: document.getElementById('password').value,
+                    tenantId: document.getElementById('tenant').value
+                })
+            });
+            
+            const data = await response.json();
+            document.getElementById('result').innerHTML = 
+                `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
+        
+        async function checkAuth() {
+            const response = await fetch(`${API}/auth/me`, {
+                credentials: 'include'
+            });
+            const data = await response.json();
+            document.getElementById('result').innerHTML = 
+                `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
+        
+        async function getOrders() {
+            const response = await fetch(`${API}/orders/today`, {
+                credentials: 'include'
+            });
+            const data = await response.json();
+            document.getElementById('result').innerHTML = 
+                `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
+    </script>
+</body>
+</html>

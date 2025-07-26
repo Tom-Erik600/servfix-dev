@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Air-Tech AS - Service</title>
+    <link rel="stylesheet" href="assets/css/main.css">
+    <link rel="stylesheet" href="assets/css/service.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="toast-container"></div>
+
+    <div id="loading-indicator" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner"><div class="spinner"></div><p>Laster service...</p></div>
+    </div>
+
+    <div class="app-container">
+        <header class="app-header" id="app-header"></header>
+        
+        <main class="main-content">
+            <div id="anlegg-info" class="customer-section"></div>
+            
+            <div id="component-list" class="checklist-card">
+                <h4 class="card-title">System/Sjekklister</h4>
+                <div id="component-list-container"><p class="placeholder-text">Ingen sjekklister er lagret.</p></div>
+            </div>
+
+            <div id="new-component-form" class="component-form-section">
+                <form id="component-form">
+                    <h4 class="card-title" id="form-title">Sjekkliste system</h4>
+                    <div id="component-details-form"></div>
+                    <h4 class="card-title" style="margin-top:16px; font-size: 14px;">Sjekkpunkter</h4>
+                    <div id="checklist-items-container"><p class="placeholder-text">Laster sjekkliste...</p></div>
+                    
+                    <div id="products-section-container" class="dynamic-section" style="display: none;">
+                        <div class="checklist-card">
+                            <div class="dynamic-section-header">
+                                <h4 class="card-title">Produkter</h4>
+                                <button type="button" class="add-line-btn-icon" data-action="add-product-line">+</button>
+                            </div>
+                            <div id="product-lines-container" class="line-item-container"></div>
+                        </div>
+                    </div>
+
+                    <div id="additional-work-section-container" class="dynamic-section" style="display: none;">
+                        <div class="checklist-card">
+                            <div class="dynamic-section-header">
+                                <h4 class="card-title">Tilleggsarbeid</h4>
+                                <button type="button" class="add-line-btn-icon" data-action="add-work-line">+</button>
+                            </div>
+                            <div id="additional-work-lines-container" class="line-item-container"></div>
+                        </div>
+                    </div>
+
+                    <div id="drift-schedule-container" class="dynamic-section"></div>
+
+                    <button type="submit" class="action-btn primary" style="width:100%; margin-top:16px;">
+                        <i data-lucide="save"></i> <span id="save-btn-text">Lagre sjekkliste</span>
+                    </button>
+                </form>
+            </div>
+
+            <div id="overall-comment-section" class="checklist-card" style="display:none;">
+                <h4 class="card-title">Øvrige kommentarer til rapport</h4>
+                <textarea id="overall-comment" rows="4" placeholder="Generelle kommentarer til hele servicen..."></textarea>
+            </div>
+
+            <div id="attachments-section" class="checklist-card" style="display:none;">
+                <h4 class="card-title">Bilder til rapport</h4>
+                <div id="attachments-container"></div>
+                <button type="button" class="action-btn secondary" id="add-attachment-btn">
+                    <i data-lucide="camera"></i> Ta bilde
+                </button>
+            </div>
+
+            <footer class="page-footer" id="page-footer" style="display: none;">
+                <button type="button" class="action-btn green-btn" id="finalize-report-btn">
+                    <i data-lucide="check-circle"></i> Ferdigstill Anlegg
+                </button>
+            </footer>
+        </main>
+    </div>
+
+    <script src="assets/js/app.js"></script>
+    <script src="assets/js/service.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

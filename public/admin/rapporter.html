@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapporter - Air-Tech Admin</title>
+    <link rel="stylesheet" href="/admin/assets/css/admin.css">
+    <link rel="stylesheet" href="/admin/assets/css/rapporter.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-layout">
+        <header class="app-header">
+            <!-- Innhold lastes dynamisk av main.js -->
+        </header>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Servicerapporter</h1>
+                <p>Oversikt over fullførte servicerapporter og PDF-generering</p>
+            </div>
+
+            <!-- Innstillinger -->
+            <div class="settings-card">
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <label>Automatisk sending til kunde når service ferdig</label>
+                        <p class="setting-description">Send servicerapport automatisk til kundens e-post når tekniker fullfører</p>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="auto-send-toggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Filtrering og søk -->
+            <div class="filters-section">
+                <div class="filters-row">
+                    <div class="filter-group">
+                        <label>Periode</label>
+                        <select id="period-filter">
+                            <option value="3months" selected>Siste 3 måneder</option>
+                            <option value="year">Hittil i år</option>
+                            <option value="lastYear">I fjor</option>
+                            <option value="all">Alle</option>
+                            <option value="custom">Egendefinert...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group" id="custom-date-group" style="display: none;">
+                        <label>Fra dato</label>
+                        <input type="date" id="date-from">
+                        <label>Til dato</label>
+                        <input type="date" id="date-to">
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label>Kunde</label>
+                        <select id="customer-filter">
+                            <option value="">Alle kunder</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label>Status</label>
+                        <select id="status-filter">
+                            <option value="">Alle statuser</option>
+                            <option value="draft">Kladd</option>
+                            <option value="completed">Fullført</option>
+                            <option value="sent">Sendt til kunde</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group search-group">
+                        <label>Fritekst</label>
+                        <input type="text" id="search-input" placeholder="Søk kunde, ordre, tekniker...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistikk -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-reports">0</div>
+                    <div class="stat-label">Totalt rapporter</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="sent-reports">0</div>
+                    <div class="stat-label">Sendt til kunde</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="pending-reports">0</div>
+                    <div class="stat-label">Venter på sending</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="draft-reports">0</div>
+                    <div class="stat-label">Kladder</div>
+                </div>
+            </div>
+
+            <!-- Rapporter tabell -->
+            <div class="reports-table-card">
+                <table class="reports-table">
+                    <thead>
+                        <tr>
+                            <th>Dato</th>
+                            <th>Ordrenr</th>
+                            <th>Kunde</th>
+                            <th>Tekniker</th>
+                            <th>Anlegg</th>
+                            <th>Status</th>
+                            <th>Handlinger</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reports-table-body">
+                        <tr>
+                            <td colspan="7" class="loading-cell">Laster rapporter...</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <!-- Paginering -->
+                <div class="pagination" id="pagination-container"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal for rapportdetaljer -->
+    <div class="modal-overlay" id="report-modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3>Rapportdetaljer</h3>
+                <button type="button" class="close-btn" onclick="closeReportModal()">×</button>
+            </div>
+            
+            <div class="modal-body" id="report-modal-body">
+                <!-- Dynamisk innhold -->
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeReportModal()">Lukk</button>
+                <button type="button" class="btn btn-primary" id="generate-pdf-btn">
+                    <span class="btn-icon">📄</span> Se PDF
+                </button>
+                <button type="button" class="btn btn-success" id="send-report-btn">
+                    <span class="btn-icon">✉️</span> Send til kunde
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toast-container"></div>
+    
+    <script src="/admin/assets/js/main.js"></script>
+    <script src="/admin/assets/js/rapporter.js"></script>
+</body>
+</html>

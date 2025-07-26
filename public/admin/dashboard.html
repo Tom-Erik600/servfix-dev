@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air-Tech Admin Dashboard</title>
+    <link rel="stylesheet" href="/admin/assets/css/admin.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-layout">
+        <header class="app-header">
+            <!-- Innhold lastes dynamisk av main.js -->
+        </header>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Dashboard</h1>
+                <p>Oversikt over dagens aktiviteter og serviceoppdrag</p>
+            </div>
+
+            <div class="kpi-grid">
+                <div class="card kpi-card">
+                    <span class="kpi-value" id="kpi-oppdrag-idag">0</span>
+                    <span class="kpi-label">Oppdrag i dag</span>
+                </div>
+                <div class="card kpi-card">
+                    <span class="kpi-value" id="kpi-fullfort-uke">0</span>
+                    <span class="kpi-label">Fullførte denne uken</span>
+                </div>
+                <div class="card kpi-card">
+                    <span class="kpi-value" id="kpi-rapporter-ikke-sendt">0</span>
+                    <span class="kpi-label">Rapporter ikke sendt</span>
+                </div>
+                <div class="card kpi-card">
+                    <span class="kpi-value" id="kpi-tilbud-venter">0</span>
+                    <span class="kpi-label">Tilbud venter på godkjenning</span>
+                </div>
+                <div class="card kpi-card">
+                    <span class="kpi-value" id="kpi-venter-fakturering">0</span>
+                    <span class="kpi-label">Venter på fakturering</span>
+                </div>
+            </div>
+
+            <div class="card main-card" id="dagens-oppdrag">
+                <h2>Dagens serviceoppdrag</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ordrenr</th>
+                            <th>Tekniker</th>
+                            <th>Kunde</th>
+                            <th>Type</th>
+                            <th>Tid</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dagens-oppdrag-liste"></tbody>
+                </table>
+            </div>
+
+            <div class="card main-card" id="ukens-oppdrag" style="margin-top: 24px;">
+                <h2>Denne ukens oppdrag</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ordrenr</th>
+                            <th>Tekniker</th>
+                            <th>Kunde</th>
+                            <th>Dato</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ukens-oppdrag-liste"></tbody>
+                </table>
+            </div>
+
+            <div class="card main-card" id="utildelte-oppdrag" style="margin-top: 24px;">
+                <h2>Uplanlagte Oppdrag</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ordrenr</th>
+                            <th>Kunde</th>
+                            <th>Beskrivelse</th>
+                        </tr>
+                    </thead>
+                    <tbody id="utildelte-oppdrag-liste"></tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+    
+    <script src="/admin/assets/js/main.js"></script>
+    <script src="/admin/assets/js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air-Tech Tekniker App</title>
+    <link rel="stylesheet" href="./assets/css/main.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+    <!-- Toast container lagt til rett etter <body> -->
+    <div id="toast-container"></div>
+
+    <div id="loading-indicator" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>Laster app...</p>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <header class="app-header">
+            <a href="home.html" class="header-nav-button">
+                <i data-lucide="arrow-left"></i>
+            </a>
+            <div class="header-main-content">
+                <div class="logo-circle">
+                    <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="14" stroke="white" stroke-width="2" fill="none"/><circle cx="16" cy="16" r="8" stroke="white" stroke-width="2" fill="none"/><circle cx="16" cy="16" r="3" fill="white"/><path d="M16 2 L16 8" stroke="white" stroke-width="2"/><path d="M16 24 L16 30" stroke="white" stroke-width="2"/><path d="M30 16 L24 16" stroke="white" stroke-width="2"/><path d="M8 16 L2 16" stroke="white" stroke-width="2"/></svg>
+                </div>
+                <div class="company-info">
+                    <h1>AIR-TECH AS</h1>
+                    <span class="app-subtitle">Planlagte service</span>
+                </div>
+            </div>
+            <div class="header-user-info">
+                <div class="technician-avatar" id="technician-initials">RB</div>
+                <span id="technician-name">Laster...</span>
+                <button id="logout-button" class="logout-button" title="Logg ut">⋯</button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <section class="calendar-section">
+                
+                <div class="calendar-controls"> 
+                    <div class="calendar-toggle">
+                        <button class="toggle-btn active" id="week-view-btn" data-action="set-view" data-view="week">Uke</button>
+                        <button class="toggle-btn" id="month-view-btn" data-action="set-view" data-view="month">Måned</button>
+                    </div>
+                    <div class="calendar-header">
+                        <button class="nav-btn" data-action="prev-period" aria-label="Forrige periode">‹</button>
+                        <h2 id="calendar-title">Laster...</h2>
+                        <button class="nav-btn" data-action="next-period" aria-label="Neste periode">›</button>
+                    </div>
+                </div>
+
+                <div class="calendar-grid week-view" id="week-calendar">
+                    <div class="calendar-weekdays">
+                        <div class="weekday">Man</div><div class="weekday">Tir</div><div class="weekday">Ons</div>
+                        <div class="weekday">Tor</div><div class="weekday">Fre</div><div class="weekday">Lør</div>
+                        <div class="weekday">Søn</div>
+                    </div>
+                    <div id="calendar-days" class="calendar-days"></div>
+                </div>
+
+                <div class="calendar-grid month-view hidden" id="month-calendar">
+                    <div class="month-weekdays">
+                        <div class="month-weekday">Man</div><div class="month-weekday">Tir</div><div class="month-weekday">Ons</div>
+                        <div class="month-weekday">Tor</div><div class="month-weekday">Fre</div><div class="month-weekday">Lør</div>
+                        <div class="month-weekday">Søn</div>
+                    </div>
+                    <div id="month-days" class="month-days"></div>
+                </div>
+            </section>
+
+            <div id="status-cards-container" class="status-cards">
+                <div class="status-card orders-card">
+                    <div class="card-header">
+                        <h4 id="selected-date-header">Ordre for valgt dag</h4>
+                        <span class="order-count" id="selected-date-count">0</span>
+                    </div>
+                    <div class="card-content" id="selected-date-orders">
+                        <div class="placeholder-text">Velg en dato i kalenderen</div>
+                    </div>
+                </div>
+                
+                <div class="status-card upcoming-card">
+                    <div class="card-header">
+                        <h4>Kommende denne uken</h4>
+                        <span class="order-count" id="upcoming-count">0</span>
+                    </div>
+                    <div class="card-content" id="upcoming-orders">
+                        <div class="placeholder-text">Ingen kommende ordre</div>
+                    </div>
+                </div>
+
+                <div class="status-card ongoing-card">
+                    <div class="card-header">
+                        <h4>Uferdige ordre</h4>
+                        <span class="order-count" id="unfinished-count">0</span>
+                    </div>
+                    <div class="card-content" id="unfinished-orders">
+                        <div class="placeholder-text">Ingen uferdige ordre</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Auth check først -->
+    <script src="./assets/js/auth-check.js"></script>
+    
+    <!-- Deretter app init -->
+    <script>
+        // Vent på auth før vi starter appen
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (window.authManager) {
+                await window.authManager.waitForInitialization();
+                
+                if (!window.authManager.isLoggedIn()) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                
+                // Oppdater brukerinfo
+                const user = window.authManager.getCurrentUser();
+                if (user) {
+                    document.getElementById('technician-name').textContent = user.technician.name;
+                    const initials = user.initials || (user.technician && user.technician.name ? user.technician.name.split(' ').map(n => n[0]).join('') : '');
+                    document.getElementById('technician-initials').textContent = initials;
+                }
+                
+                // Setup logout
+                const logoutBtn = document.getElementById('logout-button');
+                if (logoutBtn) {
+                    logoutBtn.addEventListener('click', () => {
+                        window.authManager.logout();
+                    });
+                }
+            }
+            
+            // Initialiser lucide icons
+            lucide.createIcons();
+        });
+    </script>
+    
+    <!-- Til slutt last app.js -->
+    <script src="./assets/js/app.js"></script>
+
+</body>
+</html>

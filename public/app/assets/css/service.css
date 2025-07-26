@@ -1,0 +1,358 @@
+/*
+ * Air-Tech AS - Service Side Stilark (v7.9 - Med modal og custom fix)
+*/
+
+.component-form-section, .checklist-card, .customer-section { 
+    background: white; border-radius: 12px; padding: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e9ecef; 
+    margin-bottom: 12px;
+}
+.card-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #343a40; }
+.card-title.smaller-title { font-size: 13px; font-weight: 500; color: #6c757d; }
+
+.form-group { display: flex; flex-direction: column; }
+.form-group label { font-size: 11px; font-weight: 500; color: #6c757d; margin-bottom: 4px; }
+.form-group input, .form-group textarea { padding: 8px 12px; border-radius: 6px; border: 1px solid #ced4da; font-size: 13px; }
+
+.anlegg-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+.anlegg-info-grid .info-item { padding-bottom: 4px; }
+.anlegg-info-grid .info-item .label { font-size: 11px; color: #6c757d; display: block; }
+.anlegg-info-grid .info-item .value { font-size: 13px; font-weight: 600; color: #343a40;}
+
+#component-details-form .component-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px 12px; }
+
+.checklist-item {
+    padding: 8px 10px; border: 1px solid #e9ecef;
+    border-radius: 8px; margin-bottom: 6px; display: flex;
+    justify-content: space-between; align-items: center; gap: 16px;
+    background-color: white;
+}
+
+.checklist-item-fullwidth {
+    padding: 8px 10px; border: 1px solid #e9ecef;
+    border-radius: 8px; margin-bottom: 6px; display: flex;
+    flex-direction: column; align-items: flex-start; gap: 8px;
+    background-color: white;
+}
+
+.item-label { font-size: 13px; font-weight: 500; flex-shrink: 0; }
+.item-actions { display: flex; gap: 6px; }
+
+.checklist-input-number { width: 80px; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 6px; text-align: right; font-size: 13px; }
+
+.status-btn { padding: 5px 12px; font-size: 12px; font-weight: 600; border-radius: 16px; border: 2px solid #e9ecef; background: white; color: #495057; cursor: pointer; transition: all 0.2s ease; }
+.status-btn.active.ok { background: #28a745; color: white; border-color: #28a745; }
+.status-btn.active.avvik { background: #dc3545; color: white; border-color: #dc3545; }
+.status-btn.active.byttet, .status-btn.active.rengjort { background: #ffc107; color: #212529; border-color: #ffc107; }
+
+.avvik-container, .byttet-container { margin-top: 10px; padding: 10px; border-radius: 8px; display: none; }
+.avvik-container.show, .byttet-container.show { display: block; animation: fadeIn 0.3s ease; }
+.avvik-container { background-color: #f8d7da; border: 1px solid #f5c6cb; }
+.byttet-container { background-color: #fff9e6; border: 1px solid #ffecb3; }
+.avvik-container textarea, .byttet-container textarea { width: 100%; min-height: 60px; border-radius: 6px; padding: 8px; font-size: 13px; }
+.avvik-container textarea { border: 1px solid #f5c6cb; }
+.byttet-container textarea { border: 1px solid #ffe082; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.page-footer { padding: 12px; border-top: 1px solid #e9ecef; display: flex; gap: 10px; background: #f8f9fa; }
+.page-footer .action-btn { background-color: #4A90E2; color: white; border: none; }
+.page-footer .green-btn { background-color: #28a745; }
+.page-footer .action-btn:disabled { background-color: #e9ecef; color: #adb5bd; cursor: not-allowed; }
+
+.component-summary-card { 
+    padding: 10px 14px; 
+    border-radius: 8px; 
+    margin-bottom: 8px; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    transition: background-color 0.3s ease; 
+    border: 1px solid #dee2e6; 
+    position: relative;
+}
+.component-summary-card .info-wrapper {
+    cursor: pointer;
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.component-summary-card:hover { background-color: #f1f3f4; }
+.component-summary-card.complete { background: #e6f9e8; border-left: 4px solid #28a745; }
+.component-summary-card.incomplete { background: #fff9e6; border-left: 4px solid #ffc107; }
+.component-summary-card .info { font-weight: 500; font-size: 13px; }
+.component-summary-card .status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #495057; }
+
+.delete-checklist-btn {
+    background: #f1f3f4;
+    border: 1px solid #dee2e6;
+    color: #dc3545;
+    font-weight: bold;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    margin-left: 10px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: all 0.2s ease;
+}
+.delete-checklist-btn:hover {
+    background-color: #dc3545;
+    color: white;
+    border-color: #dc3545;
+}
+
+.dynamic-section { margin-top: 24px; }
+.dynamic-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 8px; }
+.line-item-container { display: flex; flex-direction: column; gap: 12px; }
+
+/* Blå + knapp (original design) */
+.add-line-btn-icon {
+    flex-shrink: 0; width: 32px; height: 32px;
+    padding: 0; border: none; border-radius: 50%;
+    cursor: pointer; font-weight: bold; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s ease;
+    background-color: #e8f5ff; color: #0d6efd;
+}
+.add-line-btn-icon:hover { background-color: #cde6ff; }
+
+.line-item.product-item { 
+    display: flex; 
+    gap: 6px; 
+    align-items: center; 
+    width: 100%;
+}
+
+.line-item.product-item .line-input.product-name { 
+    flex: 1 1 70%; 
+    min-width: 0;
+    max-width: calc(100% - 125px);
+}
+
+.line-item.product-item .line-input.product-price { 
+    flex: 0 0 75px !important; 
+    width: 75px !important;
+    max-width: 75px !important;
+}
+
+.line-item.work-item {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 10px; border: 1px solid #e9ecef;
+    background-color: #f8f9fa; border-radius: 8px;
+}
+.work-item-main .work-description { width: 100%; resize: vertical; }
+.work-item-footer { display: flex; align-items: flex-end; gap: 10px; }
+.work-item-footer .input-group { display: flex; flex-direction: column; }
+.work-item-footer .input-group label { font-size: 10px; color: #6c757d; margin-bottom: 2px; }
+.work-item-footer .input-group input { padding: 6px 8px; }
+.work-item-footer .work-hours { width: 60px; }
+.work-item-footer .work-price { width: 85px; }
+
+.product-item .action-btn-icon { background-color: #f8f9fa; color: #dc3545; border: 1px solid #dee2e6; }
+.product-item .action-btn-icon:hover { background-color: #dc3545; color: white; }
+
+.work-item .action-btn-icon { align-self: flex-end; background-color: #f8f9fa; color: #dc3545; border: 1px solid #dee2e6; }
+.work-item .action-btn-icon:hover { background-color: #dc3545; color: white; }
+
+.attachment-section { margin-top: 24px; }
+.attachment-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; }
+.attachment-section-header h3 { font-size: 14px; font-weight: 600; color: #343a40; margin: 0; }
+.attachment-container { display: flex; flex-direction: column; gap: 8px; }
+.attachment-item { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid #e9ecef; background-color: #f8f9fa; border-radius: 6px; }
+.attachment-item img { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; }
+.attachment-info { flex: 1; }
+.attachment-info .filename { font-size: 12px; font-weight: 500; color: #343a40; }
+.attachment-info .filesize { font-size: 11px; color: #6c757d; }
+
+.line-input, .line-textarea { padding: 8px 10px; border: 1px solid #ced4da; border-radius: 6px; font-size: 13px; transition: all 0.2s ease; }
+.line-input:focus, .line-textarea:focus { border-color: #4A90E2; box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1); }
+
+#deviation-images-container, #work-images-container {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px;
+}
+.deviation-image-wrapper, .work-image-wrapper {
+    position: relative; width: 100%; padding-bottom: 100%; overflow: hidden; border-radius: 8px;
+}
+.deviation-image-wrapper img, .work-image-wrapper img {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
+}
+.image-remove-btn {
+    position: absolute; top: 4px; right: 4px; background: rgba(220, 53, 69, 0.9); color: white;
+    border: none; width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;
+}
+.image-remove-btn:hover { background: #dc3545; }
+
+.action-btn {
+    padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px;
+    font-weight: 600; cursor: pointer; transition: all 0.2s ease;
+    display: inline-flex; align-items: center; gap: 6px;
+}
+.action-btn-icon {
+    width: 32px; height: 32px; padding: 0; border-radius: 50%; font-size: 16px;
+}
+.action-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
+.qr-scanner-container {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999;
+    background: black; display: flex; flex-direction: column;
+}
+#qr-video { width: 100%; height: 100%; object-fit: cover; }
+.qr-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center; pointer-events: none;
+}
+.qr-scanner-frame {
+    width: 250px; height: 250px; border: 3px solid rgba(255, 255, 255, 0.8);
+    border-radius: 20px; position: relative;
+}
+.qr-scanner-corner {
+    position: absolute; width: 30px; height: 30px; border: 3px solid #4A90E2;
+}
+.qr-scanner-corner.top-left { top: -3px; left: -3px; border-right: none; border-bottom: none; border-top-left-radius: 20px; }
+.qr-scanner-corner.top-right { top: -3px; right: -3px; border-left: none; border-bottom: none; border-top-right-radius: 20px; }
+.qr-scanner-corner.bottom-left { bottom: -3px; left: -3px; border-right: none; border-top: none; border-bottom-left-radius: 20px; }
+.qr-scanner-corner.bottom-right { bottom: -3px; right: -3px; border-left: none; border-top: none; border-bottom-right-radius: 20px; }
+.qr-scanner-header, .qr-scanner-footer {
+    position: absolute; left: 0; width: 100%; background: rgba(0, 0, 0, 0.8);
+    padding: 20px; text-align: center; color: white;
+}
+.qr-scanner-header { top: 0; }
+.qr-scanner-footer { bottom: 0; }
+.close-scanner-btn {
+    position: absolute; top: 20px; right: 20px; background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3); color: white; padding: 8px 16px;
+    border-radius: 20px; font-size: 14px; cursor: pointer;
+}
+.qr-debug-info {
+    position: absolute; bottom: 100px; left: 20px; right: 20px;
+    background: rgba(0, 0, 0, 0.8); color: white; padding: 10px;
+    border-radius: 8px; font-size: 11px; font-family: monospace;
+}
+
+.modal {
+    display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); align-items: center; justify-content: center;
+    animation: fadeIn 0.3s ease;
+}
+.modal.show { display: flex; }
+.modal-content {
+    background-color: white; padding: 24px; border-radius: 12px; max-width: 500px;
+    width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.modal-header h2 { font-size: 20px; font-weight: 600; margin: 0; }
+.modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #6c757d; }
+.modal-close:hover { color: #343a40; }
+
+.loading-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.95);
+    display: flex; align-items: center; justify-content: center; z-index: 10000;
+}
+.loading-spinner { text-align: center; }
+.spinner {
+    border: 3px solid #f3f3f3; border-top: 3px solid #4A90E2; border-radius: 50%;
+    width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0 auto 16px;
+}
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* Driftstider responsiv container */
+.drift-schedule-section {
+    margin-top: 20px;
+    background: white;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border: 1px solid #e9ecef;
+}
+
+.drift-schedule-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.drift-schedule-table table {
+    width: 100%;
+    min-width: 300px;
+    border-collapse: collapse;
+}
+
+.drift-schedule-table th,
+.drift-schedule-table td {
+    padding: 8px 6px;
+    text-align: left;
+    border: 1px solid #e9ecef;
+    font-size: 13px;
+}
+
+.drift-schedule-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+}
+
+.drift-schedule-table input[type="time"],
+.drift-schedule-table input[type="text"] {
+    width: 100%;
+    padding: 4px 6px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+/* Mobil optimalisering */
+@media (max-width: 400px) {
+    .drift-schedule-table {
+        font-size: 12px;
+    }
+    
+    .drift-schedule-table th,
+    .drift-schedule-table td {
+        padding: 6px 4px;
+    }
+    
+    .drift-schedule-table input[type="time"],
+    .drift-schedule-table input[type="text"] {
+        font-size: 12px;
+        padding: 2px 4px;
+    }
+}
+
+/* Justeringer for "Legg til anlegg" modal input-felter og labels */
+#add-equipment-modal .form-group label {
+    font-size: 13px; /* Match .item-label */
+    font-weight: 500; /* Match .item-label */
+    color: #343a40; /* Match .card-title */
+    /* margin-bottom: 4px; (beholdes fra eksisterende .form-group label) */
+}
+
+#add-equipment-modal .form-group input[type="text"],
+#add-equipment-modal .form-group textarea {
+    /* Overstyrer .form-group input, .form-group textarea */
+    padding: 8px 12px;
+    border-radius: 8px; /* Fra main.css */
+    border: 1px solid #ddd; /* Fra main.css */
+    font-size: 16px; /* Fra main.css */
+    transition: border-color 0.2s; /* Fra main.css */
+}
+
+#add-equipment-modal .form-group input[type="text"]:focus,
+#add-equipment-modal .form-group textarea:focus {
+    outline: none; /* Fra main.css */
+    border-color: #4a90e2; /* Fra main.css */
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1); /* Fra .line-input:focus i service.css */
+}
+
+/* Placeholder styling for modal-inputene */
+#add-equipment-modal .form-group input::placeholder,
+#add-equipment-modal .form-group textarea::placeholder {
+    color: #94a3b8; /* Lysere grå for placeholder */
+    opacity: 1; /* Sikrer full opasitet */
+}

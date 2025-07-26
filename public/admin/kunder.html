@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kunder - Air-Tech Admin</title>
+    <link rel="stylesheet" href="/admin/assets/css/admin.css">
+    <link rel="stylesheet" href="/admin/assets/css/kundeinfo.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-layout">
+        <header class="app-header"></header>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Kundeoversikt</h1>
+                <p>Søk og administrer alle kunder i systemet. Data hentes direkte fra Tripletex.</p>
+            </div>
+            
+            <div class="customer-layout">
+                <!-- Venstre sidebar med kundeliste -->
+                <div class="customer-sidebar">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Alle Kunder</h2>
+                        </div>
+                        <div class="search-container">
+                            <input type="text" id="customer-search" placeholder="Søk etter kundenavn eller kundenummer..." class="search-input">
+                        </div>
+                        <div class="customer-list-container">
+                            <table class="customer-list-table">
+                                <thead>
+                                    <tr>
+                                        <th>Kundenavn</th>
+                                        <th>Kontaktperson</th>
+                                        <th>Nr.</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="customer-table-body">
+                                    <!-- Dynamisk innhold -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hovedområde med kundedetaljer -->
+                <div class="customer-details-container">
+                    <div class="card" id="customer-details-card">
+                        <div id="customer-details-placeholder">
+                            <div class="placeholder-content">
+                                <p>Velg en kunde fra listen for å se detaljert informasjon.</p>
+                            </div>
+                        </div>
+                        <div id="customer-details-content" style="display: none;">
+                            <!-- Dynamisk innhold for kundedetaljer -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Høyre sidebar med servicehistorikk -->
+                <div class="service-history-sidebar">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Servicehistorikk</h2>
+                        </div>
+                        <div id="service-history-content">
+                            <div class="empty-history">
+                                <p>Velg en kunde for å se servicehistorikk</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal for serviceordedetaljer -->
+    <div class="modal-overlay" id="order-modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3>Serviceordedetaljer</h3>
+                <button type="button" class="close-btn" onclick="closeOrderModal()">×</button>
+            </div>
+            
+            <div class="modal-body" id="order-modal-body">
+                <!-- Dynamisk innhold -->
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeOrderModal()">Lukk</button>
+                <button type="button" class="btn btn-primary" id="view-order-details-btn">
+                    <span class="btn-icon">📋</span> Se full ordre
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/admin/assets/js/main.js"></script>
+    <script src="/admin/assets/js/kunder.js"></script>
+</body>
+</html>

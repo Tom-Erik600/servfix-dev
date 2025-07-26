@@ -1,0 +1,110 @@
+/* Air-Tech AS - Main Styles med diskret logout */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #374151; line-height: 1.5; font-weight: 400; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+.app-container { max-width: 400px; margin: 0 auto; min-height: 100vh; background: #f8f9fa; display: flex; flex-direction: column; box-shadow: 0 0 30px rgba(0,0,0,0.15); position: relative; }
+.app-header { background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: white; padding: 12px 12px; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 20px rgba(74, 144, 226, 0.3); border-radius: 0 0 16px 16px; position: sticky; top: 0; z-index: 100; }
+
+.header-nav-button { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: transparent; color: white; font-size: 28px; text-decoration: none; transition: background-color 0.2s ease; border: none; padding: 0; flex-shrink: 0; }
+.header-nav-button:hover { background-color: rgba(255,255,255,0.15); }
+.header-nav-button.hidden { display: none; }
+.header-nav-spacer { width: 36px; height: 36px; flex-shrink: 0; }
+.header-main-content { display: flex; align-items: center; gap: 10px; overflow: hidden; flex-grow: 1; }
+.header-main-content .logo-circle { width: 38px; height: 38px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.header-main-content .company-info h1 { font-size: 16px; font-weight: 700; margin: 0; line-height: 1.1; white-space: nowrap; }
+.header-main-content .company-info .app-subtitle { font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.9); white-space: nowrap; }
+.header-user-info { display: flex; align-items: center; gap: 8px; text-align: right; font-size: 13px; font-weight: 500; color: white; flex-shrink: 0; }
+.header-user-info .technician-avatar { width: 32px; height: 32px; background-color: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; flex-shrink: 0; }
+
+/* Diskret logout button */
+.logout-button {
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.6);
+    padding: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    width: 32px;
+    height: 32px;
+    opacity: 0.7;
+}
+
+.logout-button:hover {
+    background-color: rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.9);
+    opacity: 1;
+}
+
+.main-content { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.calendar-section { background: white; border-radius: 14px; padding: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+.calendar-controls { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
+.calendar-toggle { display: flex; background: #e9ecef; border-radius: 10px; padding: 3px; gap: 3px; }
+.toggle-btn { flex: 1; padding: 8px 12px; border: none; border-radius: 7px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; background: transparent; color: #495057; }
+.toggle-btn.active { background: white; color: #4A90E2; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+.calendar-header { display: flex; align-items: center; justify-content: space-between; }
+.nav-btn { width: 36px; height: 36px; border: none; border-radius: 10px; background: #f8f9fa; color: #4A90E2; cursor: pointer; font-size: 16px; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.calendar-title { font-size: 16px; font-weight: 600; }
+.calendar-weekdays, .month-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 6px; }
+.weekday, .month-weekday { text-align: center; font-size: 11px; font-weight: 600; color: #6c757d; }
+.calendar-days, .month-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.calendar-day, .month-day { display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; font-weight: 500; cursor: pointer; transition: all 0.2s; border: 2px solid transparent; min-height: 42px; position: relative; }
+.day-number { font-size: 14px; }
+.service-indicator { position: absolute; bottom: 5px; width: 6px; height: 6px; background-color: #FF6B35; border-radius: 50%; }
+.calendar-day.selected .service-indicator, .month-day.selected .service-indicator { background-color: white; }
+.calendar-day.past, .month-day.past { color: #adb5bd; }
+.calendar-day.selected, .month-day.selected { background-color: #4A90E2; color: white; font-weight: 600; }
+.calendar-day.is-today, .month-day.is-today { border-color: #FF6B35; }
+.month-day { min-height: 38px; }
+.month-day.other-month { color: #dee2e6; }
+.hidden { display: none !important; }
+.status-cards { display: flex; flex-direction: column; gap: 12px; }
+.status-card { background: white; border-radius: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); overflow: hidden; }
+.card-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #f1f3f4; }
+.card-header h4 { font-size: 14px; font-weight: 600; margin: 0; }
+.order-count { background: #e9ecef; color: #495057; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; }
+.card-content { padding: 4px 8px 8px 8px; display: flex; flex-direction: column; gap: 6px; }
+.placeholder-text { color: #94a3b8; font-style: italic; font-size: 13px; text-align: center; padding: 16px 0; }
+.order-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 10px; transition: all 0.3s; }
+.order-card.expanded { box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-color: #dee2e6; }
+.order-card-header { display: flex; align-items: center; padding: 10px; gap: 10px; cursor: pointer; }
+.order-status-indicator { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.order-status-indicator.status-scheduled { background: #6c757d; }
+.order-status-indicator.status-in_progress { background: #ffc107; }
+.order-status-indicator.status-completed { background: #28a745; }
+.order-info { flex: 1; min-width: 0; }
+.order-customer { font-weight: 600; font-size: 14px; color: #374151; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.order-details { display: flex; gap: 6px; font-size: 12px; color: #6b7280; }
+.order-meta { text-align: right; }
+.order-time { font-size: 13px; font-weight: 600; color: #343a40; }
+.order-number { font-size: 11px; color: #6c757d; }
+.order-expanded-content { padding: 0 10px 10px 10px; animation: fadeIn 0.3s ease-in-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+.customer-details { padding: 10px; background-color: #fff; border-radius: 8px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; border: 1px solid #e9ecef; }
+.detail-row { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; }
+.detail-label { color: #6c757d; display: flex; align-items: center; white-space: nowrap; }
+.detail-value { color: #374151; word-break: break-word; }
+.order-actions { margin-top: 10px; display: flex; gap: 8px; }
+.action-btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.action-btn:hover { transform: translateY(-1px); }
+.action-btn.primary { background: #4A90E2; color: white; }
+.action-btn.primary:hover { background: #357ABD; box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3); }
+
+/* Loading spinner */
+.loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(2px); }
+.loading-spinner { text-align: center; }
+.spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #4A90E2; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 10px; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+.loading-spinner p { color: #666; font-size: 14px; font-weight: 500; }
+
+/* Toast notifications */
+#toast-container { position: fixed; top: 20px; right: 20px; z-index: 10000; }
+.toast { padding: 12px 16px; margin-bottom: 10px; border-radius: 6px; color: white; font-weight: 500; max-width: 300px; opacity: 0; transform: translateX(100%); transition: all 0.3s ease; }
+.toast.show { opacity: 1; transform: translateX(0); }
+.toast.info { background-color: #3b82f6; }
+.toast.success { background-color: #10b981; }
+.toast.error { background-color: #ef4444; }
+.toast.warning { background-color: #f59e0b; }

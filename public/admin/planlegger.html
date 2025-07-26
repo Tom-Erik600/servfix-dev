@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planlegger - Air-Tech Admin</title>
+    <link rel="stylesheet" href="/admin/assets/css/admin.css">
+    <link rel="stylesheet" href="/admin/assets/css/planlegger.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-layout">
+        <header class="app-header">
+            <!-- Innhold lastes dynamisk av main.js -->
+        </header>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Visuell Planlegger</h1>
+                <p>Dra en tekniker og slipp på en kunde for å opprette serviceoppdrag. Maks 1 aktiv oppdrag per kunde.</p>
+            </div>
+
+            <!-- Enkel checkbox for å vise alle kunder -->
+            <div class="simple-filter">
+                <label class="filter-checkbox">
+                    <input type="checkbox" id="show-available-customers">
+                    <span class="checkbox-custom"></span>
+                    <span class="checkbox-label">Vis også kunder som allerede har oppdrag</span>
+                </label>
+            </div>
+
+            <div class="planner-layout">
+                <aside class="planner-column" id="technician-column">
+                    <h2>Teknikere</h2>
+                    <div id="technician-list">
+                        <!-- Teknikere lastes dynamisk -->
+                    </div>
+                </aside>
+                
+                <section class="planner-column" id="project-column">
+                    <h2>Kunder uten oppdrag <span class="order-count-badge" id="order-count">0</span></h2>
+                    <div id="project-list">
+                        <!-- Kunder lastes dynamisk -->
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <!-- Modal for datovelger (samme som før) -->
+    <div class="modal-overlay" id="date-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Opprett serviceoppdrag</h3>
+            </div>
+            
+            <div class="modal-body">
+                <p id="modal-info-text" class="modal-info-text"></p>
+                
+                <div class="form-group">
+                    <label for="modal-date">Velg dato:</label>
+                    <input type="date" id="modal-date" required>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" id="modal-cancel-btn" class="btn btn-secondary">Avbryt</button>
+                <button type="button" id="modal-save-btn" class="btn btn-primary">Lagre Oppdrag</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/admin/assets/js/main.js"></script>
+    <script src="/admin/assets/js/planlegger.js"></script>
+</body>
+</html>
