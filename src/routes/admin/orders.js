@@ -32,4 +32,25 @@ router.get('/', async (req, res) => {
   }
 });
 
+// POST new order
+router.post('/', async (req, res) => {
+  try {
+    const { customerId, description, serviceType, technicianId, scheduledDate, status } = req.body;
+    const pool = await db.getTenantConnection(req.adminTenantId);
+    
+    const result = await pool.query(
+      `INSERT INTO orders (
+        customerid, description, service_type, technician_id, scheduled_date, status
+       ) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [customerId, description, serviceType, technicianId, scheduledDate, status]
+    );
+    
+    res.status(201).json(result.rows[0]);
+    
+  } catch (error) {
+    console.error(`[${req.adminTenantId}] Error creating order:`, error);
+    res.status(500).json({ error: 'Internal server error when creating order' });
+  }
+});
+
 module.exports = router;

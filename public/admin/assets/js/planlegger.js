@@ -2,12 +2,19 @@
 
 document.addEventListener('DOMContentLoaded', async () => {
     const technicianList = document.getElementById('technician-list');
+    console.log('technicianList element ved initialisering:', technicianList);
     const projectList = document.getElementById('project-list');
+    console.log('projectList element ved initialisering:', projectList);
     const dateModal = document.getElementById('date-modal');
+    console.log('dateModal element ved initialisering:', dateModal);
     const modalInfoText = document.getElementById('modal-info-text');
+    console.log('modalInfoText element ved initialisering:', modalInfoText);
     const modalDateInput = document.getElementById('modal-date');
+    console.log('modalDateInput element ved initialisering:', modalDateInput);
     const modalCancelBtn = document.getElementById('modal-cancel-btn');
+    console.log('modalCancelBtn element ved initialisering:', modalCancelBtn);
     const modalSaveBtn = document.getElementById('modal-save-btn');
+    console.log('modalSaveBtn element ved initialisering:', modalSaveBtn);
 
     // Ny checkbox for å vise alle kunder
     const showAllCustomersCheckbox = document.getElementById('show-available-customers');
@@ -24,17 +31,32 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     async function fetchData() {
         try {
-            const [technicians, customers, activeOrders] = await Promise.all([
-                fetch('/api/technicians').then(res => res.json()),
-                fetch('/api/customers').then(res => res.json()),
-                fetch('/api/orders?status=pending,scheduled,in_progress').then(res => res.json()),
+            const [technicians, customersData, activeOrders] = await Promise.all([
+                fetch('/api/admin/technicians', {
+                    credentials: 'include'  // Inkluder cookies/session
+                }).then(res => res.json()),
+                fetch('/api/admin/customers', {
+                    credentials: 'include'  // Inkluder cookies/session
+                }).then(res => res.json()),
+                fetch('/api/admin/orders?status=pending,scheduled,in_progress', {
+                    credentials: 'include'  // Inkluder cookies/session
+                }).then(res => res.json()),
             ]);
 
-            allCustomers = customers;
+            // Håndter både ny struktur (med wrapper) og gammel struktur (direkte array)
+            if (customersData.customers) {
+                allCustomers = customersData.customers;
+            } else if (Array.isArray(customersData)) {
+                allCustomers = customersData;
+            } else {
+                console.error('Ugyldig dataformat fra API:', customersData);
+                allCustomers = [];
+            }
+            console.log('allCustomers:', allCustomers); // Added this line
             
             // Finn kunder uten aktive oppdrag
             const activeCustomerIds = new Set(activeOrders.map(o => o.customerId));
-            availableCustomers = customers.filter(c => !activeCustomerIds.has(c.id) && !c.isInactive);
+            availableCustomers = allCustomers.filter(c => !activeCustomerIds.has(c.id) && !c.isInactive);
 
             renderTechnicians(technicians);
             renderCustomers();
@@ -96,15 +118,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         
         customersToShow.forEach(customer => {
+            // Debug: Logg hva vi setter
+            console.log(`Setter dataset for ${customer.name}: ${customer.id}`);
             const customerCard = document.createElement('div');
-            customerCard.className = 'project-card';  // Gjenbruk samme styling
+            customerCard.className = 'project-card';
             customerCard.dataset.customerId = customer.id;
+            
+            // Debug: Sjekk hva som faktisk ble satt
+            console.log(`Dataset ble satt til: ${customerCard.dataset.customerId}`);
             
             customerCard.innerHTML = `
                 <div class="project-customer">${customer.name}</div>
                 <div class="project-name">${customer.contact} • ${customer.phone}</div>
                 <div class="project-meta">
-                    <span>Kunde-ID: ${customer.customerNumber}</span>
+                    <span>Tripletex ID: ${customer.id} | Nr: ${customer.customerNumber || '-'}</span>
                 </div>
             `;
             
@@ -144,19 +171,88 @@ document.addEventListener('DOMContentLoaded', async () => {
         e.preventDefault();
         e.currentTarget.classList.remove('drag-over');
         
-        if (!draggedTechnician) return;
+        try {
+            if (!draggedTechnician) {
+                console.error('draggedTechnician er null');
+                return;
+            }
 
-        const technicianId = e.dataTransfer.getData('text/plain');
-        const customerId = e.currentTarget.dataset.customerId;
+            const technicianId = e.dataTransfer.getData('text/plain');
+            const customerId = parseInt(e.currentTarget.dataset.customerId, 10); // Konverter til tall
 
-        // Finn kunde og tekniker
-        const customer = allCustomers.find(c => c.id === customerId);
-        const technician = draggedTechnician.querySelector('strong').textContent;
+            console.log('=== HANDLE DROP DEBUG ===');
+            console.log('Leter etter customerId:', customerId);
+            console.log('Type:', typeof customerId);
+            
+            // Bruk samme array som renderCustomers bruker
+            const showAllCustomersCheckbox = document.getElementById('show-available-customers');
+            const customersToSearch = showAllCustomersCheckbox && showAllCustomersCheckbox.checked 
+                ? allCustomers.filter(c => !c.isInactive)
+                : availableCustomers;
+            
+            console.log('Søker i array:', showAllCustomersCheckbox.checked ? 'allCustomers' : 'availableCustomers');
+            console.log('Array lengde:', customersToSearch.length);
+            
+            // Sjekk om customersToSearch faktisk har data
+            if (!customersToSearch || customersToSearch.length === 0) {
+                console.error('customersToSearch er tom eller undefined!');
+                showToast('Kundedata ikke lastet. Prøv å laste siden på nytt.', 'error');
+                return;
+            }
 
-        targetCustomer = { technicianId, customerId, customerName: customer.name };
-
-        modalInfoText.textContent = `Opprett nytt serviceoppdrag for ${customer.name} med tekniker ${technician}.`;
-        dateModal.style.display = 'flex';
+            // Finn kunde
+            const customer = customersToSearch.find(c => c.id == customerId);
+            
+            if (!customer) {
+                console.error('Kunde ikke funnet med ID:', customerId);
+                showToast('Kunne ikke finne kunde', 'error');
+                return;
+            }
+            
+            console.log('✅ 1. Kunde funnet:', customer.name);
+            
+            // Test om draggedTechnician har querySelector
+            console.log('🔍 2. draggedTechnician:', draggedTechnician);
+            console.log('draggedTechnician type:', typeof draggedTechnician);
+            
+            if (!draggedTechnician) {
+                console.error('❌ draggedTechnician er null!');
+                return;
+            }
+            
+            // Prøv å finne strong element
+            const strongElement = draggedTechnician.querySelector('strong');
+            console.log('🔍 3. strong element:', strongElement);
+            
+            if (!strongElement) {
+                console.error('❌ Fant ikke strong element i draggedTechnician!');
+                return;
+            }
+            
+            const technician = strongElement.textContent;
+            console.log('✅ 4. Tekniker navn:', technician);
+            
+            targetCustomer = { 
+                technicianId, 
+                customerId: customer.id,
+                customerName: customer.name 
+            };
+            
+            console.log('✅ 5. targetCustomer satt:', targetCustomer);
+            console.log('modalInfoText:', modalInfoText);
+            console.log('dateModal:', dateModal);
+            
+            modalInfoText.textContent = `Opprett nytt serviceoppdrag for ${customer.name} med tekniker ${technician}.`;
+            dateModal.style.display = 'flex';
+            dateModal.classList.add('show'); // Legg til show-klassen
+            
+            console.log('✅ 9. display satt til flex');
+            console.log('🔍 10. Modal synlig?', dateModal.offsetParent !== null);
+            
+        } catch (error) {
+            console.error('❌ FEIL I HANDLEDROP:', error);
+            console.error('Stack trace:', error.stack);
+        }
     }
 
     // Modal håndtering
@@ -176,8 +272,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         try {
             // Opprett nytt oppdrag
-            const response = await fetch('/api/orders', {
+            const response = await fetch('/api/admin/orders', {
                 method: 'POST',
+                credentials: 'include',  // Legg til denne linjen
                 headers: {
                     'Content-Type': 'application/json',
                 },
@@ -210,6 +307,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function closeModal() {
         dateModal.style.display = 'none';
+        dateModal.classList.remove('show'); // Fjern show-klassen
         targetCustomer = null;
     }
 
