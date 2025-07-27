@@ -65,15 +65,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         const user = window.authManager.getCurrentUser();
         appState.currentTechnicianId = user.technician.id;
 
-        const [orders, customers, technicians, equipment] = await Promise.all([
-            AirTechAPI.getOrders(), AirTechAPI.getCustomers(), AirTechAPI.getTechnicians(), AirTechAPI.getEquipment()
+        const [orders, customers, equipment] = await Promise.all([
+            AirTechAPI.getOrders(), AirTechAPI.getCustomers(), AirTechAPI.getEquipment()
         ]);
         
-        appState.customers = new Map(customers.map(c => [c.id, c]));
-        appState.technicians = new Map(technicians.map(t => [t.id, t]));
         appState.orders = orders;
         appState.equipment = equipment;
-        appState.currentTechnician = appState.technicians.get(appState.currentTechnicianId);
+        
+        // Populate customers from orders
+        const uniqueCustomerIds = new Set(orders.map(order => order.customerId));
+        appState.customers = new Map(customers.filter(c => uniqueCustomerIds.has(c.id)).map(c => [c.id, c]));
+
+        // Set current technician
+        appState.currentTechnician = user.technician;
+        appState.technicians = new Map([[user.technician.id, user.technician]]);
         
         if (!appState.currentTechnician) {
             throw new Error(`Technician with ID ${appState.currentTechnicianId} not found.`);

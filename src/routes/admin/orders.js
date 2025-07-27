@@ -21,35 +21,58 @@ router.use((req, res, next) => {
 });
 
 // GET all orders for the selected tenant
+// GET all orders
 router.get('/', async (req, res) => {
   try {
     const pool = await db.getTenantConnection(req.adminTenantId);
     const result = await pool.query('SELECT * FROM orders');
-    res.json(result.rows);
+    
+    // Legg til orderNumber for frontend
+    const ordersWithNumber = result.rows.map(order => ({
+      ...order,
+      orderNumber: `SO-${order.id.split('-')[1]}-${order.id.split('-')[2].slice(-6)}`
+    }));
+    
+    res.json(ordersWithNumber);
   } catch (error) {
-    console.error(`[${req.adminTenantId}] Error fetching orders:`, error);
+    console.error(`Error fetching orders:`, error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// POST new order
 router.post('/', async (req, res) => {
   try {
-    const { customerId, description, serviceType, technicianId, scheduledDate, status } = req.body;
+    const { customerId, customerName, description, serviceType, technicianId, scheduledDate } = req.body;
+    
+    // Bruk RIKTIG ID-format
+    const orderId = `PROJ-${new Date().getFullYear()}-${Date.now()}`;
+    
+    // Valider påkrevde felter
+    if (!customerId || !customerName) {
+      return res.status(400).json({ error: 'customerId og customerName er påkrevd' });
+    }
+
     const pool = await db.getTenantConnection(req.adminTenantId);
     
+    // Fjern order_number fra INSERT
     const result = await pool.query(
       `INSERT INTO orders (
-        customerid, description, service_type, technician_id, scheduled_date, status
-       ) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [customerId, description, serviceType, technicianId, scheduledDate, status]
+        id, customer_id, customer_name, description, 
+        service_type, technician_id, scheduled_date, status
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [orderId, customerId, customerName, description, 
+       serviceType || 'Generell service', technicianId, 
+       scheduledDate, technicianId ? 'scheduled' : 'pending']
     );
+    
+    // Legg til orderNumber for frontend
+    result.rows[0].orderNumber = `SO-${orderId.split('-')[1]}-${orderId.split('-')[2].slice(-6)}`;
     
     res.status(201).json(result.rows[0]);
     
   } catch (error) {
-    console.error(`[${req.adminTenantId}] Error creating order:`, error);
-    res.status(500).json({ error: 'Internal server error when creating order' });
+    console.error('Error creating order:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

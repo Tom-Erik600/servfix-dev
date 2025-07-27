@@ -52,10 +52,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 console.error('Ugyldig dataformat fra API:', customersData);
                 allCustomers = [];
             }
-            console.log('allCustomers:', allCustomers); // Added this line
+            console.log('allCustomers:', allCustomers);
+            console.log('activeOrders raw:', activeOrders); // Log raw active orders
             
             // Finn kunder uten aktive oppdrag
-            const activeCustomerIds = new Set(activeOrders.map(o => o.customerId));
+            // Use 'customer_id' from backend response if that's the column name
+            const activeCustomerIds = new Set(activeOrders.map(o => o.customer_id || o.customerId)); // Check both
+            console.log('activeCustomerIds:', activeCustomerIds); // Log the set of active customer IDs
             availableCustomers = allCustomers.filter(c => !activeCustomerIds.has(c.id) && !c.isInactive);
 
             renderTechnicians(technicians);
@@ -272,6 +275,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         try {
             // Opprett nytt oppdrag
+            console.log('Sending data to backend:', {
+                customerId: targetCustomer.customerId,
+                customerName: targetCustomer.customerName, // Added for debugging
+                description: `Serviceoppdrag for ${targetCustomer.customerName}`,
+                serviceType: 'Generell service',
+                technicianId: targetCustomer.technicianId,
+                scheduledDate: scheduledDate,
+                status: 'scheduled',
+            });
+
             const response = await fetch('/api/admin/orders', {
                 method: 'POST',
                 credentials: 'include',  // Legg til denne linjen
@@ -280,6 +293,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 },
                 body: JSON.stringify({
                     customerId: targetCustomer.customerId,
+                    customerName: targetCustomer.customerName, // Ensure customerName is sent
                     description: `Serviceoppdrag for ${targetCustomer.customerName}`,
                     serviceType: 'Generell service',
                     technicianId: targetCustomer.technicianId,
