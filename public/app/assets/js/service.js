@@ -504,6 +504,22 @@ function renderChecklist() {
 }
 
 function createChecklistItemHTML(item) {
+    // Fiks for gamle datastrukturer som mangler inputType og har 'text' i stedet for 'label'
+    if (!item.inputType) {
+        // console.warn(`Missing inputType for item: ${item.id}, defaulting to 'ok_avvik'`);
+        item.inputType = 'ok_avvik'; // Standard fallback
+    }
+    
+    // Fiks for gamle datastrukturer som har 'text' i stedet for 'label'
+    if (item.text && !item.label) {
+        item.label = item.text;
+    }
+    
+    // Sørg for at vi har en label
+    if (!item.label) {
+        item.label = item.text || `Sjekkpunkt ${item.id}`;
+    }
+
     switch (item.inputType) {
         case 'ok_avvik':
             return createOkAvvikItemHTML(item);
@@ -525,7 +541,8 @@ function createChecklistItemHTML(item) {
             return createCommentItemHTML(item);
         default:
             console.warn(`Unknown input type: ${item.inputType} for item:`, item);
-            return '';
+            // Fallback til OK/Avvik for ukjente typer
+            return createOkAvvikItemHTML(item);
     }
 }
 

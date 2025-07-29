@@ -430,3 +430,60 @@ button[type="submit"].action-btn.primary:hover {
 #attachments-section {
     transition: all 0.3s ease;
 }
+
+/* Fikser for "Beskrivelse" boksen (large-textarea klassen) */
+.large-textarea {
+    width: 100% !important;
+    height: 120px !important; /* Fast høyde */
+    min-height: 120px !important;
+    max-height: 120px !important;
+    resize: none !important; /* Fjerner muligheten til å dra større */
+    padding: 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.4;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease;
+}
+
+.large-textarea:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+/* Fikser for "Øvrige kommentarer til rapport" boksen */
+#overall-comment {
+    width: 100% !important;
+    height: 120px !important; /* Fast høyde */
+    min-height: 120px !important;
+    max-height: 120px !important;
+    resize: none !important; /* Fjerner muligheten til å dra større */
+    padding: 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.4;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease;
+}
+
+#overall-comment:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+/* Sikrer at form-group containerne også bruker full bredde */
+.checklist-card .form-group {
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.checklist-card textarea {
+    width: 100% !important;
+    box-sizing: border-box;
+}
