@@ -213,7 +213,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 <input type="text" id="edit-hours" value="${quote.estimatedHours}" class="form-input" placeholder="0">
                             </div>
                             <div class="form-group">
-                                <label class="form-label">Arbeidspris (kr)</label>
+                                <label class="form-label">Totalpris for arbeid (kr)</label>
                                 <input type="text" id="edit-price" value="${quote.estimatedPrice}" class="form-input" placeholder="0">
                             </div>
                         </div>
