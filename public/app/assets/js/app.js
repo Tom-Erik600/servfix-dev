@@ -268,12 +268,12 @@ function updateStatusCards() {
     });
     updateCard('upcoming', upcomingOrders);
     
-    // Oppdater uferdige ordre
-    const unfinishedOrders = appState.orders.filter(order => 
-        deriveOrderStatus(order) !== 'completed' &&
-        order.scheduledDate && 
-        new Date(order.scheduledDate + 'T12:00:00') < new Date()
-    );
+    // Oppdater uferdige ordre - ordre som er påbegynt men ikke ferdigstilt
+    const unfinishedOrders = appState.orders.filter(order => {
+        const derivedStatus = deriveOrderStatus(order);
+        // Vis kun ordre som er under arbeid (in_progress) - ikke scheduled eller completed
+        return derivedStatus === 'in_progress';
+    });
     updateCard('unfinished', unfinishedOrders);
 }
 
