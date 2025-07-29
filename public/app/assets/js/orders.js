@@ -265,15 +265,22 @@ async function handleGlobalClick(e) {
 async function completeOrder() {
     setLoading(true);
     try {
-        await fetch(`/api/orders/${pageState.order.id}`, {
+        const response = await fetch(`/api/orders/${pageState.order.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: 'completed' })
         });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Ukjent feil');
+        }
+        
         showToast('Ordre er fullført!', 'success');
         setTimeout(() => window.location.href = 'index.html', 1000);
     } catch (error) {
-        showToast('Kunne ikke fullføre ordren.', 'error');
+        console.error('Error completing order:', error);
+        showToast(`Kunne ikke fullføre ordren: ${error.message}`, 'error');
         setLoading(false);
     }
 }

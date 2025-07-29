@@ -162,6 +162,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 serviceType: order.service_type || order.serviceType || 'Service',
                 customerId: order.customer_id || order.customerId || null,
                 customerName: order.customer_name || order.customerName || 'Ukjent Kunde',
+                customerData: order.customer_data || order.customerData || null, // LEGG TIL DENNE
                 technicianId: order.technician_id || order.technicianId || null,
                 orderNumber: order.order_number || order.orderNumber || order.id,
                 status: order.status || 'scheduled',
@@ -219,6 +220,23 @@ function renderHeader() {
 
 
 function deriveOrderStatus(order) {
+    // BEHOLD DENNE LINJEN - dette er korrekt
+    // Hvis ordre allerede er eksplisitt markert som completed i databasen, returner det
+    if (order.status === 'completed') return 'completed';
+    
+    // ERSTATT MED DENNE ENKLE LOGIKKEN:
+    // Sjekk kun om noen anlegg har startet arbeid for å sette in_progress
+    if (order.equipment && order.equipment.length > 0) {
+        const anyEquipmentStarted = order.equipment.some(eq => 
+            eq.serviceStatus === 'in_progress' || 
+            eq.serviceStatus === 'completed' ||
+            (eq.data && (eq.data.serviceStatus === 'in_progress' || eq.data.serviceStatus === 'completed'))
+        );
+        
+        if (anyEquipmentStarted) return 'in_progress';
+    }
+    
+    // Standard status hvis ikke eksplisitt completed eller in_progress
     return order.status || 'scheduled';
 }
 
@@ -270,8 +288,14 @@ function updateCard(type, orders) {
     if (orders.length > 0) {
         containerEl.innerHTML = orders.map(order => createOrderCardHTML(order, type)).join('');
         
-        // Event delegation for ordre-kort
-        containerEl.addEventListener('click', (e) => {
+        // FJERN gammel event listener først hvis den finnes
+        const oldHandler = containerEl._clickHandler;
+        if (oldHandler) {
+            containerEl.removeEventListener('click', oldHandler);
+        }
+        
+        // Definer ny handler
+        const clickHandler = (e) => {
             // Håndter ordre-kort klikk
             const card = e.target.closest('.order-card');
             if (card && !e.target.closest('.open-order-btn')) {
@@ -286,7 +310,11 @@ function updateCard(type, orders) {
                 const orderId = openBtn.dataset.orderId;
                 window.location.href = `orders.html?id=${orderId}`;
             }
-        });
+        };
+        
+        // Lagre referanse til handler og legg til
+        containerEl._clickHandler = clickHandler;
+        containerEl.addEventListener('click', clickHandler);
     } else {
         const placeholderTexts = {
             'selected-date': 'Ingen ordre for valgt dag',
@@ -322,7 +350,7 @@ function createOrderCardHTML(order, listType) {
     }
 
     return `
-        <div class="order-card ${isExpanded ? 'expanded' : ''}" data-card-key="${cardKey}">
+        <div class="order-card ${isExpanded ? 'expanded' : ''} status-${derivedStatus}" data-card-key="${cardKey}">
             <div class="order-card-header">
                 <div class="order-status-indicator status-${derivedStatus}"></div>
                 <div class="order-info">
@@ -339,10 +367,42 @@ function createOrderCardHTML(order, listType) {
             </div>
             ${isExpanded ? `
                 <div class="order-card-details">
+                    ${order.customerData ? `
+                        <div class="customer-info-section">
+                            <div class="customer-info-grid">
+                                ${order.customerData.contact ? `
+                                    <div class="info-item">
+                                        <span class="info-label">Kontaktperson:</span>
+                                        <span class="info-value">${order.customerData.contact}</span>
+                                    </div>
+                                ` : ''}
+                                ${order.customerData.phone ? `
+                                    <div class="info-item">
+                                        <span class="info-label">Telefon:</span>
+                                        <span class="info-value">${order.customerData.phone}</span>
+                                    </div>
+                                ` : ''}
+                                ${order.customerData.email ? `
+                                    <div class="info-item">
+                                        <span class="info-label">E-post:</span>
+                                        <span class="info-value">${order.customerData.email}</span>
+                                    </div>
+                                ` : ''}
+                                ${order.customerData.physicalAddress ? `
+                                    <div class="info-item full-width">
+                                        <span class="info-label">Besøksadresse:</span>
+                                        <span class="info-value">${order.customerData.physicalAddress}</span>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
                     <div class="detail-item">
                         <span class="detail-label">Beskrivelse:</span>
                         <span>${order.description || 'Ingen beskrivelse'}</span>
                     </div>
+                    
                     <button class="action-btn primary open-order-btn" data-order-id="${order.id}">
                         Åpne ordre →
                     </button>
@@ -409,10 +469,18 @@ function createCalendarDay(date, isMonthView = false) {
     if (dateStr === todayStr) classes.push('is-today');
     if (dateStr === selectedDateStr) classes.push('selected');
     
-    const ordersForDate = technicianOrders.filter(o => 
-        o.scheduledDate === dateStr && deriveOrderStatus(o) !== 'completed'
-    );
-    if (ordersForDate.length > 0) classes.push('has-orders');
+    // Finn alle ordre for denne datoen
+    const allOrdersForDate = technicianOrders.filter(o => o.scheduledDate === dateStr);
+    const uncompletedOrdersForDate = allOrdersForDate.filter(o => deriveOrderStatus(o) !== 'completed');
+
+    // Hvis det finnes ordre som ikke er ferdig, vis orange prikk
+    if (uncompletedOrdersForDate.length > 0) {
+        classes.push('has-orders');
+    } 
+    // Hvis det finnes ordre men ALLE er ferdige, vis grønn prikk
+    else if (allOrdersForDate.length > 0 && uncompletedOrdersForDate.length === 0) {
+        classes.push('all-completed');
+    }
     
     if (isMonthView && date.getMonth() !== appState.currentPeriod.getMonth()) {
         classes.push('other-month');
@@ -420,7 +488,8 @@ function createCalendarDay(date, isMonthView = false) {
     
     return `<div class="${classes.join(' ')}" data-date="${dateStr}">
         <span class="day-number">${date.getDate()}</span>
-        ${ordersForDate.length > 0 ? `<span class="service-indicator"></span>` : ''}
+        ${uncompletedOrdersForDate.length > 0 ? `<span class="service-indicator"></span>` : 
+  allOrdersForDate.length > 0 ? `<span class="service-indicator completed"></span>` : ''}
     </div>`;
 }
 
