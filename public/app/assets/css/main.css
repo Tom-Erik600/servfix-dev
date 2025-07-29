@@ -230,3 +230,30 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Robo
     font-size: 13px;
     color: #212529;
 }
+/* Justeringer for ordrekort - bredere knapp, fet skrift, konsistent tekststørrelse */
+
+/* 1. Åpne ordre knapp skal dekke nesten hele bredden */
+.order-card-details .action-btn.primary.open-order-btn {
+    width: calc(100% - 8px) !important;
+    margin: 12px 4px 0 4px;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* 2. Fet skrift på alle labels/overskrifter */
+.order-card-details .info-label {
+    font-weight: 600 !important; /* Øker fra 500 til 600 */
+}
+
+.order-card-details .detail-label {
+    font-weight: 600 !important; /* Øker fra standard til 600 */
+    font-size: 12px; /* Beholder samme størrelse som info-label */
+}
+
+/* 3. Beskrivelse får samme skriftstørrelse som andre verdier */
+.order-card-details .detail-item span:not(.detail-label) {
+    font-size: 14px !important; /* Matcher info-value størrelse */
+    color: #212529; /* Matcher info-value farge */
+    font-weight: 400; /* Matcher info-value vekt */
+}

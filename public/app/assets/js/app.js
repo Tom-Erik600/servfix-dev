@@ -367,36 +367,26 @@ function createOrderCardHTML(order, listType) {
             </div>
             ${isExpanded ? `
                 <div class="order-card-details">
-                    ${order.customerData ? `
-                        <div class="customer-info-section">
-                            <div class="customer-info-grid">
-                                ${order.customerData.contact ? `
-                                    <div class="info-item">
-                                        <span class="info-label">Kontaktperson:</span>
-                                        <span class="info-value">${order.customerData.contact}</span>
-                                    </div>
-                                ` : ''}
-                                ${order.customerData.phone ? `
-                                    <div class="info-item">
-                                        <span class="info-label">Telefon:</span>
-                                        <span class="info-value">${order.customerData.phone}</span>
-                                    </div>
-                                ` : ''}
-                                ${order.customerData.email ? `
-                                    <div class="info-item">
-                                        <span class="info-label">E-post:</span>
-                                        <span class="info-value">${order.customerData.email}</span>
-                                    </div>
-                                ` : ''}
-                                ${order.customerData.physicalAddress ? `
-                                    <div class="info-item full-width">
-                                        <span class="info-label">Besøksadresse:</span>
-                                        <span class="info-value">${order.customerData.physicalAddress}</span>
-                                    </div>
-                                ` : ''}
+                    <div class="customer-info-section">
+                        <div class="customer-info-grid">
+                            <div class="info-item">
+                                <span class="info-label">Kontaktperson:</span>
+                                <span class="info-value">${order.customerData?.contact || '(Mangler)'}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Telefon:</span>
+                                <span class="info-value">${order.customerData?.phone || '(Mangler)'}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">E-post:</span>
+                                <span class="info-value">${order.customerData?.email || '(Mangler)'}</span>
+                            </div>
+                            <div class="info-item full-width">
+                                <span class="info-label">Besøksadresse:</span>
+                                <span class="info-value">${order.customerData?.physicalAddress || '(Mangler)'}</span>
                             </div>
                         </div>
-                    ` : ''}
+                    </div>
                     
                     <div class="detail-item">
                         <span class="detail-label">Beskrivelse:</span>

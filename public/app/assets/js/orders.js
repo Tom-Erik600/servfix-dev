@@ -191,15 +191,33 @@ function renderEquipmentList() {
 }
 
 function renderActionButtons() { 
-    const allCompleted = pageState.equipment.length > 0 && 
-                        pageState.equipment.every(eq => eq.serviceStatus === 'completed');
+    // Strengere validering - ALLE anlegg må være completed
+    const hasEquipment = pageState.equipment.length > 0;
+    const allCompleted = hasEquipment && pageState.equipment.every(eq => {
+        // Sjekk både serviceStatus og data.serviceStatus for å være sikker
+        const status = eq.serviceStatus || eq.data?.serviceStatus || 'not_started';
+        return status === 'completed';
+    });
+    
+    // Ekstra logging for debugging
+    console.log('Equipment validation:', {
+        hasEquipment,
+        equipmentCount: pageState.equipment.length,
+        equipmentStatuses: pageState.equipment.map(eq => ({
+            id: eq.id,
+            serviceStatus: eq.serviceStatus,
+            dataServiceStatus: eq.data?.serviceStatus
+        })),
+        allCompleted
+    });
     
     document.querySelector('footer.action-buttons').innerHTML = `
         <button class="action-btn" data-action="complete-order" 
                 ${!allCompleted ? 'disabled' : ''}
                 style="width: 100%; padding: 16px 24px; font-size: 16px; 
-                       font-weight: 600; background-color: #28a745; 
-                       border-color: #28a745; color: white;">
+                       font-weight: 600; background-color: ${allCompleted ? '#28a745' : '#6c757d'}; 
+                       border-color: ${allCompleted ? '#28a745' : '#6c757d'}; color: white;
+                       cursor: ${allCompleted ? 'pointer' : 'not-allowed'};">
             ✅ Ferdigstill ordre
         </button>
     `; 
