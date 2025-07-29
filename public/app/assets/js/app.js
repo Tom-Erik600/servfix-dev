@@ -1,6 +1,18 @@
 // air-tech-app/assets/js/app.js - Hovedapplikasjon for tekniker-app
+(function() {
+    // STOPP app.js fra å kjøre på andre sider enn index.html
+    if (window.location.pathname.includes('service.html') || 
+        window.location.pathname.includes('orders.html') ||
+        window.location.pathname.includes('home.html')) {
+        console.log('app.js: Ikke på index.html, avbryter');
+        // Eksporter bare nødvendige funksjoner for andre sider
+        window.openOrder = (orderId) => {
+            window.location.href = `orders.html?id=${orderId}`;
+        };
+        return; // Nå er return lovlig inne i funksjonen
+    }
 
-const today = new Date();
+    const today = new Date();
 
 let appState = {
     loading: false,
@@ -20,29 +32,58 @@ const norwegianMonths = ['januar', 'februar', 'mars', 'april', 'mai', 'juni', 'j
 const norwegianDays = ['Søndag', 'Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lørdag'];
 
 const toISODateString = (date) => {
-    const d = new Date(date);
+    if (!date) return null;
+    
+    let d;
+    if (typeof date === 'string') {
+        // Håndter ISO strings (2025-07-30T22:00:00.000Z)
+        d = new Date(date);
+    } else {
+        d = new Date(date);
+    }
+    
+    // Sjekk om dato er gyldig
+    if (isNaN(d.getTime())) {
+        console.warn('Ugyldig dato til toISODateString:', date);
+        return null;
+    }
+    
+    // Bruk lokal tid (ikke UTC) for konsistens
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
+    
     return `${year}-${month}-${day}`;
 };
 
 const AirTechAPI = {
     baseUrl: '/api',
-    async request(endpoint) {
+    async request(endpoint, options = {}) {
         try {
-            const response = await fetch(`${this.baseUrl}${endpoint}`);
+            const response = await fetch(`${this.baseUrl}${endpoint}`, {
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                ...options
+            });
+            
             if (!response.ok) {
+                // Bare logg ut hvis det faktisk er autentiseringsfeil
                 if (response.status === 401) {
-                    // auth-check.js will handle the redirect
-                    console.warn('Unauthorized request. Redirecting to login.');
+                    console.error('Authentication failed, redirecting to login');
+                    window.location.href = 'login.html';
+                    return;
                 }
-                throw new Error(`HTTP error! status: ${response.status}`);
+                
+                // For andre feil, kast error men ikke logg ut
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.error || `HTTP error! status: ${response.status}`);
             }
-            return await response.json();
-        } catch (error) { 
-            console.error(`API request failed: ${endpoint}`, error); 
-            throw error; 
+            
+            const text = await response.text();
+            return text ? JSON.parse(text) : {};
+        } catch (error) {
+            console.error(`API Error: ${error.message}`);
+            throw error;
         }
     },
     getOrders: () => AirTechAPI.request('/orders'),
@@ -52,80 +93,127 @@ const AirTechAPI = {
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
-    setLoadingState(true);
-    await window.authManager.waitForInitialization();
-
-    if (!window.authManager.isLoggedIn()) {
-        console.log("Not logged in, stopping app initialization.");
-        setLoadingState(false);
-        return; // auth-check.js handles redirect
+    // SJEKK 1: Er vi på riktig side?
+    const currentPath = window.location.pathname;
+    const isIndexPage = currentPath.endsWith('index.html') || 
+                       currentPath === '/' || 
+                       currentPath.endsWith('/app/');
+    
+    if (!isIndexPage) {
+        console.log('app.js skal kun kjøre på index.html');
+        return;
     }
-
+    
+    // SJEKK 2: Finnes de nødvendige elementene?
+    const requiredElements = [
+        'calendar-days',
+        'week-calendar', 
+        'month-calendar'
+    ];
+    
+    const hasRequiredElements = requiredElements.some(id => 
+        document.getElementById(id) !== null
+    );
+    
+    if (!hasRequiredElements) {
+        console.error('Mangler nødvendige kalender-elementer på siden');
+        return;
+    }
+    
+    // START NORMAL INITIALISERING
+    setLoadingState(true);
+    
     try {
+        // Vent på autentisering
+        await window.authManager.waitForInitialization();
+
+        if (!window.authManager.isLoggedIn()) {
+            console.log("Ikke pålogget, stopper app initialisering");
+            setLoadingState(false);
+            return;
+        }
+
+        // Hent brukerdata
         const user = window.authManager.getCurrentUser();
         appState.currentTechnicianId = user.technician.id;
+        appState.currentTechnician = user.technician;
+        
+        // LEGG TIL DENNE LINJEN:
+        updateHeaderInfo();
 
-        const [orders, customers, equipment] = await Promise.all([
-            AirTechAPI.getOrders(), AirTechAPI.getCustomers(), AirTechAPI.getEquipment()
+        // Hent ordre
+        const [orders] = await Promise.all([
+            AirTechAPI.getOrders()
         ]);
         
-        appState.orders = orders;
-        appState.equipment = equipment;
-        
-        // Populate customers from orders
-        const uniqueCustomerIds = new Set(orders.map(order => order.customerId));
-        appState.customers = new Map(customers.filter(c => uniqueCustomerIds.has(c.id)).map(c => [c.id, c]));
-
-        // Set current technician
-        appState.currentTechnician = user.technician;
-        appState.technicians = new Map([[user.technician.id, user.technician]]);
-        
-        if (!appState.currentTechnician) {
-            throw new Error(`Technician with ID ${appState.currentTechnicianId} not found.`);
-        }
-        
-        console.log('📊 Data loaded:', {
-            orders: appState.orders.length,
-            customers: appState.customers.size,
-            technicians: appState.technicians.size,
-            equipment: appState.equipment.length
+        // Konverter og lagre ordre
+        appState.orders = orders.map(order => {
+            // Normaliser dato
+            const normalizeDate = (dateValue) => {
+                if (!dateValue) return null;
+                return toISODateString(dateValue);
+            };
+            
+            return {
+                ...order,
+                id: order.id,
+                scheduledDate: normalizeDate(order.scheduled_date || order.scheduledDate),
+                scheduledTime: order.scheduled_time || order.scheduledTime || null,
+                serviceType: order.service_type || order.serviceType || 'Service',
+                customerId: order.customer_id || order.customerId || null,
+                customerName: order.customer_name || order.customerName || 'Ukjent Kunde',
+                technicianId: order.technician_id || order.technicianId || null,
+                orderNumber: order.order_number || order.orderNumber || order.id,
+                status: order.status || 'scheduled',
+                description: order.description || null
+            };
         });
-        
+
+        // Oppdater UI
         renderAll();
         setupEventListeners();
-        lucide.createIcons(); // Refresh icons after potential changes
+        
+        // Initialiser lucide ikoner
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+        
     } catch (error) {
-        console.error('❌ Failed to initialize app:', error);
-        showToast('Kunne ikke laste app-data. Prøver å logge ut.', 'error');
-        setTimeout(() => window.authManager.logout(), 2000);
+        console.error('Feil ved initialisering av app:', error);
+        showToast('Kunne ikke laste applikasjonen', 'error');
     } finally {
         setLoadingState(false);
     }
 });
 
 function renderAll() {
-    renderHeader();
-    if (appState.currentView === 'week') renderWeekView();
-    else renderMonthView();
-    updateCalendarTitle();
+    // Ekstra sikkerhet - sjekk at elementene finnes
+    if (!document.getElementById('calendar-days')) {
+        console.warn('renderAll kallt uten kalender-elementer');
+        return;
+    }
+    
+    renderCalendar();
     updateStatusCards();
+    updateNavigationText();
+    updateHeaderInfo(); // <-- LEGG TIL DENNE LINJEN
 }
 
 function renderHeader() {
-    const techNameEl = document.getElementById('technician-name');
     const techInitialsEl = document.getElementById('technician-initials');
+    const currentDateEl = document.getElementById('current-date');
 
     if (appState.currentTechnician) {
-        if (techNameEl) {
-            techNameEl.textContent = appState.currentTechnician.name;
-        }
         if (techInitialsEl) {
-            const initials = appState.currentTechnician.initials || (appState.currentTechnician.name ? appState.currentTechnician.name.split(' ').map(n => n[0]).join('') : '');
+            const initials = appState.currentTechnician.initials || 
+                             appState.currentTechnician.name.split(' ').map(n => n[0]).join('');
             techInitialsEl.textContent = initials;
         }
-    } else {
-        if (techNameEl) techNameEl.textContent = 'Logget ut';
-        if (techInitialsEl) techInitialsEl.textContent = '...';
+        if (currentDateEl) {
+            const today = new Date();
+            const dateString = `${today.getDate()}. ${norwegianMonths[today.getMonth()].substring(0, 3)}. ${today.getFullYear()}`;
+            currentDateEl.textContent = dateString;
+        }
     }
 }
 
@@ -135,135 +223,158 @@ function deriveOrderStatus(order) {
 }
 
 function updateStatusCards() {
-    const technicianOrders = appState.orders; // Already filtered by the backend
-    
+    // Oppdater ordre for valgt dato
     const selectedDateStr = toISODateString(appState.selectedDate);
-    
-    const ordersForDate = technicianOrders.filter(o => 
-        o.scheduledDate === selectedDateStr && deriveOrderStatus(o) !== 'completed'
+    const ordersForSelectedDate = appState.orders.filter(order => 
+        order.scheduledDate === selectedDateStr
     );
-    document.getElementById('selected-date-header').textContent = `Ordre for ${norwegianDays[appState.selectedDate.getDay()]} ${appState.selectedDate.getDate()}.${appState.selectedDate.getMonth() + 1}`;
-    updateCard('selected-date', ordersForDate);
-
-    const todayStr = toISODateString(today);
+    updateCard('selected-date', ordersForSelectedDate);
     
-    const endOfWeek = new Date(today);
-    const dayIndex = today.getDay();
-    const daysToAdd = dayIndex === 0 ? 0 : 7 - dayIndex;
-    endOfWeek.setDate(today.getDate() + daysToAdd);
-    const weekEndStr = toISODateString(endOfWeek);
-
-    const upcomingOrders = technicianOrders.filter(o => {
-        return o.scheduledDate && o.scheduledDate >= todayStr && o.scheduledDate <= weekEndStr &&
-               deriveOrderStatus(o) !== 'completed';
+    // Oppdater kommende ordre denne uken
+    const weekStart = new Date(appState.currentPeriod);
+    let dayOfWeek = weekStart.getDay();
+    dayOfWeek = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    weekStart.setDate(weekStart.getDate() - dayOfWeek);
+    
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    
+    const upcomingOrders = appState.orders.filter(order => {
+        if (!order.scheduledDate) return false;
+        const orderDate = new Date(order.scheduledDate + 'T12:00:00');
+        const orderDateStr = toISODateString(orderDate);
+        const todayStr = toISODateString(new Date());
+        return orderDate >= new Date(todayStr) && 
+               orderDate <= weekEnd && 
+               deriveOrderStatus(order) !== 'completed';
     });
     updateCard('upcoming', upcomingOrders);
-
-    const unfinishedOrders = technicianOrders.filter(o => deriveOrderStatus(o) === 'in_progress');
+    
+    // Oppdater uferdige ordre
+    const unfinishedOrders = appState.orders.filter(order => 
+        deriveOrderStatus(order) !== 'completed' &&
+        order.scheduledDate && 
+        new Date(order.scheduledDate + 'T12:00:00') < new Date()
+    );
     updateCard('unfinished', unfinishedOrders);
 }
 
-function updateCard(type, data) {
+function updateCard(type, orders) {
     const countEl = document.getElementById(`${type}-count`);
     const containerEl = document.getElementById(`${type}-orders`);
-    if(!countEl || !containerEl) return;
     
-    countEl.textContent = data.length;
+    if (!countEl || !containerEl) return;
     
-    if (data.length > 0) {
-        containerEl.innerHTML = data.map(order => createOrderCardHTML(order, type)).join('');
+    countEl.textContent = orders.length;
+    
+    if (orders.length > 0) {
+        containerEl.innerHTML = orders.map(order => createOrderCardHTML(order, type)).join('');
+        
+        // Event delegation for ordre-kort
+        containerEl.addEventListener('click', (e) => {
+            // Håndter ordre-kort klikk
+            const card = e.target.closest('.order-card');
+            if (card && !e.target.closest('.open-order-btn')) {
+                const cardKey = card.dataset.cardKey;
+                if (cardKey) toggleOrderCard(cardKey);
+            }
+            
+            // Håndter åpne ordre knapp
+            const openBtn = e.target.closest('.open-order-btn');
+            if (openBtn) {
+                e.stopPropagation(); // Forhindre kort-toggle
+                const orderId = openBtn.dataset.orderId;
+                window.location.href = `orders.html?id=${orderId}`;
+            }
+        });
     } else {
         const placeholderTexts = {
             'selected-date': 'Ingen ordre for valgt dag',
             'upcoming': 'Ingen kommende ordre',
             'unfinished': 'Ingen uferdige ordre'
         };
-        containerEl.innerHTML = `<div class="placeholder-text">${placeholderTexts[type]}</div>`;
+        containerEl.innerHTML = `<div class="placeholder-text">${placeholderTexts[type] || 'Ingen ordre'}</div>`;
     }
 }
 
 function createOrderCardHTML(order, listType) {
-    const customer = appState.customers.get(order.customerId);
+    const customer = { name: order.customerName || 'Ukjent kunde' };
     const cardKey = `${listType}-${order.id}`;
     const isExpanded = appState.expandedCardKey === cardKey;
     const derivedStatus = deriveOrderStatus(order);
-    const statusMap = {'scheduled': 'Planlagt', 'in_progress': 'Pågår', 'completed': 'Fullført'};
+    const statusMap = {
+        'scheduled': 'Planlagt', 
+        'in_progress': 'Pågår', 
+        'completed': 'Fullført',
+        'pending': 'Venter'
+    };
     
     let timeDisplay = 'Ikke planlagt';
     if (order.scheduledDate) {
         const orderDate = new Date(order.scheduledDate + 'T12:00:00');
-        timeDisplay = `${orderDate.getDate()}.${orderDate.getMonth() + 1}`;
+        timeDisplay = orderDate.toLocaleDateString('no-NO', {
+            day: 'numeric',
+            month: 'short'
+        });
         if (order.scheduledTime) {
-            timeDisplay += ` - ${order.scheduledTime}`;
+            timeDisplay += ` kl. ${order.scheduledTime}`;
         }
     }
 
-    return `<div class="order-card ${isExpanded ? 'expanded' : ''}" data-card-key="${cardKey}">
-        <div class="order-card-header">
-            <div class="order-status-indicator status-${derivedStatus}"></div>
-            <div class="order-info">
-                <div class="order-customer">${customer?.name || 'Ukjent Kunde'}</div>
-                <div class="order-details">
-                    <span>${order.serviceType || 'Service'}</span> - <span>${statusMap[derivedStatus] || derivedStatus}</span>
+    return `
+        <div class="order-card ${isExpanded ? 'expanded' : ''}" data-card-key="${cardKey}">
+            <div class="order-card-header">
+                <div class="order-status-indicator status-${derivedStatus}"></div>
+                <div class="order-info">
+                    <div class="order-customer">${customer.name}</div>
+                    <div class="order-details">
+                        <span>${order.serviceType || 'Service'}</span> • 
+                        <span>${statusMap[derivedStatus] || derivedStatus}</span>
+                    </div>
+                </div>
+                <div class="order-meta">
+                    <div class="order-time">${timeDisplay}</div>
+                    <div class="order-number">#${(order.orderNumber || order.id).slice(-6)}</div>
                 </div>
             </div>
-            <div class="order-meta">
-                <div class="order-time">${timeDisplay}</div>
-                <div class="order-number">#${(order.orderNumber || order.id).slice(-4)}</div>
-            </div>
+            ${isExpanded ? `
+                <div class="order-card-details">
+                    <div class="detail-item">
+                        <span class="detail-label">Beskrivelse:</span>
+                        <span>${order.description || 'Ingen beskrivelse'}</span>
+                    </div>
+                    <button class="action-btn primary open-order-btn" data-order-id="${order.id}">
+                        Åpne ordre →
+                    </button>
+                </div>
+            ` : ''}
         </div>
-        ${isExpanded ? `<div class="order-expanded-content">
-            <div class="customer-details">
-                <div class="detail-row">
-                    <span class="detail-label">👤 Kontakt:</span>
-                    <span class="detail-value">${customer?.contactPerson || 'Ikke angitt'}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">📍 Adresse:</span>
-                    <span class="detail-value">${customer?.invoiceAddress?.addressLine1 || 'Ikke angitt'}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">📞 Telefon:</span>
-                    <span class="detail-value">${customer?.phone || 'Ikke angitt'}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">📝 Beskrivelse:</span>
-                    <span class="detail-value">${order.description || 'Ingen beskrivelse'}</span>
-                </div>
-            </div>
-            <div class="order-actions">
-                <button class="action-btn" data-order-id="${order.id}">Åpne ordre</button>
-            </div>
-        </div>` : ''}
-    </div>`;
+    `;
+}
+
+function updateNavigationText() {
+    // Oppdater tekster basert på valgt dato
+    const selectedDateEl = document.getElementById('selected-date-header');
+    if (selectedDateEl && appState.selectedDate) {
+        const dateStr = appState.selectedDate.toLocaleDateString('no-NO', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long'
+        });
+        selectedDateEl.textContent = `Ordre for ${dateStr}`;
+    }
 }
 
 function setupEventListeners() {
-    document.querySelector('.calendar-controls')?.addEventListener('click', handleCalendarControls);
-    document.getElementById('status-cards-container')?.addEventListener('click', handleCardClick);
-    
-    const logoutButton = document.getElementById('logout-button');
-    if (logoutButton) {
-        logoutButton.addEventListener('click', () => {
-            window.authManager.logout();
-        });
+    // Kalender kontroller
+    const calendarControls = document.querySelector('.calendar-controls');
+    if (calendarControls) {
+        calendarControls.addEventListener('click', handleCalendarControls);
     }
     
-    const monthBtn = document.getElementById('month-view-btn');
-    const weekBtn = document.getElementById('week-view-btn');
-    
-    if (monthBtn) {
-        monthBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            setView('month');
-        });
-    }
-    
-    if (weekBtn) {
-        weekBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            setView('week');
-        });
+    // Lucide ikoner
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
     }
 }
 
@@ -283,10 +394,6 @@ function handleCardClick(event) {
 function toggleOrderCard(cardKey) {
     appState.expandedCardKey = appState.expandedCardKey === cardKey ? null : cardKey;
     updateStatusCards();
-}
-
-function openOrder(orderId) {
-    window.location.href = `orders.html?id=${orderId}`;
 }
 
 function createCalendarDay(date, isMonthView = false) {
@@ -370,6 +477,15 @@ function selectDate(dateStr) {
     renderAll();
 }
 
+function renderCalendar() {
+    if (appState.currentView === 'week') {
+        renderWeekView();
+    } else {
+        renderMonthView();
+    }
+    updateCalendarTitle();
+}
+
 function updateCalendarTitle() {
     const titleElement = document.getElementById('calendar-title');
     if (!titleElement) return;
@@ -441,9 +557,11 @@ function setView(view) {
     renderAll();
 }
 
-function setLoadingState(loading) {
+function setLoadingState(isLoading) {
     const loader = document.getElementById('loading-indicator');
-    if (loader) loader.style.display = loading ? 'flex' : 'none';
+    if (loader) {
+        loader.style.display = isLoading ? 'flex' : 'none';
+    }
 }
 
 function showToast(message, type = 'info') {
@@ -470,3 +588,34 @@ function showToast(message, type = 'info') {
     container.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
 }
+
+// Oppdater header med initialer og dato
+function updateHeaderInfo() {
+    const header = document.getElementById('app-header');
+    if (!header) return;
+    
+    // Sjekk om vi har tekniker-info
+    if (!appState.currentTechnician) {
+        console.warn('Ingen tekniker-info tilgjengelig');
+        return;
+    }
+    
+    const tech = appState.currentTechnician;
+    const today = new Date();
+    const norwegianMonths = ['jan', 'feb', 'mar', 'apr', 'mai', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'des'];
+    const dateString = `${today.getDate()}. ${norwegianMonths[today.getMonth()]} ${today.getFullYear()}`;
+    
+    // Oppdater initialer
+    const techInitialsEl = document.getElementById('technician-initials');
+    if (techInitialsEl) {
+        const initials = tech.initials || tech.name.split(' ').map(n => n[0]).join('');
+        techInitialsEl.textContent = initials;
+    }
+    
+    // Oppdater dato
+    const currentDateEl = document.getElementById('current-date');
+    if (currentDateEl) {
+        currentDateEl.textContent = dateString;
+    }
+}
+})();

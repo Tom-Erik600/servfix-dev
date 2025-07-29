@@ -51,7 +51,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 throw new Error('Could not fetch checklist templates');
             }
             const data = await response.json();
-            checklistTemplates = data; // Assign the whole object
+            // Ensure facilityTypes is always an array
+            checklistTemplates.facilityTypes = data.facilityTypes || [];
             console.log('Checklist templates loaded:', checklistTemplates);
             populateEquipmentTypeSelect();
         } catch (error) {
@@ -96,7 +97,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!response.ok) {
                 throw new Error('Could not save checklist templates');
             }
-            alert('Checklist templates saved successfully!');
+            
         } catch (error) {
             console.error('Error saving checklist templates:', error);
             alert('Failed to save checklist templates.');
@@ -346,6 +347,44 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             });
         });
+    }
+
+    function addEditChecklistItemListeners() {
+        checklistItemsContainer.querySelectorAll('.edit-item-btn').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const itemIdToEdit = e.target.dataset.id;
+                editingChecklistItem = findChecklistItemById(currentFacilityType.checklistItems, itemIdToEdit);
+
+                if (editingChecklistItem) {
+                    checklistItemLabelInput.value = editingChecklistItem.label;
+                    checklistItemInputTypeSelect.value = editingChecklistItem.inputType;
+                    hasSubpointsCheckbox.checked = editingChecklistItem.subpoints && editingChecklistItem.subpoints.length > 0;
+                    subpointsSection.style.display = hasSubpointsCheckbox.checked ? 'block' : 'none';
+                    subpointsContainer.innerHTML = '';
+                    if (editingChecklistItem.subpoints) {
+                        editingChecklistItem.subpoints.forEach(subpoint => {
+                            addSubpointToModal(subpoint.label, subpoint.inputType, subpoint.showWhen, subpoint.exclusiveGroup);
+                        });
+                    }
+                    checklistItemModal.classList.add('show');
+                }
+            });
+        });
+    }
+
+    function findChecklistItemById(items, id) {
+        for (const item of items) {
+            if (item.id === id) {
+                return item;
+            }
+            if (item.subpoints && item.subpoints.length > 0) {
+                const found = findChecklistItemById(item.subpoints, id);
+                if (found) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     addChecklistItemBtn.addEventListener('click', () => {

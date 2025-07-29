@@ -8,7 +8,32 @@ let pageState = {
     quotes: []
 };
 
-document.addEventListener('DOMContentLoaded', initializePage);
+async function checkAuth() {
+    try {
+        const response = await fetch('/api/auth/me');
+        if (!response.ok) {
+            console.error('Not authenticated, redirecting to login');
+            window.location.href = 'login.html';
+            return false;
+        }
+        const data = await response.json();
+        console.log('Authenticated as:', data.technician);
+        return true;
+    } catch (error) {
+        console.error('Auth check failed:', error);
+        window.location.href = 'login.html';
+        return false;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', async function() {
+    // Sjekk autentisering først
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) return;
+    
+    // Fortsett med eksisterende kode...
+    await initializePage();
+});
 
 async function initializePage() {
     setLoading(true);
@@ -27,14 +52,27 @@ async function initializePage() {
         }
         const data = await response.json();
 
+        // Debug logging
+        console.log('Order data loaded:', {
+            order: data.order,
+            customerId: data.order?.customer_id,
+            customer: data.customer,
+            equipment: data.equipment
+        });
+
         // Oppdater pageState med den nye, samlede dataen
         pageState = {
             order: data.order,
             customer: data.customer,
-            equipment: data.equipment,
+            equipment: data.equipment || [],
             technician: data.technician,
             quotes: data.quotes || [] // Sikrer at quotes alltid er et array
         };
+
+        // Verifiser at customerId faktisk er satt
+        if (!pageState.order.customer_id) {
+            console.error('WARNING: No customer_id in order data!');
+        }
 
         renderPage();
         setupEventListeners();
@@ -470,7 +508,7 @@ function showSelectTypeDialog() {
     modal.style.display = 'flex';
     modal.addEventListener('click', handleModalClicks);
 
-    fetch('/database/checklist-templates.json')
+    fetch('/api/checklist-templates')
         .then(response => {
             if (!response.ok) {
                 throw new Error('Kunne ikke hente anleggstyper.');
@@ -525,9 +563,20 @@ function showAddEquipmentForm() {
 }
 
 async function handleSaveEquipment(event) {
-    event.preventDefault(); setLoading(true);
+    event.preventDefault(); 
+    setLoading(true);
+    
+    const customerId = pageState.order.customer_id || pageState.order.customerId;
+    
+    if (!customerId) {
+        showToast('Feil: Mangler kunde-ID for denne ordren', 'error');
+        setLoading(false);
+        return;
+    }
+    
     const newEquipmentData = {
-        customerId: pageState.order.customerId,
+        customerId: customerId, // Bruker variabelen
+        customerId: customerId, // Bruker variabelen
         type: pageState.selectedEquipmentType,
         name: document.getElementById('plassering').value,
         systemNumber: document.getElementById('systemNumber')?.value || 'N/A',
@@ -536,19 +585,41 @@ async function handleSaveEquipment(event) {
         status: 'active',
         serviceStatus: 'not_started'
     };
+    
+    console.log('Sender equipment data:', newEquipmentData); // Debug logging
+    
     try {
-        const savedEquipment = await fetch('/api/equipment', { 
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newEquipmentData) 
-        }).then(res => { if (!res.ok) throw new Error('Lagring feilet'); return res.json(); });
+        const response = await fetch('/api/equipment', { 
+            method: 'POST', 
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-Tenant-Id': 'airtech' // Legg til hvis nødvendig
+            }, 
+            body: JSON.stringify(newEquipmentData),
+            credentials: 'include' // Sikrer at cookies sendes med
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Server error:', errorData);
+            throw new Error(errorData.error || 'Lagring feilet');
+        }
+        
+        const savedEquipment = await response.json();
+        console.log('Equipment saved:', savedEquipment); // Debug logging
+        
         pageState.equipment.push(savedEquipment);
         renderEquipmentList();
         renderActionButtons();
         hideModal();
         showToast('Anlegg lagt til', 'success');
     } catch (error) { 
-        showToast(error.message, 'error'); 
+        console.error('Error saving equipment:', error);
+        showToast(`Feil: ${error.message}`, 'error'); 
     } 
-    finally { setLoading(false); }
+    finally { 
+        setLoading(false); 
+    }
 }
 
 function hideModal() { 

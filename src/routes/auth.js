@@ -63,6 +63,9 @@ router.post('/logout', (req, res) => {
 // Check auth status
 router.get('/me', async (req, res) => {
   console.log('Checking auth status for session:', req.session.technicianId);
+  console.log('req.session:', req.session);
+  console.log('req.session.tenantId:', req.session.tenantId);
+
   if (!req.session.technicianId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
@@ -84,6 +87,7 @@ router.get('/me', async (req, res) => {
     });
     
   } catch (error) {
+    console.error('Error in /me endpoint:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

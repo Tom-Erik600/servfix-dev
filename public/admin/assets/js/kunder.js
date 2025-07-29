@@ -118,23 +118,17 @@ document.addEventListener('DOMContentLoaded', function() {
      */
     function renderCustomerList(customers) {
         if (!customers || customers.length === 0) {
-            customerTableBody.innerHTML = `
-                <tr>
-                    <td colspan="3" style="text-align: center; padding: 40px; color: var(--text-light);">
-                        Ingen kunder funnet.
-                    </td>
-                </tr>
-            `;
+            customerTableBody.innerHTML = `<tr><td colspan="3">Ingen kunder funnet.</td></tr>`;
             return;
         }
 
         customerTableBody.innerHTML = customers.map(customer => `
             <tr data-customer-id="${customer.id}" onclick="selectCustomer('${customer.id}')" style="cursor: pointer;">
                 <td>
-                    <div style="font-weight: 500;">${customer.name}</div>
+                    <div style="font-weight: 500;">${customer.name || 'Ukjent navn'}</div>
                 </td>
                 <td>
-                    <div style="font-size: 14px;">${customer.contact}</div>
+                    <div style="font-size: 14px;">${customer.contact || ''}</div>
                 </td>
                 <td>
                     <div class="customer-number">${customer.customerNumber || '-'}</div>
@@ -147,18 +141,21 @@ document.addEventListener('DOMContentLoaded', function() {
      * Velger og viser en kunde
      */
     window.selectCustomer = function(customerId) {
-        const customer = allCustomers.find(c => c.id === customerId);
+        // Konverter til string for sikker sammenligning
+        const customerIdStr = String(customerId);
+        
+        const customer = allCustomers.find(c => String(c.id) === customerIdStr);
+        
         if (!customer) {
-            console.error('Kunde ikke funnet:', customerId);
+            console.error('Kunde ikke funnet:', customerIdStr);
             return;
         }
 
-        console.log('🎯 Valgte kunde:', customer);
-
-        // Oppdater valgt kunde i listen
+        // Oppdater valgt rad
         const rows = customerTableBody.querySelectorAll('tr');
         rows.forEach(row => row.classList.remove('selected'));
-        const selectedRow = customerTableBody.querySelector(`[data-customer-id="${customerId}"]`);
+        
+        const selectedRow = customerTableBody.querySelector(`[data-customer-id="${customerIdStr}"]`);
         if (selectedRow) {
             selectedRow.classList.add('selected');
         }

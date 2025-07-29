@@ -54,11 +54,16 @@ module.exports = async () => {
   });
 
   // Routes
+  console.log('Registering routes...');
   app.use('/api/auth', require('./routes/auth'));
   app.use('/api/orders', require('./routes/orders'));
-  app.use('/api/equipment', require('./routes/equipment'));
+  app.use('/api/equipment', (req, res, next) => {
+    console.log('Equipment route hit:', req.method, req.url);
+    next();
+  }, require('./routes/equipment'));
   app.use('/api/customers', require('./routes/customers'));
   app.use('/api/reports', require('./routes/reports'));
+  app.use('/api/servicereports', require('./routes/reports')); // Alias for frontend kompatibilitet
   app.use('/api/technicians', require('./routes/technicians'));
   app.use('/api/checklist-templates', require('./routes/checklist-templates'));
 

@@ -22,13 +22,13 @@
     </div>
 
     <div class="app-container">
-        <header class="app-header">
-            <a href="home.html" class="header-nav-button">
+        <header class="app-header" id="app-header">
+            <a href="home.html" class="header-nav-button" title="Tilbake">
                 <i data-lucide="arrow-left"></i>
             </a>
             <div class="header-main-content">
                 <div class="logo-circle">
-                    <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="14" stroke="white" stroke-width="2" fill="none"/><circle cx="16" cy="16" r="8" stroke="white" stroke-width="2" fill="none"/><circle cx="16" cy="16" r="3" fill="white"/><path d="M16 2 L16 8" stroke="white" stroke-width="2"/><path d="M16 24 L16 30" stroke="white" stroke-width="2"/><path d="M30 16 L24 16" stroke="white" stroke-width="2"/><path d="M8 16 L2 16" stroke="white" stroke-width="2"/></svg>
+                    <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="14" stroke="white" stroke-width="2" fill="none"/><circle cx="16" cy="16" r="8" stroke="white" stroke-width="2" fill="none"/><circle cx="16" cy="16" r="3" fill="white" /><path d="M16 2 L16 8" stroke="white" stroke-width="2"/><path d="M16 24 L16 30" stroke="white" stroke-width="2"/><path d="M30 16 L24 16" stroke="white" stroke-width="2"/><path d="M8 16 L2 16" stroke="white" stroke-width="2"/></svg>
                 </div>
                 <div class="company-info">
                     <h1>AIR-TECH AS</h1>
@@ -36,9 +36,8 @@
                 </div>
             </div>
             <div class="header-user-info">
-                <div class="technician-avatar" id="technician-initials">RB</div>
-                <span id="technician-name">Laster...</span>
-                <button id="logout-button" class="logout-button" title="Logg ut">⋯</button>
+                <span id="technician-initials"></span>
+                <span id="current-date"></span>
             </div>
         </header>
 
@@ -110,45 +109,21 @@
         </main>
     </div>
 
-    <!-- Auth check først -->
+    
+
+    <!-- Auth check først - VIKTIG! -->
     <script src="./assets/js/auth-check.js"></script>
     
-    <!-- Deretter app init -->
+    <!-- Deretter app.js -->
+    <script src="./assets/js/app.js"></script>
+    
+    <!-- Lucide icons til slutt -->
     <script>
-        // Vent på auth før vi starter appen
-        document.addEventListener('DOMContentLoaded', async () => {
-            if (window.authManager) {
-                await window.authManager.waitForInitialization();
-                
-                if (!window.authManager.isLoggedIn()) {
-                    window.location.href = '/login.html';
-                    return;
-                }
-                
-                // Oppdater brukerinfo
-                const user = window.authManager.getCurrentUser();
-                if (user) {
-                    document.getElementById('technician-name').textContent = user.technician.name;
-                    const initials = user.initials || (user.technician && user.technician.name ? user.technician.name.split(' ').map(n => n[0]).join('') : '');
-                    document.getElementById('technician-initials').textContent = initials;
-                }
-                
-                // Setup logout
-                const logoutBtn = document.getElementById('logout-button');
-                if (logoutBtn) {
-                    logoutBtn.addEventListener('click', () => {
-                        window.authManager.logout();
-                    });
-                }
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
             }
-            
-            // Initialiser lucide icons
-            lucide.createIcons();
         });
     </script>
-    
-    <!-- Til slutt last app.js -->
-    <script src="./assets/js/app.js"></script>
-
 </body>
 </html>

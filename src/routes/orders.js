@@ -64,21 +64,36 @@ router.get('/today', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const pool = await db.getTenantConnection(req.session.tenantId);
-    const result = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+    const orderResult = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
     
-    if (result.rows.length === 0) {
+    if (orderResult.rows.length === 0) {
       return res.status(404).json({ error: 'Order not found' });
     }
     
-    // Legg til orderNumber
-    const order = result.rows[0];
+    const order = orderResult.rows[0];
     order.orderNumber = `SO-${order.id.split('-')[1]}-${order.id.split('-')[2].slice(-6)}`;
+
+    // Fetch customer data
+    const customer = {
+      id: order.customer_id,
+      name: order.customer_name,
+      ...(order.customer_data || {})  // Spread eventuelle ekstra customer-data
+    };
+
+    // Fetch equipment data for the customer
+    const equipmentResult = await pool.query('SELECT * FROM equipment WHERE customer_id = $1', [order.customer_id]);
+    const equipment = equipmentResult.rows || [];
+
+    // Fetch technician data (assuming technicianId is available in order or session)
+    const technicianResult = await pool.query('SELECT * FROM technicians WHERE id = $1', [order.technician_id]);
+    const technician = technicianResult.rows[0] || {};
     
     res.json({
       order: order,
-      customer: {}, // Hent kunde-data hvis nødvendig
-      equipment: [], // Hent utstyr hvis nødvendig
-      technician: {} // Hent tekniker-data hvis nødvendig
+      customer: customer,
+      equipment: equipment,
+      technician: technician,
+      quotes: [] // Assuming quotes are fetched separately or not yet implemented
     });
     
   } catch (error) {

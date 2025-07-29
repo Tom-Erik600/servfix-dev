@@ -78,6 +78,16 @@ class TripletexService {
             throw new Error('Failed to fetch customers from Tripletex.');
         }
     }
+    async getCustomer(customerId) {
+        try {
+            const client = await this.getApiClient();
+            const response = await client.get(`/customer/${customerId}`);
+            return response.data.value;
+        } catch (error) {
+            console.error('Error fetching customer from Tripletex:', error);
+            throw new Error('Failed to fetch customer from Tripletex.');
+        }
+    }
 }
 
 module.exports = new TripletexService();
