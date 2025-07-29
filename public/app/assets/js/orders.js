@@ -326,8 +326,28 @@ function hideDeleteConfirmation(cardElement) {
 async function deactivateEquipment(cardElement) {
     setLoading(true);
     const equipmentId = cardElement.dataset.equipmentId;
+    const deactivationReason = cardElement.querySelector('.deactivation-reason').value.trim();
+    
+    // Valider at deaktiveringsgrunnen er fylt ut
+    if (!deactivationReason) {
+        showToast('Deaktiveringsgrunnen er påkrevd', 'error');
+        setLoading(false);
+        return;
+    }
+    
     try {
-        await fetch(`/api/equipment/${equipmentId}`, { method: 'DELETE' });
+        const response = await fetch(`/api/equipment/${equipmentId}`, { 
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deactivationReason })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Deaktivering feilet');
+        }
+        
+        // Beholder eksisterende animasjon og UI-oppdatering
         cardElement.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
         cardElement.style.opacity = '0';
         cardElement.style.transform = 'scale(0.95)';
@@ -338,9 +358,11 @@ async function deactivateEquipment(cardElement) {
             showToast('Anlegg deaktivert', 'success');
         }, 300);
     } catch (error) { 
-        showToast('Deaktivering feilet.', 'error'); 
-    } 
-    finally { setLoading(false); }
+        console.error('Deactivation error:', error);
+        showToast(`Deaktivering feilet: ${error.message}`, 'error');
+    } finally {
+        setLoading(false);
+    }
 }
 
 function navigateToServicePage(equipmentId) {

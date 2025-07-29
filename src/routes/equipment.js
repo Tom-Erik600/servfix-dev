@@ -57,8 +57,26 @@ router.get('/:customerId', async (req, res) => {
   console.log('=== EQUIPMENT BY CUSTOMER ID ENDPOINT CALLED ===');
   try {
     const { customerId } = req.params;
+    // Parameter for å inkludere deaktiverte anlegg (for historiske ordre)
+    const includeInactive = req.query.includeInactive === 'true';
+    
     const pool = await db.getTenantConnection(req.session.tenantId);
-    const result = await pool.query('SELECT * FROM equipment WHERE customer_id = $1;', [customerId]);
+    
+    let query, params;
+    if (includeInactive) {
+      // For historiske ordre - vis alle anlegg
+      console.log('Including inactive equipment for customer:', customerId);
+      query = 'SELECT * FROM equipment WHERE customer_id = $1';
+      params = [customerId];
+    } else {
+      // For nye ordre - vis kun aktive anlegg (default)
+      console.log('Filtering to active equipment only for customer:', customerId);
+      query = `SELECT * FROM equipment WHERE customer_id = $1 AND (data->>'status' IS NULL OR data->>'status' = 'active')`;
+      params = [customerId];
+    }
+    
+    const result = await pool.query(query, params);
+    console.log(`Found ${result.rows.length} equipment for customer ${customerId}`);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching equipment:', error);
@@ -186,6 +204,65 @@ router.put('/:equipmentId', async (req, res) => {
   } catch (error) {
     console.error('Error updating equipment:', error);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE equipment (deactivate, not delete)
+router.delete('/:equipmentId', async (req, res) => {
+  console.log('Equipment DELETE request (deactivate):', {
+    equipmentId: req.params.equipmentId,
+    body: req.body,
+    sessionTechnicianId: req.session.technicianId
+  });
+  
+  try {
+    const { equipmentId } = req.params;
+    const { deactivationReason } = req.body;
+    
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    
+    // Hent eksisterende equipment
+    const existing = await pool.query('SELECT * FROM equipment WHERE id = $1', [equipmentId]);
+    
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Equipment not found' });
+    }
+    
+    const currentData = existing.rows[0].data || {};
+    
+    // Oppdater data med inactive status og deaktiveringsinformasjon
+    const updatedData = {
+      ...currentData,
+      status: 'inactive',
+      deactivatedAt: new Date().toISOString(),
+      deactivationReason: deactivationReason || 'Ikke oppgitt',
+      deactivatedBy: req.session.technicianId
+    };
+    
+    // Oppdater equipment med ny status
+    const result = await pool.query(
+      'UPDATE equipment SET data = $1 WHERE id = $2 RETURNING *',
+      [updatedData, equipmentId]
+    );
+    
+    const updatedEquipment = result.rows[0];
+    
+    // Transform data for frontend (beholder eksisterende format)
+    updatedEquipment.status = updatedEquipment.data?.status;
+    updatedEquipment.systemNumber = updatedEquipment.data?.systemNumber;
+    updatedEquipment.systemType = updatedEquipment.data?.systemType;
+    updatedEquipment.operator = updatedEquipment.data?.operator;
+    updatedEquipment.serviceStatus = updatedEquipment.data?.serviceStatus;
+    
+    console.log('Equipment deactivated:', equipmentId);
+    res.json({ 
+      message: 'Equipment deactivated successfully', 
+      equipment: updatedEquipment 
+    });
+    
+  } catch (error) {
+    console.error('Error deactivating equipment:', error);
+    res.status(500).json({ error: 'Server error during deactivation' });
   }
 });
 
