@@ -69,6 +69,15 @@ async function initializePage() {
             quotes: data.quotes || [] // Sikrer at quotes alltid er et array
         };
 
+        // Transformer equipment data for å sikre serviceStatus er tilgjengelig
+        pageState.equipment = pageState.equipment.map(eq => ({
+            ...eq,
+            serviceStatus: eq.serviceStatus || eq.data?.serviceStatus || 'not_started',
+            systemNumber: eq.systemNumber || eq.data?.systemNumber || '',
+            systemType: eq.systemType || eq.data?.systemType || '',
+            operator: eq.operator || eq.data?.operator || ''
+        }));
+
         // Verifiser at customerId faktisk er satt
         if (!pageState.order.customer_id) {
             console.error('WARNING: No customer_id in order data!');
@@ -182,9 +191,17 @@ function renderEquipmentList() {
 }
 
 function renderActionButtons() { 
-    const allCompleted = pageState.equipment.length > 0 && pageState.equipment.every(eq => eq.serviceStatus === 'completed');
+    const allCompleted = pageState.equipment.length > 0 && 
+                        pageState.equipment.every(eq => eq.serviceStatus === 'completed');
+    
     document.querySelector('footer.action-buttons').innerHTML = `
-        <button class="action-btn" data-action="complete-order" ${!allCompleted ? 'disabled' : ''}>✅ Ferdigstill ordre</button>
+        <button class="action-btn" data-action="complete-order" 
+                ${!allCompleted ? 'disabled' : ''}
+                style="width: 100%; padding: 16px 24px; font-size: 16px; 
+                       font-weight: 600; background-color: #28a745; 
+                       border-color: #28a745; color: white;">
+            ✅ Ferdigstill ordre
+        </button>
     `; 
 }
 

@@ -356,3 +356,77 @@
     color: #94a3b8; /* Lysere grå for placeholder */
     opacity: 1; /* Sikrer full opasitet */
 }
+
+/* Equipment status button styling */
+#finalize-report-btn {
+    width: 100%;
+    padding: 16px 24px;
+    font-size: 16px;
+    font-weight: 600;
+    height: auto;
+    min-height: 56px;
+    transition: all 0.3s ease;
+    background-color: #6c757d;
+    border-color: #6c757d;
+}
+
+#finalize-report-btn:not(:disabled) {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+#finalize-report-btn:not(:disabled):hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+#finalize-report-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background-color: #6c757d !important;
+    border-color: #6c757d !important;
+}
+
+/* Lagre sjekkliste button - lighter blue */
+button[type="submit"].action-btn.primary {
+    background-color: #5a9fd4;
+    border-color: #5a9fd4;
+}
+
+button[type="submit"].action-btn.primary:hover {
+    background-color: #4a8fc4;
+    border-color: #4a8fc4;
+}
+
+/* Status indicator in anlegg info */
+.anlegg-status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: auto;
+}
+
+.anlegg-status-indicator.not_started {
+    background-color: #e9ecef;
+    color: #495057;
+}
+
+.anlegg-status-indicator.in_progress {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.anlegg-status-indicator.completed {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+/* Show overall comment and attachments when components exist */
+#overall-comment-section,
+#attachments-section {
+    transition: all 0.3s ease;
+}

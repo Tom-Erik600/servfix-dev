@@ -81,8 +81,36 @@ router.get('/:id', async (req, res) => {
     };
 
     // Fetch equipment data for the customer
-    const equipmentResult = await pool.query('SELECT * FROM equipment WHERE customer_id = $1', [order.customer_id]);
-    const equipment = equipmentResult.rows || [];
+    const equipmentResult = await pool.query(
+        `SELECT 
+            id, 
+            customer_id, 
+            type, 
+            name, 
+            location, 
+            data,
+            data->>'serviceStatus' as service_status,
+            data->>'systemNumber' as system_number,
+            data->>'systemType' as system_type,
+            data->>'operator' as operator
+        FROM equipment 
+        WHERE customer_id = $1`,
+        [order.customer_id || order.customerId]
+    );
+
+    // Transform equipment data
+    const equipment = equipmentResult.rows.map(eq => ({
+        id: eq.id,
+        customerId: eq.customer_id,
+        type: eq.type,
+        name: eq.name,
+        location: eq.location,
+        serviceStatus: eq.service_status || 'not_started',
+        systemNumber: eq.system_number || '',
+        systemType: eq.system_type || '',
+        operator: eq.operator || '',
+        data: eq.data
+    }));
 
     // Fetch technician data (assuming technicianId is available in order or session)
     const technicianResult = await pool.query('SELECT * FROM technicians WHERE id = $1', [order.technician_id]);

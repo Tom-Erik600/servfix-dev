@@ -244,6 +244,7 @@ function renderAll() {
     }
     
     updateFinalizeButtonState();
+    updatePageFooterVisibility();
 }
 
 function renderHeader() {
@@ -277,17 +278,30 @@ function renderHeader() {
 }
 
 function renderAnleggInfo() {
-    if (!state.equipment || !state.order) return;
-    
     const container = document.getElementById('anlegg-info');
-    if (!container) return;
+    if (!container || !state.equipment || !state.order) return;
     
     const typeDisplayName = state.equipment.type ? 
         state.equipment.type.charAt(0).toUpperCase() + state.equipment.type.slice(1) : 
         'Ukjent';
     
+    // Status mapping
+    const statusMap = {
+        'not_started': { text: 'Ikke startet', icon: 'clock' },
+        'in_progress': { text: 'Under arbeid', icon: 'tool' },
+        'completed': { text: 'Ferdigstilt', icon: 'check-circle' }
+    };
+    
+    const currentStatus = statusMap[state.equipment.serviceStatus || 'not_started'];
+    
     container.innerHTML = `
-        <h4 class="card-title">Anleggsinformasjon</h4>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h4 class="card-title" style="margin: 0;">Anleggsinformasjon</h4>
+            <div class="anlegg-status-indicator ${state.equipment.serviceStatus || 'not_started'}">
+                <i data-lucide="${currentStatus.icon}" style="width: 16px; height: 16px;"></i>
+                <span>${currentStatus.text}</span>
+            </div>
+        </div>
         <div class="anlegg-info-grid">
             <div class="info-item">
                 <span class="label">Anleggstype</span>
@@ -315,6 +329,11 @@ function renderAnleggInfo() {
             </div>
         </div>
     `;
+    
+    // Re-initialize lucide icons
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
 }
 
 function renderComponentList() {
@@ -351,6 +370,28 @@ function renderComponentList() {
     if (typeof lucide !== 'undefined') {
         lucide.createIcons();
     }
+
+    // Update footer visibility and button state
+    updatePageFooterVisibility();
+}
+
+function updatePageFooterVisibility() {
+    const overallCommentSection = document.getElementById('overall-comment-section');
+    const attachmentsSection = document.getElementById('attachments-section');
+    
+    const hasComponents = state.serviceReport.reportData.components && 
+                         state.serviceReport.reportData.components.length > 0;
+    
+    // Show additional sections only if there are components
+    if (overallCommentSection) {
+        overallCommentSection.style.display = hasComponents ? 'block' : 'none';
+    }
+    if (attachmentsSection) {
+        attachmentsSection.style.display = hasComponents ? 'block' : 'none';
+    }
+    
+    // Always update button state
+    updateFinalizeButtonState();
 }
 
 function getComponentTitle(details) {
@@ -946,6 +987,7 @@ async function saveChecklist(e) {
         state.editingComponentIndex = null;
         resetAndLoadForm();
         renderComponentList();
+        updatePageFooterVisibility();
         updateFinalizeButtonState();
         showToast('Sjekkliste lagret!', 'success');
         
@@ -1100,6 +1142,7 @@ async function deleteChecklist(index) {
             reportData: state.serviceReport.reportData
         });
         renderComponentList();
+        updatePageFooterVisibility();
         updateFinalizeButtonState();
         showToast('Sjekkliste slettet', 'success');
     } catch (error) {
@@ -1234,10 +1277,23 @@ function updateFinalizeButtonState() {
     if (!finalizeBtn) return;
     
     const allComponents = state.serviceReport.reportData.components || [];
-    const canFinalize = allComponents.length > 0 && 
-                       allComponents.every(c => isChecklistComplete(c));
+    const hasComponents = allComponents.length > 0;
     
-    finalizeBtn.disabled = !canFinalize;
+    // Button is enabled only if there are components
+    finalizeBtn.disabled = !hasComponents;
+    
+    // Update button text based on equipment status
+    const btnIcon = finalizeBtn.querySelector('i');
+    const btnText = finalizeBtn.querySelector('span') || finalizeBtn;
+    
+    if (state.equipment?.serviceStatus === 'completed') {
+        btnText.textContent = 'Anlegg er ferdigstilt';
+        finalizeBtn.style.backgroundColor = '#28a745';
+        finalizeBtn.style.borderColor = '#28a745';
+    } else {
+        btnText.textContent = 'Ferdigstill Anlegg';
+        // Color is handled by CSS based on disabled state
+    }
 }
 
 async function finalizeAnlegg() {
@@ -1262,9 +1318,22 @@ async function finalizeAnlegg() {
         
         // Update equipment status
         await api.put(`/equipment/${state.equipmentId}`, { serviceStatus: 'completed' });
+
+        // Update UI to reflect new status
+        state.equipment.serviceStatus = 'completed';
+        updateFinalizeButtonState();
         
-        // Navigate back to order
-        window.location.href = `orders.html?id=${state.orderId}`;
+        // Oppdater lokal state også
+        state.equipment.serviceStatus = 'completed';
+        updateFinalizeButtonState();
+
+        // Vis melding før navigering
+        showToast('Anlegg ferdigstilt!', 'success');
+
+        // Vent litt før navigering så bruker ser meldingen
+        setTimeout(() => {
+            window.location.href = `orders.html?id=${state.orderId}`;
+        }, 1000);
         
     } catch (error) {
         showToast(`Kunne ikke ferdigstille: ${error.message}`, 'error');
