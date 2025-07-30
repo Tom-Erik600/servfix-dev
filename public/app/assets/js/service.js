@@ -11,6 +11,9 @@ const state = {
     editingComponentIndex: null
 };
 
+// Global variabel for å holde styr på hvilken knapp som ble klikket
+let currentPhotoContext = null;
+
 const api = {
     async request(endpoint, options = {}) {
         try {
@@ -560,9 +563,16 @@ function createOkAvvikItemHTML(item) {
         </div>
         <div class="avvik-container" id="avvik-${item.id}">
             <textarea placeholder="Beskriv avvik..."></textarea>
-            <button type="button" class="action-btn-secondary">
-                <i data-lucide="camera"></i>Ta bilde
-            </button>
+            <div class="photo-dropdown-wrapper" style="position: relative; display: inline-block;">
+                <button type="button" class="photo-btn" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer;">
+                    <i data-lucide="camera"></i>Ta bilde av avvik<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
+                </button>
+                <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
+                    <button class="photo-option" data-action="camera" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
+                    <button class="photo-option" data-action="upload" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
+                </div>
+            </div>
+            <div id="avvik-images-container-${item.id}" class="avvik-images-container"></div>
         </div>
     `;
 }
@@ -582,15 +592,40 @@ function createOkByttetAvvikItemHTML(item) {
         </div>
         <div class="avvik-container" id="avvik-${item.id}">
             <textarea placeholder="Beskriv avvik..."></textarea>
-            <button type="button" class="action-btn-secondary">
-                <i data-lucide="camera"></i>Ta bilde
-            </button>
+            <div class="photo-dropdown-wrapper" style="position: relative; display: inline-block;">
+                <button type="button" class="photo-btn" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer;">
+                    <i data-lucide="camera"></i>Ta bilde<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
+                </button>
+                <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
+                    <button onclick="openPhotoOption('camera')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
+                    <button onclick="openPhotoOption('upload')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
+                </div>
+            </div>
         </div>
         <div class="byttet-container" id="byttet-${item.id}">
             <textarea placeholder="Kommentar..."></textarea>
-            <button type="button" class="action-btn-secondary">
-                <i data-lucide="camera"></i>Ta bilde
-            </button>
+            <div class="photo-dropdown-wrapper" style="position: relative; display: inline-block;">
+                <button type="button" class="photo-btn" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer;">
+                    <i data-lucide="camera"></i>Ta bilde<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
+                </button>
+                <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
+                    <button onclick="openPhotoOption('camera')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
+                    <button onclick="openPhotoOption('upload')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
+                </div>
+            <div id="avvik-images-container-${item.id}" class="avvik-images-container"></div>
+        </div>
+        <div class="byttet-container" id="byttet-${item.id}">
+            <textarea placeholder="Kommentar..."></textarea>
+            <div class="photo-dropdown-wrapper" style="position: relative; display: inline-block;">
+                <button type="button" class="photo-btn" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer;">
+                    <i data-lucide="camera"></i>Ta bilde<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
+                </button>
+                <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
+                    <button onclick="openPhotoOption('camera')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
+                    <button onclick="openPhotoOption('upload')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
+                </div>
+            </div>
+            <div id="byttet-images-container-${item.id}" class="avvik-images-container"></div>
         </div>
     `;
 }
@@ -1119,16 +1154,11 @@ function collectChecklistData(items) {
                 
             case 'checkbox':
                 const checkbox = document.getElementById(item.id);
-                if (checkbox) value = checkbox.checked;
-                break;
-                
-            case 'group_selection':
-                const selectedRadio = element.querySelector('input[type="radio"]:checked');
-                if (selectedRadio) value = selectedRadio.id;
+                if (checkbox) checkbox.checked = !!result;
                 break;
                 
             case 'switch_select':
-                const select = element.querySelector('select');
+                const select = document.getElementById(`select-${item.id}`);
                 if (select) value = select.value;
                 break;
         }
@@ -1410,3 +1440,515 @@ window.debugService = {
     reloadTemplate: () => loadChecklistForFacility(state.equipment?.type || 'custom'),
     renderAll
 };
+
+// Photo dropdown functionality med context detection
+document.addEventListener('click', function(e) {
+    // Toggle dropdown
+    if (e.target.closest('.photo-btn')) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const container = e.target.closest('.photo-dropdown-wrapper');
+        const dropdown = container.querySelector('.photo-dropdown');
+        
+        // Lagre kontekst for hvilken type bilde dette er
+        if (container.closest('.avvik-container')) {
+            currentPhotoContext = {
+                type: 'avvik',
+                container: container.closest('.avvik-container'),
+                avvikId: container.closest('.avvik-container').id
+            };
+        } else if (container.closest('#attachments-section')) {
+            currentPhotoContext = {
+                type: 'general',
+                container: container.closest('#attachments-section')
+            };
+        } else {
+            currentPhotoContext = { type: 'general' };
+        }
+        
+        // Lukk andre dropdowns
+        document.querySelectorAll('.photo-dropdown').forEach(d => {
+            if (d !== dropdown) {
+                d.style.opacity = '0';
+                d.style.visibility = 'hidden';
+            }
+        });
+        
+        // Toggle denne dropdown
+        const isVisible = dropdown.style.opacity === '1';
+        dropdown.style.opacity = isVisible ? '0' : '1';
+        dropdown.style.visibility = isVisible ? 'hidden' : 'visible';
+        
+        console.log('📷 Photo context set:', currentPhotoContext);
+    }
+    
+    // Handle dropdown option clicks  
+    if (e.target.closest('.photo-option')) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const action = e.target.closest('.photo-option').dataset.action;
+        console.log('📷 Photo action selected:', action, 'Context:', currentPhotoContext);
+        
+        // Kall openPhotoOption med action
+        openPhotoOption(action);
+    }
+    
+    // Lukk dropdowns ved klikk utenfor
+    if (!e.target.closest('.photo-dropdown-wrapper')) {
+        document.querySelectorAll('.photo-dropdown').forEach(d => {
+            d.style.opacity = '0';
+            d.style.visibility = 'hidden';
+        });
+        currentPhotoContext = null;
+    }
+});
+
+async function openPhotoOption(type) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    if (type === 'camera') input.capture = 'environment';
+    
+    input.onchange = async (e) => {
+        if (e.target.files[0]) {
+            const file = e.target.files[0];
+            console.log('📷 File selected:', file.name);
+            console.log('📷 Current context:', currentPhotoContext);
+            
+            // Sjekk at vi har nødvendig data
+            if (!state.order?.id || !state.equipment?.id || !state.serviceReport?.reportId) {
+                alert('❌ Feil: Mangler ordre- eller anleggsdata. Prøv å laste siden på nytt.');
+                return;
+            }
+            
+            // Bestem bildetype basert på lagret kontekst
+            const imageType = currentPhotoContext?.type || 'general';
+            
+            console.log('📷 Image type determined:', imageType);
+            
+            // Vis loading
+            showPhotoUploadProgress(`Laster opp ${imageType === 'avvik' ? 'avvik-' : 'rapport-'}bilde...`);
+            
+            try {
+                const result = await uploadImageToServer(file, imageType);
+                
+                hidePhotoUploadProgress();
+                
+                if (result.success) {
+                    if (result.avvikNumber) {
+                        showToast(`✅ Avvik #${result.formattedAvvikNumber} bilde lastet opp!`, 'success');
+                        updateAvvikImageUI(result);
+                    } else {
+                        showToast(`✅ Rapport-bilde lastet opp!`, 'success');
+                        updateGeneralImageUI(result);
+                    }
+                } else {
+                    throw new Error(result.error || 'Ukjent feil');
+                }
+                
+            } catch (error) {
+                hidePhotoUploadProgress();
+                console.error('Upload error:', error);
+                showToast(`❌ Kunne ikke laste opp: ${error.message}`, 'error');
+            }
+        }
+    };
+    input.click();
+    
+    // Lukk dropdown
+    document.querySelectorAll('.photo-dropdown').forEach(d => {
+        d.style.opacity = '0'; 
+        d.style.visibility = 'hidden';
+    });
+}
+
+// Ny funksjon: Last opp bilde til server
+async function uploadImageToServer(file, imageType) {
+    console.log('📤 Uploading to server:', {
+        filename: file.name,
+        imageType: imageType,
+        endpoint: imageType === 'avvik' ? '/api/images/avvik' : '/api/images/general'
+    });
+
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('orderId', state.order.id);
+    formData.append('equipmentId', state.equipment.id);
+    formData.append('reportId', state.serviceReport.reportId);
+
+    // Legg til avvik-spesifikk info hvis relevant
+    if (imageType === 'avvik' && currentPhotoContext?.avvikId) {
+        formData.append('avvikId', currentPhotoContext.avvikId);
+    }
+
+    const endpoint = imageType === 'avvik' ? '/api/images/avvik' : '/api/images/general';
+
+    console.log('📤 Using endpoint:', endpoint);
+
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('📤 Upload result:', result);
+
+    return result;
+}
+
+// Progress og UI funktioner (legg til på slutten av service.js)
+function showPhotoUploadProgress(message) {
+    let progressEl = document.getElementById('photo-upload-progress');
+    if (!progressEl) {
+        progressEl = document.createElement('div');
+        progressEl.id = 'photo-upload-progress';
+        progressEl.style.cssText = `
+            position: fixed; top: 20px; right: 20px; background: #3b82f6; color: white;
+            padding: 12px 20px; border-radius: 8px; z-index: 10000; font-size: 14px;
+            display: flex; align-items: center; gap: 10px;
+        `;
+        progressEl.innerHTML = `
+            <div style="width: 16px; height: 16px; border: 2px solid transparent; 
+                        border-top: 2px solid white; border-radius: 50%; 
+                        animation: spin 1s linear infinite;"></div>
+            <span>${message}</span>
+        `;
+        document.body.appendChild(progressEl);
+    }
+}
+
+function hidePhotoUploadProgress() {
+    const progressEl = document.getElementById('photo-upload-progress');
+    if (progressEl) progressEl.remove();
+}
+
+// Global array for å holde styr på bilder
+const imageGallery = {
+    general: [],
+    avvik: []
+};
+
+// Erstat updateGeneralImageUI funksjonen
+function updateGeneralImageUI(result) {
+    // Legg til i gallery data
+    imageGallery.general.push({
+        url: result.url,
+        title: `Rapport-bilde ${imageGallery.general.length + 1}`,
+        type: 'Rapport',
+        uploadedAt: new Date().toLocaleString('no-NO')
+    });
+    
+    // Oppdater UI
+    renderImageGallery('general');
+}
+
+// Erstat updateAvvikImageUI funksjonen  
+function updateAvvikImageUI(result) {
+    // Legg til i gallery data
+    imageGallery.avvik.push({
+        url: result.url,
+        title: `Avvik #${result.formattedAvvikNumber}`,
+        type: 'Avvik',
+        avvikNumber: result.formattedAvvikNumber,
+        uploadedAt: new Date().toLocaleString('no-NO')
+    });
+    
+    // Oppdater UI
+    renderImageGallery('avvik');
+    
+    // Oppdater avvik-header hvis det finnes
+    const openDropdown = document.querySelector('.photo-dropdown[style*="opacity: 1"]');
+    if (openDropdown) {
+        const avvikContainer = openDropdown.closest('.avvik-container');
+        if (avvikContainer) {
+            const header = avvikContainer.querySelector('.avvik-header');
+            if (header) {
+                const numberSpan = header.querySelector('.avvik-number');
+                if (numberSpan) {
+                    numberSpan.textContent = `Avvik #${result.formattedAvvikNumber}`;
+                }
+                header.style.display = 'flex';
+            }
+        }
+    }
+}
+
+// Ny funksjon: Render image gallery
+function renderImageGallery(type) {
+    const containerId = type === 'general' ? 'attachments-container' : 'avvik-images-container';
+    const container = document.getElementById(containerId);
+    
+    if (!container) {
+        console.warn(`Container ${containerId} not found`);
+        return;
+    }
+    
+    const images = imageGallery[type];
+    
+    if (images.length === 0) {
+        container.innerHTML = `
+            <div class="empty-gallery">
+                <div class="empty-icon">📷</div>
+                <div>Ingen bilder lagt til</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const galleryHTML = `
+        <div class="image-gallery">
+            <div class="gallery-grid">
+                ${images.map((image, index) => `
+                    <div class="image-thumbnail" onclick="openImageModal(${index}, '${type}')">
+                        <img src="${image.url}" alt="${image.title}" loading="lazy">
+                        <div class="image-overlay">
+                            <span class="image-type-badge ${type === 'avvik' ? 'avvik' : ''}">${image.type}</span>
+                            <div class="image-actions">
+                                <button class="image-action-btn" onclick="event.stopPropagation(); openImageModal(${index}, '${type}')">
+                                    <i data-lucide="eye"></i>
+                                </button>
+                                <button class="image-action-btn delete-btn" onclick="event.stopPropagation(); deleteImage(${index}, '${type}')">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = galleryHTML;
+    
+    // Re-initialize lucide icons
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
+}
+
+// Image modal functionality
+let currentImageIndex = 0;
+let currentImageType = 'general';
+
+function openImageModal(index, type) {
+    currentImageIndex = index;
+    currentImageType = type;
+    
+    // Opprett modal hvis den ikke eksisterer
+    if (!document.getElementById('imageModal')) {
+        createImageModal();
+    }
+    
+    const modal = document.getElementById('imageModal');
+    const modalImage = document.getElementById('modalImage');
+    const modalTitle = document.getElementById('modalTitle');
+    const imageInfo = document.getElementById('imageInfo');
+    
+    const images = imageGallery[type];
+    const image = images[index];
+    
+    modalImage.src = image.url;
+    modalTitle.textContent = image.title;
+    imageInfo.textContent = `Bilde ${index + 1} av ${images.length} • ${image.uploadedAt}`;
+    
+    updateNavigationButtons();
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden'; // Prevent background scroll
+}
+
+function closeImageModal() {
+    const modal = document.getElementById('imageModal');
+    if (modal) {
+        modal.classList.remove('show');
+        document.body.style.overflow = ''; // Restore scroll
+    }
+}
+
+function navigateImage(direction) {
+    const images = imageGallery[currentImageType];
+    currentImageIndex += direction;
+    
+    if (currentImageIndex < 0) currentImageIndex = images.length - 1;
+    if (currentImageIndex >= images.length) currentImageIndex = 0;
+    
+    const modalImage = document.getElementById('modalImage');
+    const modalTitle = document.getElementById('modalTitle');
+    const imageInfo = document.getElementById('imageInfo');
+    
+    const image = images[currentImageIndex];
+    modalImage.src = image.url;
+    modalTitle.textContent = image.title;
+    imageInfo.textContent = `Bilde ${currentImageIndex + 1} av ${images.length} • ${image.uploadedAt}`;
+    
+    updateNavigationButtons();
+}
+
+function updateNavigationButtons() {
+    const images = imageGallery[currentImageType];
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    
+    if (prevBtn && nextBtn) {
+        if (images.length <= 1) {
+            prevBtn.style.display = 'none';
+            nextBtn.style.display = 'none';
+        } else {
+            prevBtn.style.display = 'flex';
+            nextBtn.style.display = 'flex';
+        }
+    }
+}
+
+async function deleteImage(index, type) {
+    if (!confirm('Er du sikker på at du vil slette dette bildet?')) {
+        return;
+    }
+    
+    try {
+        const image = imageGallery[type][index];
+        
+        // Call backend to delete image
+        const response = await fetch('/api/images/delete', {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ imageUrl: image.url })
+        });
+        
+        if (response.ok) {
+            // Remove from local gallery
+            imageGallery[type].splice(index, 1);
+            
+            // Re-render gallery
+            renderImageGallery(type);
+            
+            // Close modal if it was the current image
+            if (document.getElementById('imageModal')?.classList.contains('show') && 
+                currentImageIndex === index && currentImageType === type) {
+                closeImageModal();
+            }
+            
+            showToast('Bilde slettet', 'success');
+        } else {
+            throw new Error('Kunne ikke slette bilde');
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+        showToast('Kunne ikke slette bilde: ' + error.message, 'error');
+    }
+}
+
+function createImageModal() {
+    const modalHTML = `
+        <div class="image-modal" id="imageModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="modal-title" id="modalTitle">Bilde</div>
+                    <button class="modal-close" onclick="closeImageModal()">
+                        <i data-lucide="x"></i>
+                    </button>
+                </div>
+                
+                <div class="modal-image-container">
+                    <img class="modal-image" id="modalImage" src="" alt="">
+                    <button class="gallery-nav prev" id="prevBtn" onclick="navigateImage(-1)">
+                        <i data-lucide="chevron-left"></i>
+                    </button>
+                    <button class="gallery-nav next" id="nextBtn" onclick="navigateImage(1)">
+                        <i data-lucide="chevron-right"></i>
+                    </button>
+                </div>
+                
+                <div class="modal-footer">
+                    <div class="image-info" id="imageInfo">Bilde info</div>
+                    <div class="modal-actions">
+                        <button class="modal-btn delete" onclick="deleteCurrentImage()">
+                            <i data-lucide="trash-2"></i> Slett
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Add event listeners
+    document.addEventListener('keydown', (e) => {
+        const modal = document.getElementById('imageModal');
+        if (modal?.classList.contains('show')) {
+            if (e.key === 'Escape') {
+                closeImageModal();
+            } else if (e.key === 'ArrowLeft') {
+                navigateImage(-1);
+            } else if (e.key === 'ArrowRight') {
+                navigateImage(1);
+            }
+        }
+    });
+    
+    // Close on background click
+    document.getElementById('imageModal').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) {
+            closeImageModal();
+        }
+    });
+    
+    // Re-initialize lucide icons
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
+}
+
+function deleteCurrentImage() {
+    deleteImage(currentImageIndex, currentImageType);
+}
+
+// Initialize galleries when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize empty galleries
+    renderImageGallery('general');
+    renderImageGallery('avvik');
+});
+
+// Load existing images when service report is loaded
+function loadExistingImages() {
+    // This function should be called when loading an existing service report
+    // to populate imageGallery with existing images from the database
+    
+    if (state.serviceReport?.reportData?.photos) {
+        imageGallery.general = state.serviceReport.reportData.photos.map((url, index) => ({
+            url: url,
+            title: `Rapport-bilde ${index + 1}`,
+            type: 'Rapport',
+            uploadedAt: 'Tidligere'
+        }));
+        renderImageGallery('general');
+    }
+    
+    // Load avvik images if available
+    // This would require a new API endpoint to fetch avvik images for a report
+}
+
+function updateGeneralImageUI(result) {
+    const attachmentsContainer = document.getElementById('attachments-container');
+    if (attachmentsContainer) {
+        const imageEl = document.createElement('div');
+        imageEl.style.cssText = `
+            margin: 4px 8px 4px 0; padding: 6px 10px; background: #e7f5e7;
+            border: 1px solid #4ade80; border-radius: 4px; font-size: 12px; color: #166534;
+        `;
+        imageEl.innerHTML = `📷 Rapport-bilde lastet opp`;
+        attachmentsContainer.appendChild(imageEl);
+    }
+}

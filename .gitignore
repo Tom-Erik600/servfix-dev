@@ -1,2 +1,6 @@
 
 .vscode/claudesync.json
+
+
+# Google Cloud credentials
+config/gcp/*.json

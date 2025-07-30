@@ -86,9 +86,15 @@
             <div id="attachments-section" class="checklist-card" style="display:none;">
                 <h4 class="card-title">Bilder til rapport</h4>
                 <div id="attachments-container"></div>
-                <button type="button" class="action-btn secondary" id="add-attachment-btn">
-                    <i data-lucide="camera"></i> Ta bilde
-                </button>
+                <div class="photo-dropdown-wrapper" style="position: relative; display: inline-block;">
+                    <button type="button" class="photo-btn" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer;">
+                        <i data-lucide="camera"></i>Ta bilde<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
+                    </button>
+                    <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
+                        <button onclick="openPhotoOption('camera')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
+                        <button onclick="openPhotoOption('upload')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
+                    </div>
+                </div>
             </div>
 
             <footer class="page-footer" id="page-footer">
@@ -103,8 +109,9 @@
     <script src="./assets/js/auth-check.js"></script>
 
     <script src="assets/js/app.js"></script>
-    <script src="assets/js/service.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script>lucide.createIcons();</script>
+<script src="assets/js/service.js"></script>
+<script src="assets/js/photo-improvement.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script>lucide.createIcons();</script>
 </body>
 </html>

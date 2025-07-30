@@ -66,6 +66,7 @@ module.exports = async () => {
   app.use('/api/servicereports', require('./routes/reports')); // Alias for frontend kompatibilitet
   app.use('/api/technicians', require('./routes/technicians'));
   app.use('/api/checklist-templates', require('./routes/checklist-templates'));
+  app.use('/api/images', require('./routes/images'));
 
   // Error handling
   app.use((error, req, res, next) => {
