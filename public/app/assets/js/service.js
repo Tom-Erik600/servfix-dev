@@ -504,6 +504,11 @@ function renderChecklist() {
     if (typeof lucide !== 'undefined') {
         lucide.createIcons();
     }
+
+    // Render avvik-bilder som finnes
+    setTimeout(() => {
+        renderAvvikImagesForChecklist();
+    }, 100);  // Kort delay for å sikre DOM er klar
 }
 
 function createChecklistItemHTML(item) {
@@ -1428,6 +1433,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     try {
         await initializePage();
+        await loadExistingImages();
     } catch (error) {
         console.error('Critical initialization error:', error);
         showToast('Kunne ikke laste siden: ' + error.message, 'error');
@@ -1646,36 +1652,64 @@ function updateGeneralImageUI(result) {
         uploadedAt: new Date().toLocaleString('no-NO')
     });
     
-    // Oppdater UI
+    // VIKTIG: Vis attachments-section
+    const attachmentsSection = document.getElementById('attachments-section');
+    if (attachmentsSection) {
+        attachmentsSection.style.display = 'block';
+    }
+    
+    // Render gallery
     renderImageGallery('general');
 }
 
 // Erstat updateAvvikImageUI funksjonen  
 function updateAvvikImageUI(result) {
-    // Legg til i gallery data
+    const avvikId = currentPhotoContext?.avvikId?.replace('avvik-', '');
+    
+    // Legg til i gallery data med avvikId
+    if (!imageGallery.avvik) imageGallery.avvik = [];
     imageGallery.avvik.push({
         url: result.url,
         title: `Avvik #${result.formattedAvvikNumber}`,
         type: 'Avvik',
         avvikNumber: result.formattedAvvikNumber,
+        avvikId: avvikId,
         uploadedAt: new Date().toLocaleString('no-NO')
     });
     
-    // Oppdater UI
-    renderImageGallery('avvik');
-    
-    // Oppdater avvik-header hvis det finnes
-    const openDropdown = document.querySelector('.photo-dropdown[style*="opacity: 1"]');
-    if (openDropdown) {
-        const avvikContainer = openDropdown.closest('.avvik-container');
-        if (avvikContainer) {
-            const header = avvikContainer.querySelector('.avvik-header');
-            if (header) {
-                const numberSpan = header.querySelector('.avvik-number');
-                if (numberSpan) {
-                    numberSpan.textContent = `Avvik #${result.formattedAvvikNumber}`;
-                }
-                header.style.display = 'flex';
+    // Vis bildet i riktig avvik-container
+    if (currentPhotoContext?.container && avvikId) {
+        const containerId = `avvik-images-container-${avvikId}`;
+        let imagesContainer = document.getElementById(containerId);
+        
+        if (imagesContainer) {
+            // Filtrer bilder for denne spesifikke avvikken og render
+            const avvikImages = imageGallery.avvik.filter(img => img.avvikId === avvikId);
+            
+            const galleryHTML = `
+                <div class="image-gallery">
+                    <div class="gallery-grid">
+                        ${avvikImages.map((image, index) => `
+                            <div class="image-thumbnail" onclick="openImageModal(${imageGallery.avvik.indexOf(image)}, 'avvik')">
+                                <img src="${image.url}" alt="${image.title}" loading="lazy">
+                                <div class="image-overlay">
+                                    <span class="image-type-badge avvik">Avvik</span>
+                                    <div class="image-actions">
+                                        <button class="image-action-btn delete-btn" onclick="event.stopPropagation(); deleteImage(${imageGallery.avvik.indexOf(image)}, 'avvik')">
+                                            <i data-lucide="trash-2"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            
+            imagesContainer.innerHTML = galleryHTML;
+            
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
             }
         }
     }
@@ -1712,9 +1746,6 @@ function renderImageGallery(type) {
                         <div class="image-overlay">
                             <span class="image-type-badge ${type === 'avvik' ? 'avvik' : ''}">${image.type}</span>
                             <div class="image-actions">
-                                <button class="image-action-btn" onclick="event.stopPropagation(); openImageModal(${index}, '${type}')">
-                                    <i data-lucide="eye"></i>
-                                </button>
                                 <button class="image-action-btn delete-btn" onclick="event.stopPropagation(); deleteImage(${index}, '${type}')">
                                     <i data-lucide="trash-2"></i>
                                 </button>
@@ -1728,7 +1759,6 @@ function renderImageGallery(type) {
     
     container.innerHTML = galleryHTML;
     
-    // Re-initialize lucide icons
     if (typeof lucide !== 'undefined') {
         lucide.createIcons();
     }
@@ -1909,46 +1939,108 @@ function createImageModal() {
         lucide.createIcons();
     }
 }
-
-function deleteCurrentImage() {
-    deleteImage(currentImageIndex, currentImageType);
+async function loadExistingImages() {
+    if (!state.serviceReport?.reportId) return;
+    
+    try {
+        console.log('🔄 Loading existing images for report:', state.serviceReport.reportId);
+        
+        // Last inn rapport-bilder fra reportData
+        if (state.serviceReport?.reportData?.photos) {
+            imageGallery.general = state.serviceReport.reportData.photos.map((url, index) => ({
+                url: url,
+                title: `Rapport-bilde ${index + 1}`,
+                type: 'Rapport',
+                uploadedAt: 'Tidligere'
+            }));
+            
+            if (imageGallery.general.length > 0) {
+                const attachmentsSection = document.getElementById('attachments-section');
+                if (attachmentsSection) {
+                    attachmentsSection.style.display = 'block';
+                }
+                renderImageGallery('general');
+                console.log('✅ Loaded', imageGallery.general.length, 'general images');
+            }
+        }
+        
+        // Last inn avvik-bilder fra database (men ikke render dem enda)
+        const response = await fetch(`/api/images/avvik/${state.serviceReport.reportId}`, {
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            const avvikImages = await response.json();
+            console.log('📸 Found avvik images:', avvikImages);
+            
+            if (avvikImages.length > 0) {
+                imageGallery.avvik = avvikImages.map(img => ({
+                    url: img.image_url,
+                    title: `Avvik #${String(img.avvik_number).padStart(3, '0')}`,
+                    type: 'Avvik',
+                    avvikNumber: String(img.avvik_number).padStart(3, '0'),
+                    avvikId: `item${img.avvik_number}`,
+                    uploadedAt: new Date(img.uploaded_at).toLocaleString('no-NO')
+                }));
+                
+                console.log('✅ Loaded', imageGallery.avvik.length, 'avvik images into memory');
+                // IKKE kall renderImageGallery('avvik') her - containers finnes ikke enda
+            }
+        } else {
+            console.log('❌ Failed to load avvik images:', response.status);
+        }
+        
+    } catch (error) {
+        console.error('❌ Could not load existing images:', error);
+    }
 }
 
-// Initialize galleries when page loads
-document.addEventListener('DOMContentLoaded', () => {
-    // Initialize empty galleries
-    renderImageGallery('general');
-    renderImageGallery('avvik');
-});
-
-// Load existing images when service report is loaded
-function loadExistingImages() {
-    // This function should be called when loading an existing service report
-    // to populate imageGallery with existing images from the database
+// Vis avvik-bilder når avvik-containers opprettes
+function renderAvvikImagesForChecklist() {
+    if (!imageGallery.avvik || imageGallery.avvik.length === 0) return;
     
-    if (state.serviceReport?.reportData?.photos) {
-        imageGallery.general = state.serviceReport.reportData.photos.map((url, index) => ({
-            url: url,
-            title: `Rapport-bilde ${index + 1}`,
-            type: 'Rapport',
-            uploadedAt: 'Tidligere'
-        }));
-        renderImageGallery('general');
-    }
+    console.log('🎨 Rendering avvik images for visible containers...');
     
-    // Load avvik images if available
-    // This would require a new API endpoint to fetch avvik images for a report
-}
-
-function updateGeneralImageUI(result) {
-    const attachmentsContainer = document.getElementById('attachments-container');
-    if (attachmentsContainer) {
-        const imageEl = document.createElement('div');
-        imageEl.style.cssText = `
-            margin: 4px 8px 4px 0; padding: 6px 10px; background: #e7f5e7;
-            border: 1px solid #4ade80; border-radius: 4px; font-size: 12px; color: #166534;
-        `;
-        imageEl.innerHTML = `📷 Rapport-bilde lastet opp`;
-        attachmentsContainer.appendChild(imageEl);
-    }
+    // Finn alle avvik-containers som nå eksisterer i DOM
+    const avvikContainers = document.querySelectorAll('.avvik-images-container');
+    
+    avvikContainers.forEach(container => {
+        const containerId = container.id; // f.eks. "avvik-images-container-item1"
+        const avvikId = containerId.replace('avvik-images-container-', ''); // f.eks. "item1"
+        
+        console.log('🔍 Checking container:', containerId, 'for avvikId:', avvikId);
+        
+        // Finn bilder som tilhører dette avviket
+        const avvikImages = imageGallery.avvik.filter(img => img.avvikId === avvikId);
+        
+        if (avvikImages.length > 0) {
+            console.log('✅ Found', avvikImages.length, 'images for', avvikId);
+            
+            const galleryHTML = `
+                <div class="image-gallery">
+                    <div class="gallery-grid">
+                        ${avvikImages.map((image, index) => `
+                            <div class="image-thumbnail" onclick="openImageModal(${imageGallery.avvik.indexOf(image)}, 'avvik')">
+                                <img src="${image.url}" alt="${image.title}" loading="lazy">
+                                <div class="image-overlay">
+                                    <span class="image-type-badge avvik">Avvik</span>
+                                    <div class="image-actions">
+                                        <button class="image-action-btn delete-btn" onclick="event.stopPropagation(); deleteImage(${imageGallery.avvik.indexOf(image)}, 'avvik')">
+                                            <i data-lucide="trash-2"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML = galleryHTML;
+            
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+    });
 }

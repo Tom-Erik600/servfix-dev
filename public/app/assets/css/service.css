@@ -1,3 +1,112 @@
+/* Image Modal CSS - legg til øverst i filen */
+.image-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.image-modal.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 8px;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-title {
+    font-weight: 600;
+    font-size: 18px;
+    color: #111827;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    color: #6b7280;
+}
+
+.modal-close:hover {
+    background: #f3f4f6;
+    color: #111827;
+}
+
+.modal-image-container {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    min-height: 400px;
+}
+
+.modal-image {
+    max-width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+    display: block;
+}
+
+.modal-footer {
+    padding: 16px 20px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.image-info {
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.modal-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.modal-btn.delete {
+    background: #ef4444;
+    color: white;
+}
+
+.modal-btn.delete:hover {
+    background: #dc2626;
+}
 /*
  * Air-Tech AS - Service Side Stilark (v7.9 - Med modal og custom fix)
 */
@@ -494,16 +603,16 @@ button[type="submit"].action-btn.primary:hover {
 
 .gallery-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 8px;
     margin-top: 12px;
 }
 
 .image-thumbnail {
     position: relative;
-    width: 120px;
-    height: 120px;
-    border-radius: 8px;
+    width: 100%;
+    height: 80px;
+    border-radius: 6px;
     overflow: hidden;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -511,15 +620,11 @@ button[type="submit"].action-btn.primary:hover {
     background-color: #f3f4f6;
 }
 
-.image-thumbnail:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
 .image-thumbnail img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    object-position: center;
 }
 
 .image-overlay {
@@ -783,13 +888,12 @@ button[type="submit"].action-btn.primary:hover {
 /* Responsive Design */
 @media (max-width: 768px) {
     .gallery-grid {
-        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-        gap: 8px;
+        grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+        gap: 6px;
     }
     
     .image-thumbnail {
-        width: 100px;
-        height: 100px;
+        height: 70px;
     }
     
     .modal-content {
@@ -839,4 +943,16 @@ button[type="submit"].action-btn.primary:hover {
 
 #avvik-images-container:empty::before {
     content: "Ingen avvik-bilder lagt til";
+}
+
+.empty-gallery {
+    text-align: center;
+    padding: 30px 20px;
+    color: #6c757d;
+}
+
+.empty-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
 }

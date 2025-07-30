@@ -268,5 +268,95 @@ router.delete('/delete', async (req, res) => {
   }
 });
 
+// GET /api/images/avvik/:reportId - Hent alle avvik-bilder for en rapport
+router.get('/avvik/:reportId', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    const result = await pool.query(
+      `SELECT service_report_id, avvik_number, image_url, uploaded_at, metadata
+       FROM avvik_images WHERE service_report_id = $1 ORDER BY avvik_number ASC`,
+      [reportId]
+    );
+    console.log(`Found ${result.rows.length} avvik images for report ${reportId}`);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Feil ved henting av avvik-bilder:', error);
+    res.status(500).json({ error: 'Kunne ikke hente avvik-bilder' });
+  }
+});
+
+// GET /api/images/avvik/:reportId - Hent alle avvik-bilder for en rapport
+router.get('/avvik/:reportId', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    
+    const result = await pool.query(
+      `SELECT service_report_id, avvik_number, image_url, uploaded_at, metadata
+       FROM avvik_images 
+       WHERE service_report_id = $1 
+       ORDER BY avvik_number ASC`,
+      [reportId]
+    );
+    
+    console.log(`Found ${result.rows.length} avvik images for report ${reportId}`);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Feil ved henting av avvik-bilder:', error);
+    res.status(500).json({ error: 'Kunne ikke hente avvik-bilder' });
+  }
+});
+
+// GET /api/images/avvik/:reportId - Hent alle avvik-bilder for en rapport
+router.get('/avvik/:reportId', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    
+    const result = await pool.query(
+      `SELECT service_report_id, avvik_number, image_url, uploaded_at, metadata
+       FROM avvik_images 
+       WHERE service_report_id = $1 
+       ORDER BY avvik_number ASC`,
+      [reportId]
+    );
+    
+    console.log(`Found ${result.rows.length} avvik images for report ${reportId}`);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Feil ved henting av avvik-bilder:', error);
+    res.status(500).json({ error: 'Kunne ikke hente avvik-bilder' });
+  }
+});
+
+// GET /api/images/avvik/:reportId - Hent alle avvik-bilder for en rapport
+router.get('/avvik/:reportId', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    
+    const result = await pool.query(
+      `SELECT service_report_id, avvik_number, image_url, uploaded_at, metadata
+       FROM avvik_images 
+       WHERE service_report_id = $1 
+       ORDER BY avvik_number ASC`,
+      [reportId]
+    );
+    
+    console.log(`Found ${result.rows.length} avvik images for report ${reportId}`);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Feil ved henting av avvik-bilder:', error);
+    res.status(500).json({ error: 'Kunne ikke hente avvik-bilder' });
+  }
+});
 
 module.exports = router;
+
+
+
+
