@@ -4,6 +4,8 @@ const router = express.Router();
 const db = require('../../config/database');
 const path = require('path');
 const fs = require('fs').promises;
+const tripletexService = require('../../services/tripletexService');
+const emailService = require('../../services/emailService');
 
 // Middleware for admin autentisering og tenant-håndtering
 router.use((req, res, next) => {
@@ -40,6 +42,7 @@ router.get('/', async (req, res) => {
         sr.invoice_date,
         sr.created_at,
         o.customer_name,
+        o.customer_id,
         o.scheduled_date,
         e.name as equipment_name,
         e.type as equipment_type,
@@ -54,16 +57,30 @@ router.get('/', async (req, res) => {
     console.log('Executing query...');
     const result = await pool.query(query);
     console.log(`Found ${result.rows.length} reports`);
-    
+
+    // Hent customer email fra Tripletex for hver rapport
+    const reportsWithEmail = await Promise.all(result.rows.map(async (report) => {
+      try {
+        if (report.customer_id) {
+          const customerDetails = await tripletexService.getCustomer(report.customer_id);
+          report.customer_email = customerDetails?.email || customerDetails?.invoiceEmail || null;
+        }
+      } catch (error) {
+        console.warn(`Could not fetch email for customer ${report.customer_id}:`, error.message);
+        report.customer_email = null;
+      }
+      return report;
+    }));
+
     const stats = {
-      total: result.rows.length,
-      sent: result.rows.filter(r => r.sent_til_fakturering).length,
-      pending: result.rows.filter(r => !r.sent_til_fakturering).length,
-      invoiced: result.rows.filter(r => r.is_invoiced).length
+      total: reportsWithEmail.length,
+      sent: reportsWithEmail.filter(r => r.sent_til_fakturering).length,
+      pending: reportsWithEmail.filter(r => !r.sent_til_fakturering).length,
+      invoiced: reportsWithEmail.filter(r => r.is_invoiced).length
     };
-    
+
     res.json({
-      reports: result.rows,
+      reports: reportsWithEmail, // Bruk reportsWithEmail i stedet for result.rows
       stats: stats
     });
     
@@ -135,24 +152,86 @@ router.get('/:reportId/pdf', async (req, res) => {
 // POST /api/admin/reports/:reportId/send - Send rapport til kunde
 router.post('/:reportId/send', async (req, res) => {
   const { reportId } = req.params;
+  const { confirmed } = req.body;
   
   try {
     const pool = await db.getTenantConnection(req.adminTenantId);
     
-    await pool.query(
-      'UPDATE service_reports SET sent_til_fakturering = true, pdf_sent_timestamp = CURRENT_TIMESTAMP WHERE id = $1',
-      [reportId]
-    );
+    // Hent rapport og customer_id
+    const reportQuery = `
+      SELECT sr.*, o.customer_id, o.customer_name
+      FROM service_reports sr
+      JOIN orders o ON sr.order_id = o.id
+      WHERE sr.id = $1
+    `;
     
-    res.json({
-      success: true,
-      message: 'Rapport markert som sendt',
-      sentTo: 'kunde@example.com'
-    });
+    const reportResult = await pool.query(reportQuery, [reportId]);
+    if (reportResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Rapport ikke funnet' });
+    }
+    
+    const report = reportResult.rows[0];
+    
+    // Hent kundens e-post fra Tripletex
+    let customerEmail = null;
+    try {
+      if (report.customer_id) {
+        const customerDetails = await tripletexService.getCustomer(report.customer_id);
+        customerEmail = customerDetails?.email || customerDetails?.invoiceEmail;
+      }
+    } catch (error) {
+      console.warn('Kunne ikke hente kunde e-post:', error.message);
+    }
+    
+    if (!customerEmail) {
+      return res.status(400).json({ error: 'Ingen gyldig e-postadresse funnet for kunde' });
+    }
+    
+    // Hvis ikke bekreftet, returner e-postadresse for bekreftelse
+    if (!confirmed) {
+      return res.json({
+        requiresConfirmation: true,
+        customerEmail: customerEmail,
+        customerName: report.customer_name
+      });
+    }
+    
+    // VIKTIG: Send faktisk e-post FØRST
+    console.log(`📧 Sending email to: ${customerEmail}`);
+    
+    try {
+      // Initialiser email service
+      if (!emailService.transporter) {
+        console.log('🔧 Initializing email service...');
+        await emailService.init();
+      }
+      
+      // Send faktisk e-post
+      const emailResult = await emailService.sendServiceReport(reportId, req.adminTenantId);
+      console.log('✅ Email sent successfully:', emailResult.messageId);
+      
+      // KUN marker som sendt hvis e-post er faktisk sendt
+      await pool.query(
+        'UPDATE service_reports SET sent_til_fakturering = true, pdf_sent_timestamp = CURRENT_TIMESTAMP WHERE id = $1',
+        [reportId]
+      );
+      
+      res.json({
+        success: true,
+        message: 'Rapport sendt via e-post',
+        sentTo: emailResult.sentTo,
+        messageId: emailResult.messageId
+      });
+      
+    } catch (emailError) {
+      console.error('❌ E-post sending feilet:', emailError);
+      // IKKE marker som sendt hvis e-post feiler
+      throw new Error(`E-post kunne ikke sendes: ${emailError.message}`);
+    }
     
   } catch (error) {
     console.error('Feil ved sending av rapport:', error);
-    res.status(500).json({ error: `Kunne ikke sende rapport: ${error.message}` });
+    res.status(500).json({ error: error.message });
   }
 });
 

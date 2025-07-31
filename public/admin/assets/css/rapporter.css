@@ -599,3 +599,21 @@
         align-self: center;
     }
 }
+
+.group-first {
+    border-top: 2px solid var(--primary-blue);
+}
+
+.group-member {
+    border-top: 1px dashed #e0e0e0;
+}
+
+.group-member td:first-child::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    width: 2px;
+    height: 20px;
+    background-color: var(--text-light);
+    opacity: 0.3;
+}

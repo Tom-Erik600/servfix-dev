@@ -109,7 +109,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             state.reports = data.reports || [];
             state.stats = data.stats || {};
 
-            renderTable();
+            renderReportsTable(state.reports);
             updateStatistics();
             
             console.log(`✅ Successfully loaded ${state.reports.length} reports`);
@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (elements.tableBody) {
             elements.tableBody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="loading-cell">
+                    <td colspan="9" class="loading-cell">
                         Laster rapporter...
                     </td>
                 </tr>
@@ -144,7 +144,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (elements.tableBody) {
             elements.tableBody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="loading-cell" style="color: #DC2626;">
+                    <td colspan="9" class="loading-cell" style="color: #DC2626;">
                         ❌ ${message}
                     </td>
                 </tr>
@@ -155,26 +155,38 @@ document.addEventListener('DOMContentLoaded', async function() {
     /**
      * Render the reports table
      */
-    function renderTable() {
-        if (!elements.tableBody) return;
-
-        const filteredReports = getFilteredReports();
-
-        if (filteredReports.length === 0) {
-            elements.tableBody.innerHTML = `
-                <tr>
-                    <td colspan="7" class="loading-cell">
-                        📋 Ingen rapporter funnet
-                    </td>
-                </tr>
-            `;
+    function renderReportsTable(reports) {
+        const tbody = document.getElementById('reports-table-body');
+        
+        if (!reports || reports.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px; color: var(--text-light);">Ingen rapporter funnet</td></tr>';
             return;
         }
-
-        const tableHTML = filteredReports.map(report => createReportRow(report)).join('');
-        elements.tableBody.innerHTML = tableHTML;
         
-        console.log(`✅ Rendered ${filteredReports.length} report rows`);
+        // Grupper rapporter etter order_id
+        const groupedReports = {};
+        reports.forEach(report => {
+            if (!groupedReports[report.order_id]) {
+                groupedReports[report.order_id] = [];
+            }
+            groupedReports[report.order_id].push(report);
+        });
+        
+        // Generer HTML for hver gruppe
+        let html = '';
+        let isFirstGroup = true;
+
+        Object.entries(groupedReports).forEach(([orderId, orderReports]) => {
+            orderReports.forEach((report, index) => {
+                html += createReportRow(report, index === 0, orderReports.length, !isFirstGroup);
+            });
+            isFirstGroup = false;
+        });
+        
+        tbody.innerHTML = html;
+        
+        // Oppdater statistikk
+        updateStatistics();
     }
 
     /**
@@ -219,33 +231,47 @@ document.addEventListener('DOMContentLoaded', async function() {
     /**
      * Create a table row for a report
      */
-    function createReportRow(report) {
+    function createReportRow(report, isFirstInGroup, groupSize, needsTopBorder = false) {
         const isInvoiced = report.is_invoiced;
         const isSent = report.sent_til_fakturering;
         const hasPDF = report.pdf_generated && report.pdf_path;
         
-        // Determine row class
         let rowClass = '';
         if (isInvoiced) rowClass = 'row-invoiced';
         else if (isSent) rowClass = 'row-sent';
         else rowClass = 'row-pending';
-
+        
+        // Legg til topp-border for nye prosjektgrupper
+        const borderStyle = needsTopBorder ? 'border-top: 2px solid #3b82f6; padding-top: 8px;' : '';
+        
         return `
-            <tr class="${rowClass}">
+            <tr class="${rowClass}" style="${borderStyle}">
                 <td>
-                    <div style="font-weight: 500;">
-                        ${formatDate(report.scheduled_date || report.created_at)}
-                    </div>
-                    ${report.created_at ? `<small style="color: var(--text-light);">Opprettet: ${formatDate(report.created_at)}</small>` : ''}
+                    ${isFirstInGroup ? 
+                        `<strong style="color: var(--primary-blue);">${report.order_id}</strong>` + 
+                        (groupSize > 1 ? `<br><small style="color: var(--text-light);">${groupSize} anlegg</small>` : '') :
+                        ''
+                    }
                 </td>
                 <td>
-                    <strong style="color: var(--primary-blue);">${report.order_id}</strong>
+                    ${isFirstInGroup ? 
+                        `<div style="font-weight: 500;">${formatDate(report.scheduled_date)}</div>` :
+                        ''
+                    }
+                </td>
+                <td>
+                    <div style="font-weight: 400;">
+                        ${formatDate(report.created_at)}
+                    </div>
                 </td>
                 <td>
                     <div style="font-weight: 500;">${report.customer_name || 'Ukjent kunde'}</div>
                 </td>
                 <td>
-                    ${report.technician_name || 'Ikke tildelt'}
+                    ${report.technician_name ? 
+                        report.technician_name.split(' ').map(n => n[0]).join('').toUpperCase() : 
+                        'N/A'
+                    }
                 </td>
                 <td>
                     <div style="font-weight: 500;">${report.equipment_name || 'Ukjent'}</div>
@@ -255,48 +281,40 @@ document.addEventListener('DOMContentLoaded', async function() {
                     <span class="status-indicator status-${isSent ? 'sent' : 'pending'}">
                         ${isSent ? '✅ Sendt til kunde' : '⏳ Venter sending'}
                     </span>
-                    ${report.pdf_sent_timestamp ? `<div style="font-size: 11px; color: var(--text-light); margin-top: 2px;">Sendt: ${formatDate(report.pdf_sent_timestamp)}</div>` : ''}
                 </td>
                 <td>
-                    <div class="action-column">
-                        <!-- PDF and Edit actions -->
-                        <div class="action-row">
-                            ${hasPDF ? 
-                                `<button onclick="viewPDF('${report.id}')" class="action-btn btn-primary" title="Vis PDF">
-                                    📄 Vis PDF
-                                </button>` : 
-                                `<span style="font-size: 11px; color: var(--text-light);">PDF ikke generert</span>`
-                            }
-                            <button onclick="editReport('${report.id}')" class="action-btn btn-secondary" title="Rediger rapport">
-                                ✏️ Rediger
-                            </button>
-                        </div>
-                        
-                        <!-- Send Action -->
-                        <div class="action-row">
-                            ${!isSent ? 
-                                `<button onclick="sendToCustomer('${report.id}')" class="action-btn btn-success" title="Send til kunde">
-                                    ✉️ Send til kunde
-                                </button>` : 
-                                `<span style="font-size: 11px; color: var(--status-sent); font-weight: 600;">✅ Sendt</span>`
-                            }
-                        </div>
-                        
-                        <!-- Invoice Checkbox -->
-                        <div class="action-row">
-                            <label class="invoice-checkbox">
-                                <input type="checkbox" 
-                                       ${isInvoiced ? 'checked' : ''} 
-                                       onchange="toggleInvoice('${report.id}', this.checked)">
-                                <span style="color: ${isInvoiced ? 'var(--status-sent)' : 'var(--text-secondary)'};">
-                                    Fakturert
-                                </span>
-                            </label>
-                        </div>
-                        
-                        ${isInvoiced && report.invoice_comment ? 
-                            `<div style="font-size: 10px; color: var(--text-light); font-style: italic; margin-top: 2px;">${report.invoice_comment}</div>` : ''
+                    <div style="font-weight: 400;">
+                        ${report.customer_email || '<span style="color: var(--text-light);">Mangler e-post</span>'}
+                    </div>
+                </td>
+                <td>
+                    <div class="action-buttons" style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start;">
+                        ${hasPDF ? 
+                            `<button class="btn btn-sm btn-outline" onclick="viewPDF('${report.id}')" title="Vis PDF" style="font-size: 12px; padding: 6px 10px;">
+                                📄 Vis PDF
+                            </button>` : 
+                            `<span style="color: var(--text-light); font-size: 11px;">PDF ikke generert</span>`
                         }
+                        
+                        ${!isSent && hasPDF ? 
+                            `<button class="btn btn-sm btn-primary" onclick="sendToCustomer('${report.id}')" title="Send til kunde" style="font-size: 11px; padding: 4px 8px; background-color: #3b82f6;">
+                                📧 Send til kunde
+                            </button>` : 
+                            ''
+                        }
+                        
+                        <button class="btn btn-sm" onclick="editReport('${report.id}')" title="Rediger" style="font-size: 11px; padding: 4px 8px; background-color: #f59e0b; color: white; border: 1px solid #f59e0b;">
+                            ✏️ Rediger
+                        </button>
+                        
+                        <label class="checkbox-container" style="display: flex; align-items: center; margin-top: 4px; font-size: 11px;">
+                            <input type="checkbox" 
+                                   ${isInvoiced ? 'checked' : ''} 
+                                   onchange="toggleInvoice('${report.id}', this.checked)"
+                                   title="Marker som fakturert"
+                                   style="margin-right: 4px; transform: scale(0.8);">
+                            <span>Fakturert</span>
+                        </label>
                     </div>
                 </td>
             </tr>
@@ -322,7 +340,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         state.filters.search = elements.searchInput?.value || '';
         state.filters.status = elements.statusFilter?.value || 'all';
         
-        renderTable();
+        renderReportsTable(getFilteredReports());
     }
 
     /**
@@ -514,32 +532,56 @@ document.addEventListener('DOMContentLoaded', async function() {
     };
 
     /**
-     * Send to customer function
+     * Send to customer function with email confirmation
      */
     window.sendToCustomer = async function(reportId) {
-        if (!confirm('Send denne rapporten til kunden?')) {
-            return;
-        }
-
         try {
-            showToast('✉️ Sender rapport...', 'info');
+            showToast('🔍 Sjekker kundens e-postadresse...', 'info');
             
+            // Først, hent e-postadresse for bekreftelse
             const response = await fetch(`/api/admin/reports/${reportId}/send`, {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json'
-                }
+                },
+                body: JSON.stringify({ confirmed: false })
             });
 
             const result = await response.json();
 
-            if (response.ok) {
-                showToast(`✅ Rapport sendt til ${result.sentTo || 'kunde'}`, 'success');
-                await loadReports();
+            if (result.requiresConfirmation) {
+                // Vis bekreftelse med faktisk e-postadresse
+                const confirmMessage = `Er du sikker på at du vil sende rapporten til:\n\n📧 ${result.customerEmail}\n\nKunde: ${result.customerName}`;
+                
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+                
+                // Send med bekreftelse
+                showToast('✉️ Sender rapport...', 'info');
+                
+                const sendResponse = await fetch(`/api/admin/reports/${reportId}/send`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ confirmed: true })
+                });
+
+                const sendResult = await sendResponse.json();
+
+                if (sendResponse.ok) {
+                    showToast(`✅ Rapport sendt til ${sendResult.sentTo}`, 'success');
+                    await loadReports();
+                } else {
+                    throw new Error(sendResult.error || 'Ukjent feil');
+                }
             } else {
-                throw new Error(result.error || 'Ukjent feil');
+                throw new Error(result.error || 'Kunne ikke hente e-postadresse');
             }
+            
         } catch (error) {
             console.error('Error sending report:', error);
             showToast('❌ Feil ved sending: ' + error.message, 'error');
