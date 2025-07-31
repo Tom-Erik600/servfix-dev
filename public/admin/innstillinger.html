@@ -5,38 +5,589 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Innstillinger - Air-Tech Admin</title>
     <link rel="stylesheet" href="/admin/assets/css/admin.css">
+    <link rel="stylesheet" href="/admin/assets/css/innstillinger.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="app-layout">
-        <header class="app-header">
-            <!-- Lastes av main.js -->
-        </header>
+        <header class="app-header"></header>
+
         <main class="main-content">
             <div class="page-header">
                 <h1>Innstillinger</h1>
-                <p>Administrer systeminnstillinger</p>
+                <p>Konfigurer bedriftsinformasjon, logo og systeminnstillinger</p>
             </div>
+
+            <!-- Bedriftsinformasjon -->
             <div class="card">
-                <h2>Logo og farger</h2>
-                <p style="color: #f59e0b; font-style: italic;">
-                    ⚠️ Denne funksjonen er under utvikling
-                </p>
-                <div class="form-group">
-                    <label>Last opp bedriftslogo</label>
-                    <input type="file" disabled>
+                <div class="card-header">
+                    <h2>🏢 Bedriftsinformasjon</h2>
                 </div>
-                <div class="form-group">
-                    <label>Primærfarge</label>
-                    <input type="color" value="#4A90E2" disabled>
+                <div class="card-body">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="company-name">Bedriftsnavn</label>
+                            <input type="text" id="company-name" class="form-input" placeholder="Air-Tech AS">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="company-address">Adresse</label>
+                            <input type="text" id="company-address" class="form-input" placeholder="Stanseveien 18, 0975 Oslo">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="company-phone">Telefon</label>
+                            <input type="tel" id="company-phone" class="form-input" placeholder="+47 22 00 00 00">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="company-email">E-post</label>
+                            <input type="email" id="company-email" class="form-input" placeholder="post@air-tech.no">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="company-cvr">Organisasjonsnummer</label>
+                            <input type="text" id="company-cvr" class="form-input" placeholder="123 456 789">
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-primary" id="save-company-info">
+                        Lagre bedriftsinformasjon
+                    </button>
                 </div>
-                <div class="form-group">
-                    <label>Sekundærfarge</label>
-                    <input type="color" value="#357ABD" disabled>
+            </div>
+
+            <!-- Logo-opplasting -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>🖼️ Bedriftslogo</h2>
+                </div>
+                <div class="card-body">
+                    <p style="margin-bottom: 20px; color: var(--text-light);">
+                        Last opp logo som vises på rapporter. Anbefalt størrelse: 200x80px, maks 2MB.
+                    </p>
+                    
+                    <div class="logo-upload-area" id="logo-upload-area">
+                        <div class="upload-content">
+                            <div class="upload-icon">🖼️</div>
+                            <div class="upload-text">
+                                <strong>Klikk her eller dra og slipp logo</strong>
+                                <small>PNG, JPG eller SVG - maks 2MB</small>
+                            </div>
+                        </div>
+                        <input type="file" class="hidden-file-input" id="logo-file-input" accept="image/*">
+                    </div>
+                    
+                    <div id="logo-preview-section" style="display: none; margin-top: 16px; text-align: center;">
+                        <img id="logo-preview" class="logo-preview" alt="Logo preview">
+                        <div class="logo-actions" style="margin-top: 16px;">
+                            <button type="button" class="btn btn-primary" id="upload-logo-btn">
+                                📤 Last opp logo
+                            </button>
+                            <button type="button" class="btn btn-secondary" id="remove-preview-btn">
+                                🗑️ Avbryt
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="current-logo-section" style="display: none; margin-top: 16px; text-align: center;">
+                        <p style="font-size: 14px; color: var(--text-light); margin-bottom: 8px;">Gjeldende logo:</p>
+                        <img id="current-logo" class="logo-preview" alt="Current logo">
+                        <div class="logo-actions" style="margin-top: 16px;">
+                            <button type="button" class="btn btn-secondary" id="remove-current-logo-btn">
+                                🗑️ Fjern gjeldende logo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rapport-innstillinger -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>📄 Rapport-innstillinger</h2>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="sender-email">Avsender-epost</label>
+                        <input type="email" id="sender-email" class="form-input" placeholder="post@air-tech.no">
+                        <small style="color: var(--text-light);">E-postadressen som brukes som avsender for rapporter</small>
+                    </div>
+                    
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <div class="setting-title">🔄 Automatisk sending av rapporter</div>
+                                <div class="setting-description">Send rapporter automatisk til kunder når de er ferdigstilt</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="auto-send-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <div class="setting-title">📧 Kopier admin på alle rapporter</div>
+                                <div class="setting-description">Sender en kopi av alle rapporter til admin-epost</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="copy-admin-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <button type="button" class="btn btn-primary" id="save-report-settings">
+                        Lagre rapport-innstillinger
+                    </button>
+                </div>
+            </div>
+
+            <!-- Lagre alle innstillinger -->
+            <div class="card">
+                <div class="card-body" style="text-align: center;">
+                    <button type="button" class="btn btn-primary btn-large" id="save-all-settings">
+                        💾 Lagre alle innstillinger
+                    </button>
                 </div>
             </div>
         </main>
     </div>
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <p id="loading-text">Laster...</p>
+        </div>
+    </div>
+
     <script src="/admin/assets/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('⚙️ Loading settings page with JSON storage...');
+            
+            // State
+            let selectedLogoFile = null;
+            let currentLogoUrl = null;
+            let currentSettings = {};
+            
+            // DOM elements
+            const logoUploadArea = document.getElementById('logo-upload-area');
+            const logoFileInput = document.getElementById('logo-file-input');
+            const logoPreviewSection = document.getElementById('logo-preview-section');
+            const logoPreview = document.getElementById('logo-preview');
+            const uploadLogoBtn = document.getElementById('upload-logo-btn');
+            const removePreviewBtn = document.getElementById('remove-preview-btn');
+            const currentLogoSection = document.getElementById('current-logo-section');
+            const currentLogo = document.getElementById('current-logo');
+            const removeCurrentLogoBtn = document.getElementById('remove-current-logo-btn');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            
+            // Company info elements
+            const companyNameInput = document.getElementById('company-name');
+            const companyAddressInput = document.getElementById('company-address');
+            const companyPhoneInput = document.getElementById('company-phone');
+            const companyEmailInput = document.getElementById('company-email');
+            const companyCvrInput = document.getElementById('company-cvr');
+            
+            // Report settings elements
+            const senderEmailInput = document.getElementById('sender-email');
+            const autoSendToggle = document.getElementById('auto-send-toggle');
+            const copyAdminToggle = document.getElementById('copy-admin-toggle');
+            
+            // Load settings from backend JSON file
+            loadAllSettingsFromBackend();
+            
+            // Setup event listeners
+            setupEventListeners();
+            setupLogoUpload();
+            
+            // === LOAD SETTINGS FROM JSON FILE ===
+            async function loadAllSettingsFromBackend() {
+                try {
+                    console.log('🔍 Loading all settings from backend JSON file...');
+                    showLoading(true, 'Laster innstillinger...');
+                    
+                    const response = await fetch('/api/images/settings', {
+                        credentials: 'include'
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log('📋 Settings loaded from backend:', data);
+                        currentSettings = data;
+                        
+                        // Load company info
+                        if (data.companyInfo) {
+                            const info = data.companyInfo;
+                            if (info.name) companyNameInput.value = info.name;
+                            if (info.address) companyAddressInput.value = info.address;
+                            if (info.phone) companyPhoneInput.value = info.phone;
+                            if (info.email) companyEmailInput.value = info.email;
+                            if (info.cvr) companyCvrInput.value = info.cvr;
+                        }
+                        
+                        // Load logo
+                        if (data.logo?.url) {
+                            currentLogoUrl = data.logo.url;
+                            
+                            const testImg = new Image();
+                            testImg.onload = () => {
+                                currentLogo.src = data.logo.url;
+                                currentLogoSection.style.display = 'block';
+                            };
+                            testImg.onerror = () => {
+                                currentLogoSection.style.display = 'none';
+                            };
+                            testImg.src = data.logo.url;
+                        } else {
+                            currentLogoSection.style.display = 'none';
+                        }
+                        
+                        // Load report settings
+                        if (data.reportSettings) {
+                            const reportSettings = data.reportSettings;
+                            if (reportSettings.senderEmail) senderEmailInput.value = reportSettings.senderEmail;
+                            if (typeof reportSettings.autoSend === 'boolean') autoSendToggle.checked = reportSettings.autoSend;
+                            if (typeof reportSettings.copyAdmin === 'boolean') copyAdminToggle.checked = reportSettings.copyAdmin;
+                        }
+                        
+                    } else {
+                        console.warn('⚠️ Settings API request failed:', response.status);
+                    }
+                } catch (error) {
+                    console.error('❌ Could not load settings:', error);
+                } finally {
+                    showLoading(false);
+                }
+            }
+            
+            // === EVENT LISTENERS ===
+            function setupEventListeners() {
+                const saveCompanyInfoBtn = document.getElementById('save-company-info');
+                if (saveCompanyInfoBtn) {
+                    saveCompanyInfoBtn.addEventListener('click', saveCompanyInfo);
+                }
+                
+                const saveReportSettingsBtn = document.getElementById('save-report-settings');
+                if (saveReportSettingsBtn) {
+                    saveReportSettingsBtn.addEventListener('click', saveReportSettings);
+                }
+                
+                const saveAllBtn = document.getElementById('save-all-settings');
+                if (saveAllBtn) {
+                    saveAllBtn.addEventListener('click', saveAllSettings);
+                }
+                
+                if (removeCurrentLogoBtn) {
+                    removeCurrentLogoBtn.addEventListener('click', removeCurrentLogo);
+                }
+                
+                // Toggle change listeners (immediate feedback + async save)
+                if (autoSendToggle) {
+                    autoSendToggle.addEventListener('change', function() {
+                        fetch('/api/images/save-settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({ 
+                                reportSettings: { autoSend: this.checked } 
+                            })
+                        }).catch(error => console.error('Error saving auto-send:', error));
+                    });
+                }
+                
+                if (copyAdminToggle) {
+                    copyAdminToggle.addEventListener('change', function() {
+                        fetch('/api/images/save-settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({ 
+                                reportSettings: { copyAdmin: this.checked } 
+                            })
+                        }).catch(error => console.error('Error saving copy-admin:', error));
+                    });
+                }
+            }
+            
+            // === LOGO UPLOAD SETUP ===
+            function setupLogoUpload() {
+                logoUploadArea.addEventListener('click', () => logoFileInput.click());
+                logoFileInput.addEventListener('change', handleFileSelect);
+                
+                if (uploadLogoBtn) {
+                    uploadLogoBtn.addEventListener('click', uploadSelectedLogo);
+                }
+                
+                if (removePreviewBtn) {
+                    removePreviewBtn.addEventListener('click', clearSelectedLogo);
+                }
+                
+                // DRAG AND DROP
+                logoUploadArea.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    logoUploadArea.classList.add('dragover');
+                });
+                
+                logoUploadArea.addEventListener('dragleave', (e) => {
+                    e.preventDefault();
+                    logoUploadArea.classList.remove('dragover');
+                });
+                
+                logoUploadArea.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    logoUploadArea.classList.remove('dragover');
+                    
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        handleFileSelect({ target: { files: files } });
+                    }
+                });
+            }
+            
+            // === FILE HANDLING ===
+            function handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                if (!file.type.startsWith('image/')) {
+                    showToast('Kun bildefiler er tillatt', 'error');
+                    return;
+                }
+                
+                if (file.size > 2 * 1024 * 1024) {
+                    showToast('Filen er for stor (maks 2MB)', 'error');
+                    return;
+                }
+                
+                selectedLogoFile = file;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    logoPreview.src = e.target.result;
+                    logoPreviewSection.style.display = 'block';
+                    logoUploadArea.style.display = 'none';
+                };
+                reader.readAsDataURL(file);
+            }
+            
+            async function uploadSelectedLogo() {
+                if (!selectedLogoFile) {
+                    showToast('Ingen fil valgt', 'error');
+                    return;
+                }
+                
+                try {
+                    showLoading(true, 'Laster opp logo...');
+                    
+                    const formData = new FormData();
+                    formData.append('logo', selectedLogoFile);
+                    
+                    const response = await fetch('/api/images/upload-logo', {
+                        method: 'POST',
+                        credentials: 'include',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showToast('Logo lastet opp og lagret!');
+                        
+                        currentLogoUrl = result.logoUrl;
+                        currentLogo.src = result.logoUrl;
+                        currentLogoSection.style.display = 'block';
+                        clearSelectedLogo();
+                        
+                    } else {
+                        throw new Error(result.error || 'Upload failed');
+                    }
+                    
+                } catch (error) {
+                    console.error('Logo upload error:', error);
+                    showToast('Feil ved opplasting: ' + error.message, 'error');
+                } finally {
+                    showLoading(false);
+                }
+            }
+            
+            function clearSelectedLogo() {
+                selectedLogoFile = null;
+                logoPreviewSection.style.display = 'none';
+                logoUploadArea.style.display = 'flex';
+                logoFileInput.value = '';
+            }
+            
+            async function removeCurrentLogo() {
+                if (!confirm('Er du sikker på at du vil fjerne gjeldende logo?')) return;
+                
+                try {
+                    showLoading(true, 'Fjerner logo...');
+                    
+                    const response = await fetch('/api/images/logo', {
+                        method: 'DELETE',
+                        credentials: 'include'
+                    });
+                    
+                    if (response.ok) {
+                        showToast('Logo fjernet');
+                        currentLogoSection.style.display = 'none';
+                        currentLogoUrl = null;
+                    } else {
+                        const result = await response.json();
+                        throw new Error(result.error || 'Kunne ikke fjerne logo');
+                    }
+                } catch (error) {
+                    showToast('Feil ved fjerning: ' + error.message, 'error');
+                } finally {
+                    showLoading(false);
+                }
+            }
+            
+            // === SAVE FUNCTIONS ===
+            async function saveCompanyInfo() {
+                try {
+                    showLoading(true, 'Lagrer bedriftsinformasjon...');
+                    
+                    const companyInfo = {
+                        name: companyNameInput.value.trim(),
+                        address: companyAddressInput.value.trim(),
+                        phone: companyPhoneInput.value.trim(),
+                        email: companyEmailInput.value.trim(),
+                        cvr: companyCvrInput.value.trim()
+                    };
+                    
+                    const response = await fetch('/api/images/save-settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ companyInfo })
+                    });
+                    
+                    if (response.ok) {
+                        showToast('Bedriftsinformasjon lagret!');
+                        currentSettings.companyInfo = companyInfo;
+                    } else {
+                        const error = await response.json();
+                        throw new Error(error.error || 'Kunne ikke lagre');
+                    }
+                } catch (error) {
+                    showToast('Feil ved lagring: ' + error.message, 'error');
+                } finally {
+                    showLoading(false);
+                }
+            }
+            
+            async function saveReportSettings() {
+                try {
+                    showLoading(true, 'Lagrer rapport-innstillinger...');
+                    
+                    const reportSettings = {
+                        senderEmail: senderEmailInput.value.trim(),
+                        autoSend: autoSendToggle.checked,
+                        copyAdmin: copyAdminToggle.checked
+                    };
+                    
+                    const response = await fetch('/api/images/save-settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ reportSettings })
+                    });
+                    
+                    if (response.ok) {
+                        showToast('Rapport-innstillinger lagret!');
+                        currentSettings.reportSettings = reportSettings;
+                    } else {
+                        const error = await response.json();
+                        throw new Error(error.error || 'Kunne ikke lagre');
+                    }
+                } catch (error) {
+                    showToast('Feil ved lagring: ' + error.message, 'error');
+                } finally {
+                    showLoading(false);
+                }
+            }
+            
+            async function saveAllSettings() {
+                try {
+                    showLoading(true, 'Lagrer innstillinger...');
+                    
+                    const allSettings = {
+                        companyInfo: {
+                            name: companyNameInput.value.trim(),
+                            address: companyAddressInput.value.trim(),
+                            phone: companyPhoneInput.value.trim(),
+                            email: companyEmailInput.value.trim(),
+                            cvr: companyCvrInput.value.trim()
+                        },
+                        reportSettings: {
+                            senderEmail: senderEmailInput.value.trim(),
+                            autoSend: autoSendToggle.checked,
+                            copyAdmin: copyAdminToggle.checked
+                        }
+                    };
+                    
+                    const response = await fetch('/api/images/save-settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify(allSettings)
+                    });
+                    
+                    if (response.ok) {
+                        showToast('Alle innstillinger lagret!');
+                        currentSettings = { ...currentSettings, ...allSettings };
+                    } else {
+                        const error = await response.json();
+                        throw new Error(error.error || 'Kunne ikke lagre');
+                    }
+                } catch (error) {
+                    showToast('Feil ved lagring: ' + error.message, 'error');
+                } finally {
+                    showLoading(false);
+                }
+            }
+            
+            // === UTILITY FUNCTIONS ===
+            function showLoading(show, text = 'Laster...') {
+                if (show) {
+                    document.getElementById('loading-text').textContent = text;
+                    loadingOverlay.style.display = 'flex';
+                } else {
+                    loadingOverlay.style.display = 'none';
+                }
+            }
+            
+            function showToast(message, type = 'success') {
+                // Simple toast - create element and show briefly
+                const toast = document.createElement('div');
+                toast.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: ${type === 'error' ? '#ef4444' : '#10b981'};
+                    color: white;
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    font-weight: 500;
+                    z-index: 1000;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                `;
+                toast.textContent = message;
+                document.body.appendChild(toast);
+                
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 3000);
+            }
+        });
+    </script>
 </body>
 </html>

@@ -17,168 +17,111 @@
         </header>
 
         <main class="main-content">
-            <!-- Enhanced page header -->
+            <!-- Page header -->
             <div class="page-header">
                 <h1>📋 Servicerapporter</h1>
-                <p>Administrer og send servicerapporter til kunder med profesjonell PDF-generering</p>
+                <p>Administrer og send servicerapporter til kunder</p>
             </div>
 
-            <!-- Enhanced settings card -->
+            <!-- Filter and search -->
             <div class="card" style="margin-bottom: 24px;">
-                <div class="card-header">
-                    <h2>⚙️ Innstillinger</h2>
-                </div>
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <label>🔄 Automatisk sending til kunde</label>
-                        <p class="setting-description">Send servicerapport automatisk når tekniker fullfører service. Dette sparer tid og sikrer rask kommunikasjon med kunden.</p>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" id="auto-send-toggle" checked>
-                        <span class="slider"></span>
-                    </label>
-                </div>
-            </div>
-
-            <!-- Enhanced filters card -->
-            <div class="card" style="margin-bottom: 24px;">
-                <div class="card-header">
-                    <h2>🔍 Filter og søk</h2>
-                </div>
                 <div class="filters-grid">
                     <div class="filter-group">
-                        <label>📊 Status filter</label>
+                        <label>Status filter</label>
                         <select id="status-filter">
-                            <option value="all">🔄 Alle rapporter</option>
-                            <option value="pending">⏳ Venter sending</option>
-                            <option value="sent">✅ Sendt til kunde</option>
-                            <option value="invoiced">💰 Fakturerte</option>
+                            <option value="all">Alle rapporter</option>
+                            <option value="pending">Venter sending</option>
+                            <option value="sent">Sendt til kunde</option>
+                            <option value="invoiced">Fakturerte</option>
                         </select>
                     </div>
                     
                     <div class="filter-group">
-                        <label>🔍 Fritekst søk</label>
-                        <input type="text" id="search-input" placeholder="Søk på kunde, ordre, tekniker eller anlegg...">
+                        <label>Søk</label>
+                        <input type="text" id="search-input" placeholder="Søk kunde, ordre, tekniker...">
                     </div>
                 </div>
             </div>
 
-            <!-- Enhanced statistics with modern design -->
+            <!-- Statistics -->
             <div class="stats-row">
                 <div class="stat-card">
                     <div class="stat-value" id="total-reports">0</div>
-                    <div class="stat-label">📋 Totalt rapporter</div>
+                    <div class="stat-label">Totalt rapporter</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="sent-reports">0</div>
-                    <div class="stat-label">✉️ Sendt til kunde</div>
+                    <div class="stat-label">Sendt til kunde</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="pending-reports">0</div>
-                    <div class="stat-label">⏳ Venter på sending</div>
+                    <div class="stat-label">Venter på sending</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="invoiced-reports">0</div>
-                    <div class="stat-label">💰 Fakturerte</div>
+                    <div class="stat-label">Fakturerte</div>
                 </div>
             </div>
 
-            <!-- Enhanced reports table -->
+            <!-- Reports Table -->
             <div class="card">
                 <div class="card-header">
-                    <h2>📊 Servicerapporter oversikt</h2>
-                    <div style="display: flex; gap: 12px; align-items: center;">
-                        <button onclick="reloadReports()" 
-                                style="padding: 8px 16px; background: var(--primary-blue); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 6px; transition: all 0.3s ease;"
-                                onmouseover="this.style.background='var(--primary-blue-light)'"
-                                onmouseout="this.style.background='var(--primary-blue)'">
-                            🔄 Oppdater
-                        </button>
-                        <span style="font-size: 12px; color: var(--text-light); font-weight: 500;">
-                            Sist oppdatert: <span id="last-updated">Nå</span>
-                        </span>
-                    </div>
+                    <h2>Servicerapporter</h2>
+                    <button onclick="reloadReports()" class="refresh-btn">
+                        🔄 Oppdater
+                    </button>
                 </div>
                 <div class="table-container">
                     <table class="reports-table">
                         <thead>
                             <tr>
-                                <th>📅 Servicedato</th>
-                                <th>📋 Ordrenummer</th>
-                                <th>👤 Kunde</th>
-                                <th>🔧 Tekniker</th>
-                                <th>⚙️ Anlegg</th>
-                                <th>📊 Status</th>
-                                <th>🎯 Handlinger</th>
+                                <th>Dato</th>
+                                <th>Ordrenr</th>
+                                <th>Kunde</th>
+                                <th>Tekniker</th>
+                                <th>Anlegg</th>
+                                <th>Status</th>
+                                <th>Handlinger</th>
                             </tr>
                         </thead>
                         <tbody id="reports-table-body">
                             <tr>
                                 <td colspan="7" class="loading-cell">
-                                    <div style="display: flex; align-items: center; justify-content: center; gap: 12px;">
-                                        <div style="width: 20px; height: 20px; border: 2px solid #E5E7EB; border-top: 2px solid var(--primary-blue); border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                                        <span>⏳ Laster rapporter...</span>
-                                    </div>
+                                    Laster rapporter...
                                 </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                
-                <!-- Enhanced table footer with useful info -->
-                <div style="padding: 16px 20px; background: #F8FAFC; border-top: 1px solid #E5E7EB; border-radius: 0 0 12px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-secondary);">
-                    <div>
-                        💡 <strong>Tips:</strong> Bruk Ctrl+R for å oppdatere, Ctrl+F for å søke
-                    </div>
-                    <div>
-                        🔄 Automatisk oppdatering hvert 5. minutt
-                    </div>
-                </div>
-            </div>
-
-            <!-- Help section -->
-            <div class="card" style="margin-top: 24px; background: linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%); border: 2px solid var(--primary-blue-light);">
-                <div class="card-header">
-                    <h2>💡 Hjelpetips</h2>
-                </div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
-                    <div>
-                        <h3 style="color: var(--primary-blue); margin-bottom: 8px; font-size: 14px;">📄 PDF-visning</h3>
-                        <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Klikk "Vis PDF" for å åpne rapporten i en ny fane. PDF-er genereres automatisk når teknikere fullfører oppdrag.</p>
-                    </div>
-                    <div>
-                        <h3 style="color: var(--primary-blue); margin-bottom: 8px; font-size: 14px;">✉️ Sending til kunde</h3>
-                        <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Send rapporter direkte til kundens e-post. Systemet holder oversikt over hvilke rapporter som er sendt.</p>
-                    </div>
-                    <div>
-                        <h3 style="color: var(--primary-blue); margin-bottom: 8px; font-size: 14px;">💰 Fakturering</h3>
-                        <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Marker rapporter som fakturert for å holde oversikt over faktureringsstatus. Legg til kommentarer ved behov.</p>
-                    </div>
-                </div>
             </div>
         </main>
     </div>
 
-    <!-- Enhanced scripts loading -->
+    <!-- Edit Report Modal -->
+    <div id="edit-report-modal" class="modal-overlay">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3>✏️ Rediger servicerapport</h3>
+                <button type="button" class="close-btn" onclick="closeEditModal()">×</button>
+            </div>
+            
+            <div class="modal-body" id="edit-modal-body">
+                <!-- Dynamic content will be loaded here -->
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Avbryt</button>
+                <button type="button" class="btn btn-primary" id="save-report-btn">
+                    💾 Lagre endringer
+                </button>
+                <button type="button" class="btn btn-success" id="save-and-send-btn">
+                    ✉️ Lagre og send
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="/admin/assets/js/main.js"></script>
     <script src="/admin/assets/js/rapporter.js"></script>
-    
-    <!-- Auto-refresh functionality -->
-    <script>
-        // Auto-refresh every 5 minutes
-        setInterval(() => {
-            if (typeof reloadReports === 'function') {
-                reloadReports();
-                document.getElementById('last-updated').textContent = new Date().toLocaleTimeString('no-NO');
-            }
-        }, 5 * 60 * 1000);
-        
-        // Update last updated time initially
-        document.addEventListener('DOMContentLoaded', () => {
-            setTimeout(() => {
-                document.getElementById('last-updated').textContent = new Date().toLocaleTimeString('no-NO');
-            }, 1000);
-        });
-    </script>
 </body>
 </html>

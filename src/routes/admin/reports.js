@@ -1,6 +1,9 @@
+// src/routes/admin/reports.js - Fixed with PDF serving
 const express = require('express');
 const router = express.Router();
 const db = require('../../config/database');
+const path = require('path');
+const fs = require('fs').promises;
 
 // Middleware for admin autentisering og tenant-håndtering
 router.use((req, res, next) => {
@@ -68,6 +71,62 @@ router.get('/', async (req, res) => {
     console.error('Database error in admin reports:', error);
     res.status(500).json({ 
       error: 'Kunne ikke hente rapporter',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/admin/reports/:reportId/pdf - Serve PDF file (MANGLENDE RUTE!)
+router.get('/:reportId/pdf', async (req, res) => {
+  const { reportId } = req.params;
+  
+  try {
+    console.log(`Serving PDF for report: ${reportId}`);
+    
+    const pool = await db.getTenantConnection(req.adminTenantId);
+    
+    // Hent PDF-path fra database
+    const result = await pool.query(
+      'SELECT pdf_path, pdf_generated FROM service_reports WHERE id = $1',
+      [reportId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Rapport ikke funnet' });
+    }
+    
+    const report = result.rows[0];
+    
+    if (!report.pdf_generated || !report.pdf_path) {
+      return res.status(404).json({ error: 'PDF ikke generert for denne rapporten' });
+    }
+    
+    // Bygg full path til PDF-fil
+    const fullPdfPath = path.join(__dirname, '../../servfix-files/tenants', req.adminTenantId, report.pdf_path);
+    
+    console.log(`Looking for PDF at: ${fullPdfPath}`);
+    
+    // Sjekk om filen eksisterer
+    try {
+      await fs.access(fullPdfPath);
+    } catch (fileError) {
+      console.error(`PDF file not found: ${fullPdfPath}`);
+      return res.status(404).json({ error: 'PDF-fil ikke funnet på server' });
+    }
+    
+    // Les og send PDF-fil
+    const pdfBuffer = await fs.readFile(fullPdfPath);
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="servicerapport_${reportId}.pdf"`);
+    res.send(pdfBuffer);
+    
+    console.log(`✅ PDF served successfully for report ${reportId}`);
+    
+  } catch (error) {
+    console.error('Error serving PDF:', error);
+    res.status(500).json({ 
+      error: 'Kunne ikke hente PDF',
       details: error.message 
     });
   }

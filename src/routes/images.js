@@ -1,4 +1,4 @@
-// src/routes/images.js - Bilde upload routes
+// src/routes/images.js - Enhanced with JSON settings system
 const express = require('express');
 const multer = require('multer');
 const { Storage } = require('@google-cloud/storage');
@@ -23,7 +23,6 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024, // 10MB limit
   },
   fileFilter: (req, file, cb) => {
-    // Kun tillat bilder
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
@@ -32,15 +31,445 @@ const upload = multer({
   }
 });
 
+// Helper: Last opp til Google Cloud Storage
+async function uploadToGCS(buffer, filePath, mimetype) {
+  const file = bucket.file(filePath);
+  
+  const stream = file.createWriteStream({
+    metadata: {
+      contentType: mimetype,
+    },
+    resumable: false,
+  });
+
+  return new Promise((resolve, reject) => {
+    stream.on('error', reject);
+    stream.on('finish', () => {
+      const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
+      resolve(publicUrl);
+    });
+    stream.end(buffer);
+  });
+}
+
+// Helper: Load tenant settings from JSON file in GCS
+async function loadTenantSettings(tenantId) {
+  try {
+    const settingsPath = `tenants/${tenantId}/assets/settings.json`;
+    const file = bucket.file(settingsPath);
+    const [exists] = await file.exists();
+    
+    if (exists) {
+      const [contents] = await file.download();
+      return JSON.parse(contents.toString());
+    } else {
+      return getDefaultSettings(tenantId);
+    }
+  } catch (error) {
+    console.error('Error loading tenant settings:', error);
+    return getDefaultSettings(tenantId);
+  }
+}
+
+// Helper: Save tenant settings to JSON file in GCS
+async function saveTenantSettings(tenantId, settings) {
+  try {
+    const settingsPath = `tenants/${tenantId}/assets/settings.json`;
+    const file = bucket.file(settingsPath);
+    
+    await file.save(JSON.stringify(settings, null, 2), {
+      metadata: {
+        contentType: 'application/json',
+      },
+    });
+    
+    console.log(`✅ Settings saved for tenant ${tenantId}`);
+    return true;
+  } catch (error) {
+    console.error('Error saving tenant settings:', error);
+    return false;
+  }
+}
+
+// Helper: Default settings
+function getDefaultSettings(tenantId) {
+  return {
+    tenantId: tenantId,
+    companyInfo: {
+      name: "Air-Tech AS",
+      address: "Stanseveien 18, 0975 Oslo",
+      phone: "+47 22 00 00 00",
+      email: "post@air-tech.no",
+      cvr: "123 456 789"
+    },
+    logo: {
+      url: null,
+      uploadedAt: null,
+      originalName: null,
+      fileSize: null
+    },
+    reportSettings: {
+      autoSend: false,
+      copyAdmin: false,
+      senderEmail: "post@air-tech.no"
+    },
+    lastUpdated: new Date().toISOString()
+  };
+}
+
 // Auth middleware
 router.use((req, res, next) => {
-  if (!req.session.technicianId) {
+  if (!req.session.technicianId && !req.session.isAdmin) {
     return res.status(401).json({ error: 'Ikke autentisert' });
   }
   next();
 });
 
-// Helper: Generer filsti for GCS
+// GET /api/images/settings - Hent alle innstillinger fra JSON-fil
+router.get('/settings', async (req, res) => {
+  try {
+    const tenantId = req.session.tenantId || 'airtech';
+    console.log(`📋 Loading settings for tenant: ${tenantId}`);
+    
+    const settings = await loadTenantSettings(tenantId);
+    
+    console.log(`✅ Settings loaded:`, {
+      hasLogo: !!settings.logo?.url,
+      companyName: settings.companyInfo?.name,
+      lastUpdated: settings.lastUpdated
+    });
+    
+    res.json(settings);
+    
+  } catch (error) {
+    console.error('Error loading settings:', error);
+    res.status(500).json({ 
+      error: 'Kunne ikke laste innstillinger',
+      details: error.message 
+    });
+  }
+});
+
+// POST /api/images/save-settings - Lagre innstillinger til JSON-fil
+router.post('/save-settings', async (req, res) => {
+  try {
+    const tenantId = req.session.tenantId || 'airtech';
+    const settingsUpdate = req.body;
+    
+    console.log(`💾 Saving settings for tenant: ${tenantId}`, settingsUpdate);
+    
+    // Load existing settings
+    const currentSettings = await loadTenantSettings(tenantId);
+    
+    // Merge with updates (deep merge for nested objects)
+    const updatedSettings = {
+      ...currentSettings,
+      ...settingsUpdate,
+      tenantId: tenantId,
+      lastUpdated: new Date().toISOString()
+    };
+    
+    // Deep merge for nested objects
+    if (settingsUpdate.companyInfo) {
+      updatedSettings.companyInfo = {
+        ...currentSettings.companyInfo,
+        ...settingsUpdate.companyInfo
+      };
+    }
+    
+    if (settingsUpdate.reportSettings) {
+      updatedSettings.reportSettings = {
+        ...currentSettings.reportSettings,
+        ...settingsUpdate.reportSettings
+      };
+    }
+    
+    if (settingsUpdate.logo) {
+      updatedSettings.logo = {
+        ...currentSettings.logo,
+        ...settingsUpdate.logo
+      };
+    }
+    
+    // Save to GCS
+    const saved = await saveTenantSettings(tenantId, updatedSettings);
+    
+    if (!saved) {
+      throw new Error('Kunne ikke lagre innstillinger til cloud storage');
+    }
+    
+    console.log(`✅ Settings saved successfully for ${tenantId}`);
+    
+    res.json({
+      success: true,
+      message: 'Innstillinger lagret!',
+      settings: updatedSettings
+    });
+    
+  } catch (error) {
+    console.error('Error saving settings:', error);
+    res.status(500).json({ 
+      error: 'Kunne ikke lagre innstillinger',
+      details: error.message 
+    });
+  }
+});
+
+// POST /api/images/upload-logo - Last opp bedriftslogo
+router.post('/upload-logo', upload.single('logo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Ingen fil lastet opp' });
+    }
+
+    console.log('📤 Laster opp bedriftslogo...', {
+      filename: req.file.originalname,
+      size: Math.round(req.file.size / 1024) + 'KB',
+      mimetype: req.file.mimetype
+    });
+    
+    const tenantId = req.session.tenantId || 'airtech';
+    const fileExtension = path.extname(req.file.originalname).slice(1) || 'png';
+    const timestamp = Date.now();
+    
+    // Generate file path for logo
+    const filePath = `tenants/${tenantId}/assets/logo_${timestamp}.${fileExtension}`;
+
+    // Upload to Google Cloud Storage
+    const logoUrl = await uploadToGCS(req.file.buffer, filePath, req.file.mimetype);
+
+    // Load existing settings
+    const settings = await loadTenantSettings(tenantId);
+    
+    // Update logo info
+    settings.logo = {
+      url: logoUrl,
+      uploadedAt: new Date().toISOString(),
+      originalName: req.file.originalname,
+      fileSize: req.file.size
+    };
+    settings.lastUpdated = new Date().toISOString();
+    
+    // Save updated settings
+    const saved = await saveTenantSettings(tenantId, settings);
+    
+    if (!saved) {
+      throw new Error('Kunne ikke lagre logo-innstillinger');
+    }
+
+    console.log(`✅ Bedriftslogo lastet opp og lagret for ${tenantId}: ${logoUrl}`);
+
+    res.json({
+      success: true,
+      logoUrl: logoUrl,
+      message: 'Logo lastet opp og lagret!',
+      fileInfo: {
+        originalName: req.file.originalname,
+        size: req.file.size,
+        uploadedAt: settings.logo.uploadedAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Feil ved opplasting av logo:', error);
+    res.status(500).json({ 
+      error: 'Kunne ikke laste opp logo',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/images/logo - Hent logo-info (manglende endepunkt)
+router.get('/logo', async (req, res) => {
+  try {
+    const tenantId = req.session.tenantId || 'airtech';
+    console.log(`🖼️ Loading logo for tenant: ${tenantId}`);
+    
+    const settings = await loadTenantSettings(tenantId);
+    
+    // Return logo-specific data i samme format som frontend forventer
+    const logoData = {
+      logoUrl: settings.logo?.url || null,
+      hasLogo: !!settings.logo?.url,
+      companyInfo: settings.companyInfo || null,
+      lastUpdated: settings.lastUpdated
+    };
+    
+    console.log(`✅ Logo data loaded for ${tenantId}:`, {
+      hasLogo: logoData.hasLogo,
+      logoUrl: logoData.logoUrl ? 'Present' : 'None'
+    });
+    
+    res.json(logoData);
+    
+  } catch (error) {
+    console.error('Error loading logo:', error);
+    res.status(500).json({ 
+      error: 'Kunne ikke laste logo',
+      details: error.message 
+    });
+  }
+});
+
+// DELETE /api/images/logo - Fjern logo
+router.delete('/logo', async (req, res) => {
+  try {
+    const tenantId = req.session.tenantId || 'airtech';
+    
+    console.log(`🗑️ Removing logo for tenant: ${tenantId}`);
+    
+    // Load current settings
+    const settings = await loadTenantSettings(tenantId);
+    
+    // Clear logo info
+    settings.logo = {
+      url: null,
+      uploadedAt: null,
+      originalName: null,
+      fileSize: null
+    };
+    settings.lastUpdated = new Date().toISOString();
+    
+    // Save updated settings
+    const saved = await saveTenantSettings(tenantId, settings);
+    
+    if (!saved) {
+      throw new Error('Kunne ikke lagre endringer');
+    }
+    
+    console.log(`✅ Logo removed for ${tenantId}`);
+    
+    res.json({
+      success: true,
+      message: 'Logo fjernet'
+    });
+    
+  } catch (error) {
+    console.error('Error removing logo:', error);
+    res.status(500).json({ 
+      error: 'Kunne ikke fjerne logo',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/images/logo - Hent bare logo-info
+router.get('/logo', async (req, res) => {
+  try {
+    const tenantId = req.session.tenantId || 'airtech';
+    console.log(`🖼️ Loading logo for tenant: ${tenantId}`);
+    
+    const settings = await loadTenantSettings(tenantId);
+    
+    // Return logo-specific data
+    const logoData = {
+      logoUrl: settings.logo?.url || null,
+      hasLogo: !!settings.logo?.url,
+      logoInfo: settings.logo || null,
+      companyInfo: settings.companyInfo || null,
+      lastUpdated: settings.lastUpdated
+    };
+    
+    console.log(`✅ Logo data loaded for ${tenantId}:`, {
+      hasLogo: logoData.hasLogo,
+      logoUrl: logoData.logoUrl ? 'Present' : 'None'
+    });
+    
+    res.json(logoData);
+    
+  } catch (error) {
+    console.error('Error loading logo:', error);
+    res.status(500).json({ 
+      error: 'Kunne ikke laste logo',
+      details: error.message 
+    });
+  }
+});
+
+// POST /api/images/upload - Last opp servicebilder
+router.post('/upload', upload.array('images', 10), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'Ingen filer lastet opp' });
+    }
+
+    console.log(`📸 Laster opp ${req.files.length} servicebilder...`);
+    
+    const { serviceReportId, imageType, avvikNumber } = req.body;
+    const tenantId = req.session.tenantId || 'airtech';
+    
+    if (!serviceReportId) {
+      return res.status(400).json({ error: 'serviceReportId er påkrevd' });
+    }
+
+    // Get order and equipment info for folder structure
+    const pool = await db.getTenantConnection(tenantId);
+    const reportResult = await pool.query(
+      'SELECT order_id, equipment_id FROM service_reports WHERE id = $1',
+      [serviceReportId]
+    );
+    
+    if (reportResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Service report ikke funnet' });
+    }
+    
+    const { order_id, equipment_id } = reportResult.rows[0];
+    const uploadedImages = [];
+    
+    // Upload each file
+    for (let i = 0; i < req.files.length; i++) {
+      const file = req.files[i];
+      const fileExtension = path.extname(file.originalname).slice(1) || 'jpg';
+      
+      // Generate organized file path
+      const filePath = generateImagePath(tenantId, order_id, equipment_id, imageType, avvikNumber, fileExtension);
+      
+      // Upload to GCS
+      const imageUrl = await uploadToGCS(file.buffer, filePath, file.mimetype);
+      
+      // Save image record to database
+      const imageRecord = await pool.query(
+        `INSERT INTO avvik_images (service_report_id, avvik_number, image_url, uploaded_at, metadata)
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4)
+         RETURNING *`,
+        [
+          serviceReportId,
+          avvikNumber || null,
+          imageUrl,
+          JSON.stringify({
+            originalName: file.originalname,
+            fileSize: file.size,
+            imageType: imageType,
+            filePath: filePath
+          })
+        ]
+      );
+      
+      uploadedImages.push({
+        url: imageUrl,
+        id: imageRecord.rows[0].id,
+        metadata: imageRecord.rows[0].metadata
+      });
+      
+      console.log(`✅ Bilde ${i + 1} lastet opp: ${imageUrl}`);
+    }
+
+    res.json({
+      success: true,
+      message: `${uploadedImages.length} bilder lastet opp`,
+      images: uploadedImages
+    });
+
+  } catch (error) {
+    console.error('Feil ved opplasting av bilder:', error);
+    res.status(500).json({ 
+      error: 'Kunne ikke laste opp bilder',
+      details: error.message 
+    });
+  }
+});
+
+// Helper: Generate image path for service images
 function generateImagePath(tenantId, orderId, equipmentId, imageType, avvikNumber = null, fileExtension = 'jpg') {
   const now = new Date();
   const year = now.getFullYear();
@@ -58,279 +487,6 @@ function generateImagePath(tenantId, orderId, equipmentId, imageType, avvikNumbe
   
   return `tenants/${tenantId}/service-reports/${year}/${month}/order-${orderId}/equipment-${equipmentId}/${imageType}/${filename}`;
 }
-
-// Helper: Last opp til Google Cloud Storage
-async function uploadToGCS(buffer, filePath, mimetype) {
-  const file = bucket.file(filePath);
-  
-  const stream = file.createWriteStream({
-    metadata: {
-      contentType: mimetype,
-    },
-    resumable: false,
-  });
-
-  return new Promise((resolve, reject) => {
-    stream.on('error', reject);
-    stream.on('finish', () => {
-      // Generer public URL
-      const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
-      resolve(publicUrl);
-    });
-    stream.end(buffer);
-  });
-}
-
-// POST /api/images/avvik - Last opp avvik-bilde
-router.post('/avvik', upload.single('image'), async (req, res) => {
-  try {
-    const { orderId, equipmentId, reportId } = req.body;
-    
-    if (!req.file) {
-      return res.status(400).json({ error: 'Ingen fil lastet opp' });
-    }
-    
-    if (!orderId || !equipmentId || !reportId) {
-      return res.status(400).json({ error: 'Mangler påkrevde parametere' });
-    }
-
-    const pool = await db.getTenantConnection(req.session.tenantId);
-    
-    // Generer neste avvik-nummer
-    const avvikNumberResult = await pool.query(
-      'SELECT get_next_avvik_number($1) as avvik_number',
-      [reportId]
-    );
-    const avvikNumber = avvikNumberResult.rows[0].avvik_number;
-
-    // Generer filsti
-    const fileExtension = path.extname(req.file.originalname).slice(1) || 'jpg';
-    const filePath = generateImagePath(
-      req.session.tenantId, 
-      orderId, 
-      equipmentId, 
-      'avvik', 
-      avvikNumber, 
-      fileExtension
-    );
-
-    // Last opp til Google Cloud Storage
-    const imageUrl = await uploadToGCS(req.file.buffer, filePath, req.file.mimetype);
-
-    // Lagre i database
-    await pool.query(
-      `INSERT INTO avvik_images 
-       (service_report_id, avvik_number, image_url, image_type, metadata, uploaded_by) 
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        reportId, 
-        avvikNumber, 
-        imageUrl, 
-        'avvik',
-        JSON.stringify({
-          originalName: req.file.originalname,
-          size: req.file.size,
-          mimetype: req.file.mimetype,
-          gcsPath: filePath
-        }),
-        req.session.technicianId
-      ]
-    );
-
-    console.log(`Avvik-bilde lastet opp: ${imageUrl}, avvik #${avvikNumber}`);
-
-    res.json({
-      success: true,
-      url: imageUrl,
-      avvikNumber: avvikNumber,
-      formattedAvvikNumber: String(avvikNumber).padStart(3, '0')
-    });
-
-  } catch (error) {
-    console.error('Feil ved opplasting av avvik-bilde:', error);
-    res.status(500).json({ error: 'Kunne ikke laste opp bilde: ' + error.message });
-  }
-});
-
-// POST /api/images/general - Last opp generelt rapport-bilde
-router.post('/general', upload.single('image'), async (req, res) => {
-  try {
-    const { orderId, equipmentId, reportId } = req.body;
-    
-    if (!req.file) {
-      return res.status(400).json({ error: 'Ingen fil lastet opp' });
-    }
-
-    const pool = await db.getTenantConnection(req.session.tenantId);
-
-    // Generer filsti
-    const fileExtension = path.extname(req.file.originalname).slice(1) || 'jpg';
-    const filePath = generateImagePath(
-      req.session.tenantId, 
-      orderId, 
-      equipmentId, 
-      'general', 
-      null, 
-      fileExtension
-    );
-
-    // Last opp til Google Cloud Storage
-    const imageUrl = await uploadToGCS(req.file.buffer, filePath, req.file.mimetype);
-
-    // Oppdater service_reports med nytt bilde
-    await pool.query(
-      `UPDATE service_reports 
-       SET photos = array_append(COALESCE(photos, ARRAY[]::text[]), $1)
-       WHERE id = $2`,
-      [imageUrl, reportId]
-    );
-
-    console.log(`Generelt bilde lastet opp: ${imageUrl}`);
-
-    res.json({
-      success: true,
-      url: imageUrl
-    });
-
-  } catch (error) {
-    console.error('Feil ved opplasting av generelt bilde:', error);
-    res.status(500).json({ error: 'Kunne ikke laste opp bilde: ' + error.message });
-  }
-});
-
-// DELETE /api/images/delete - Slett bilde
-router.delete('/delete', async (req, res) => {
-  try {
-    const { imageUrl } = req.body;
-    
-    if (!imageUrl) {
-      return res.status(400).json({ error: 'imageUrl er påkrevd' });
-    }
-
-    const pool = await db.getTenantConnection(req.session.tenantId);
-    
-    // Finn bilde i database
-    const imageResult = await pool.query(
-      'SELECT id, metadata FROM avvik_images WHERE image_url = $1',
-      [imageUrl]
-    );
-    
-    if (imageResult.rows.length > 0) {
-      // Det er et avvik-bilde
-      const imageData = imageResult.rows[0];
-      const metadata = imageData.metadata;
-      
-      // Slett fra database
-      await pool.query('DELETE FROM avvik_images WHERE id = $1', [imageData.id]);
-      
-      // Slett fra Google Cloud Storage
-      if (metadata && metadata.gcsPath) {
-        try {
-          await bucket.file(metadata.gcsPath).delete();
-          console.log(`Slettet avvik-bilde fra GCS: ${metadata.gcsPath}`);
-        } catch (gcsError) {
-          console.warn('Kunne ikke slette fra GCS:', gcsError.message);
-        }
-      }
-    } else {
-      // Det er et generelt rapport-bilde
-      const reportResult = await pool.query(
-        'SELECT id FROM service_reports WHERE $1 = ANY(photos)',
-        [imageUrl]
-      );
-      
-      if (reportResult.rows.length > 0) {
-        // Fjern fra photos array
-        await pool.query(
-          'UPDATE service_reports SET photos = array_remove(photos, $1) WHERE $1 = ANY(photos)',
-          [imageUrl]
-        );
-        
-        // Slett fra Google Cloud Storage
-        try {
-          // Ekstrahér GCS path fra URL
-          const gcsPath = imageUrl.replace(`https://storage.googleapis.com/${bucketName}/`, '');
-          await bucket.file(gcsPath).delete();
-          console.log(`Slettet generelt bilde fra GCS: ${gcsPath}`);
-        } catch (gcsError) {
-          console.warn('Kunne ikke slette fra GCS:', gcsError.message);
-        }
-      } else {
-        return res.status(404).json({ error: 'Bilde ikke funnet' });
-      }
-    }
-
-    res.json({ success: true });
-
-  } catch (error) {
-    console.error('Feil ved sletting av bilde:', error);
-    res.status(500).json({ error: 'Kunne ikke slette bilde' });
-  }
-});
-
-// GET /api/images/avvik/:reportId - Hent alle avvik-bilder for en rapport
-router.get('/avvik/:reportId', async (req, res) => {
-  try {
-    const { reportId } = req.params;
-    const pool = await db.getTenantConnection(req.session.tenantId);
-    const result = await pool.query(
-      `SELECT service_report_id, avvik_number, image_url, uploaded_at, metadata
-       FROM avvik_images WHERE service_report_id = $1 ORDER BY avvik_number ASC`,
-      [reportId]
-    );
-    console.log(`Found ${result.rows.length} avvik images for report ${reportId}`);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Feil ved henting av avvik-bilder:', error);
-    res.status(500).json({ error: 'Kunne ikke hente avvik-bilder' });
-  }
-});
-
-// GET /api/images/avvik/:reportId - Hent alle avvik-bilder for en rapport
-router.get('/avvik/:reportId', async (req, res) => {
-  try {
-    const { reportId } = req.params;
-    
-    const pool = await db.getTenantConnection(req.session.tenantId);
-    
-    const result = await pool.query(
-      `SELECT service_report_id, avvik_number, image_url, uploaded_at, metadata
-       FROM avvik_images 
-       WHERE service_report_id = $1 
-       ORDER BY avvik_number ASC`,
-      [reportId]
-    );
-    
-    console.log(`Found ${result.rows.length} avvik images for report ${reportId}`);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Feil ved henting av avvik-bilder:', error);
-    res.status(500).json({ error: 'Kunne ikke hente avvik-bilder' });
-  }
-});
-
-// GET /api/images/avvik/:reportId - Hent alle avvik-bilder for en rapport
-router.get('/avvik/:reportId', async (req, res) => {
-  try {
-    const { reportId } = req.params;
-    
-    const pool = await db.getTenantConnection(req.session.tenantId);
-    
-    const result = await pool.query(
-      `SELECT service_report_id, avvik_number, image_url, uploaded_at, metadata
-       FROM avvik_images 
-       WHERE service_report_id = $1 
-       ORDER BY avvik_number ASC`,
-      [reportId]
-    );
-    
-    console.log(`Found ${result.rows.length} avvik images for report ${reportId}`);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Feil ved henting av avvik-bilder:', error);
-    res.status(500).json({ error: 'Kunne ikke hente avvik-bilder' });
-  }
-});
 
 // GET /api/images/avvik/:reportId - Hent alle avvik-bilder for en rapport
 router.get('/avvik/:reportId', async (req, res) => {
@@ -356,7 +512,3 @@ router.get('/avvik/:reportId', async (req, res) => {
 });
 
 module.exports = router;
-
-
-
-
