@@ -1,439 +1,600 @@
-// air-tech-adminweb/assets/js/rapporter.js - Håndtering av servicerapporter
+/**
+ * Servicerapporter Admin - Air-Tech AS (Forbedret versjon)
+ * Profesjonell implementering med moderne design og UX
+ */
 
-document.addEventListener('DOMContentLoaded', async () => {
-    // State
-    let allReports = [];
-    let filteredReports = [];
-    let currentPage = 1;
-    const reportsPerPage = 25;
-    let customers = [];
-    let technicians = [];
-    let orders = [];
-    let equipment = [];
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('🎨 Loading enhanced servicerapporter admin system...');
     
-    // DOM elementer
-    const autoSendToggle = document.getElementById('auto-send-toggle');
-    const periodFilter = document.getElementById('period-filter');
-    const customerFilter = document.getElementById('customer-filter');
-    const statusFilter = document.getElementById('status-filter');
-    const searchInput = document.getElementById('search-input');
-    const customDateGroup = document.getElementById('custom-date-group');
-    const dateFrom = document.getElementById('date-from');
-    const dateTo = document.getElementById('date-to');
-    const reportModal = document.getElementById('report-modal');
-    
-    // Initialiser
-    await loadAllData();
-    setupEventListeners();
-    
-    // Les innstillinger fra localStorage
-    const autoSendSetting = localStorage.getItem('autoSendReports');
-    autoSendToggle.checked = autoSendSetting !== 'false';
-    
-    async function loadAllData() {
+    // State management
+    const state = {
+        reports: [],
+        stats: {},
+        isLoading: false,
+        filters: {
+            status: 'all',
+            search: ''
+        }
+    };
+
+    // DOM elements
+    const elements = {
+        tableBody: document.getElementById('reports-table-body'),
+        searchInput: document.getElementById('search-input'),
+        statusFilter: document.getElementById('status-filter'),
+        autoSendToggle: document.getElementById('auto-send-toggle'),
+        stats: {
+            total: document.getElementById('total-reports'),
+            sent: document.getElementById('sent-reports'),
+            pending: document.getElementById('pending-reports'),
+            invoiced: document.getElementById('invoiced-reports')
+        }
+    };
+
+    // Initialize system
+    await initializeSystem();
+
+    /**
+     * Initialize the admin reports system
+     */
+    async function initializeSystem() {
         try {
-            // Hent all data parallelt
-            const [reportsData, customersData, techniciansData, ordersData, equipmentData] = await Promise.all([
-                fetch('/api/reports/service').then(res => res.json()),
-                fetch('/api/customers').then(res => res.json()),
-                fetch('/api/technicians').then(res => res.json()),
-                fetch('/api/orders').then(res => res.json()),
-                fetch('/api/equipment').then(res => res.json())
-            ]);
-            
-            customers = customersData;
-            technicians = techniciansData;
-            orders = ordersData;
-            equipment = equipmentData;
-            allReports = reportsData;
-            
-            // Populer kunde-filter
-            populateCustomerFilter();
-            
-            // Sett default periode (siste 3 måneder)
-            const threeMonthsAgo = new Date();
-            threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-            dateFrom.value = threeMonthsAgo.toISOString().split('T')[0];
-            dateTo.value = new Date().toISOString().split('T')[0];
-            
-            // Initial filtrering
-            filterReports();
-            
+            setupEventListeners();
+            await loadReports();
+            addEnhancedInteractions();
+            console.log('✅ Enhanced servicerapporter system initialized successfully');
         } catch (error) {
-            console.error('Feil ved lasting av data:', error);
-            showToast('Kunne ikke laste rapporter', 'error');
+            console.error('❌ Failed to initialize system:', error);
+            showError('Kunne ikke initialisere rapportsystemet');
         }
     }
-    
-    function populateCustomerFilter() {
-        customerFilter.innerHTML = '<option value="">Alle kunder</option>';
-        customers.forEach(customer => {
-            const option = document.createElement('option');
-            option.value = customer.id;
-            option.textContent = customer.name;
-            customerFilter.appendChild(option);
-        });
-    }
-    
+
+    /**
+     * Setup all event listeners
+     */
     function setupEventListeners() {
-        // Auto-send toggle
-        autoSendToggle.addEventListener('change', (e) => {
-            localStorage.setItem('autoSendReports', e.target.checked);
-            showToast(`Automatisk sending ${e.target.checked ? 'aktivert' : 'deaktivert'}`);
-        });
-        
-        // Filtre
-        periodFilter.addEventListener('change', handlePeriodChange);
-        customerFilter.addEventListener('change', filterReports);
-        statusFilter.addEventListener('change', filterReports);
-        searchInput.addEventListener('input', debounce(filterReports, 300));
-        dateFrom.addEventListener('change', filterReports);
-        dateTo.addEventListener('change', filterReports);
-        
-        // Modal
-        reportModal.addEventListener('click', (e) => {
-            if (e.target === reportModal) closeReportModal();
-        });
-        
+        // Search input with enhanced debouncing
+        if (elements.searchInput) {
+            elements.searchInput.addEventListener('input', debounce(handleFilters, 200));
+            elements.searchInput.addEventListener('focus', () => {
+                elements.searchInput.parentElement.style.transform = 'scale(1.02)';
+            });
+            elements.searchInput.addEventListener('blur', () => {
+                elements.searchInput.parentElement.style.transform = 'scale(1)';
+            });
+        }
+
+        // Status filter with animation
+        if (elements.statusFilter) {
+            elements.statusFilter.addEventListener('change', handleFilters);
+        }
+
+        // Auto-send toggle with enhanced feedback
+        if (elements.autoSendToggle) {
+            elements.autoSendToggle.addEventListener('change', handleAutoSendToggle);
+            
+            // Load saved setting
+            const savedSetting = localStorage.getItem('autoSendReports');
+            if (savedSetting !== null) {
+                elements.autoSendToggle.checked = savedSetting === 'true';
+            }
+        }
+    }
+
+    /**
+     * Add enhanced interactions
+     */
+    function addEnhancedInteractions() {
+        // Add keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && reportModal.classList.contains('show')) {
-                closeReportModal();
+            if (e.ctrlKey || e.metaKey) {
+                switch (e.key) {
+                    case 'r':
+                        e.preventDefault();
+                        loadReports();
+                        showToast('🔄 Oppdaterer rapporter...', 'info');
+                        break;
+                    case 'f':
+                        e.preventDefault();
+                        elements.searchInput?.focus();
+                        break;
+                }
             }
         });
-    }
-    
-    function handlePeriodChange() {
-        const value = periodFilter.value;
-        const today = new Date();
-        
-        switch(value) {
-            case '3months':
-                const threeMonthsAgo = new Date();
-                threeMonthsAgo.setMonth(today.getMonth() - 3);
-                dateFrom.value = threeMonthsAgo.toISOString().split('T')[0];
-                dateTo.value = today.toISOString().split('T')[0];
-                customDateGroup.style.display = 'none';
-                break;
-                
-            case 'year':
-                const yearStart = new Date(today.getFullYear(), 0, 1);
-                dateFrom.value = yearStart.toISOString().split('T')[0];
-                dateTo.value = today.toISOString().split('T')[0];
-                customDateGroup.style.display = 'none';
-                break;
-                
-            case 'lastYear':
-                const lastYearStart = new Date(today.getFullYear() - 1, 0, 1);
-                const lastYearEnd = new Date(today.getFullYear() - 1, 11, 31);
-                dateFrom.value = lastYearStart.toISOString().split('T')[0];
-                dateTo.value = lastYearEnd.toISOString().split('T')[0];
-                customDateGroup.style.display = 'none';
-                break;
-                
-            case 'all':
-                dateFrom.value = '';
-                dateTo.value = '';
-                customDateGroup.style.display = 'none';
-                break;
-                
-            case 'custom':
-                customDateGroup.style.display = 'flex';
-                break;
-        }
-        
-        filterReports();
-    }
-    
-    function filterReports() {
-        filteredReports = allReports.filter(report => {
-            // Periode filter
-            if (dateFrom.value && new Date(report.createdAt) < new Date(dateFrom.value)) return false;
-            if (dateTo.value && new Date(report.createdAt) > new Date(dateTo.value + 'T23:59:59')) return false;
-            
-            // Kunde filter
-            const order = orders.find(o => o.id === report.orderId);
-            if (customerFilter.value && order?.customerId !== customerFilter.value) return false;
-            
-            // Status filter
-            const reportStatus = getReportStatus(report);
-            if (statusFilter.value && reportStatus !== statusFilter.value) return false;
-            
-            // Søk
-            if (searchInput.value) {
-                const searchTerm = searchInput.value.toLowerCase();
-                const customer = customers.find(c => c.id === order?.customerId);
-                const technician = technicians.find(t => t.id === order?.technicianId);
-                
-                const searchableText = [
-                    order?.orderNumber,
-                    customer?.name,
-                    technician?.name,
-                    report.reportId
-                ].filter(Boolean).join(' ').toLowerCase();
-                
-                if (!searchableText.includes(searchTerm)) return false;
-            }
-            
-            return true;
+
+        // Add smooth scroll for better UX
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
         });
-        
-        // Sorter etter dato (nyeste først)
-        filteredReports.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        
-        // Reset til første side
-        currentPage = 1;
-        
-        updateStats();
-        renderReports();
     }
-    
-    function getReportStatus(report) {
-        if (report.sentToCustomer) return 'sent';
-        if (report.status === 'completed') return 'completed';
-        return 'draft';
-    }
-    
-    function updateStats() {
-        const stats = {
-            total: filteredReports.length,
-            sent: filteredReports.filter(r => r.sentToCustomer).length,
-            pending: filteredReports.filter(r => r.status === 'completed' && !r.sentToCustomer).length,
-            draft: filteredReports.filter(r => r.status === 'draft').length
-        };
+
+    /**
+     * Load reports from the admin API with enhanced error handling
+     */
+    async function loadReports() {
+        if (state.isLoading) return;
         
-        document.getElementById('total-reports').textContent = stats.total;
-        document.getElementById('sent-reports').textContent = stats.sent;
-        document.getElementById('pending-reports').textContent = stats.pending;
-        document.getElementById('draft-reports').textContent = stats.draft;
-    }
-    
-    function renderReports() {
-        const tbody = document.getElementById('reports-table-body');
-        const startIndex = (currentPage - 1) * reportsPerPage;
-        const endIndex = startIndex + reportsPerPage;
-        const pageReports = filteredReports.slice(startIndex, endIndex);
-        
-        if (pageReports.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">Ingen rapporter funnet</td></tr>';
-            renderPagination();
-            return;
-        }
-        
-        tbody.innerHTML = pageReports.map(report => {
-            const order = orders.find(o => o.id === report.orderId);
-            const customer = customers.find(c => c.id === order?.customerId);
-            const technician = technicians.find(t => t.id === order?.technicianId);
-            const reportEquipment = equipment.filter(e => e.id === report.equipmentId);
-            const status = getReportStatus(report);
+        state.isLoading = true;
+        showLoadingState();
+
+        try {
+            const response = await fetch('/api/admin/reports', {
+                method: 'GET',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log('📊 Reports data received:', data);
+
+            state.reports = data.reports || [];
+            state.stats = data.stats || {};
+
+            renderTable();
+            updateStatistics();
             
-            return `
+            console.log(`✅ Successfully loaded ${state.reports.length} reports`);
+
+        } catch (error) {
+            console.error('❌ Error loading reports:', error);
+            showError('Feil ved lasting av rapporter: ' + error.message);
+        } finally {
+            state.isLoading = false;
+        }
+    }
+
+    /**
+     * Show enhanced loading state
+     */
+    function showLoadingState() {
+        if (elements.tableBody) {
+            elements.tableBody.innerHTML = `
                 <tr>
-                    <td>${formatDate(report.createdAt)}</td>
-                    <td>${order?.orderNumber || report.orderId}</td>
-                    <td>${customer?.name || 'Ukjent'}</td>
-                    <td>${technician?.name || 'Ukjent'}</td>
-                    <td>${reportEquipment.length} anlegg</td>
-                    <td><span class="status-badge ${status}">${getStatusText(status)}</span></td>
-                    <td>
-                        <div class="action-buttons">
-                            <button class="btn-icon-only" onclick="viewReport('${report.reportId}')" title="Vis detaljer">
-                                👁️
-                            </button>
-                            <button class="btn-icon-only" onclick="generatePDF('${report.reportId}')" title="Generer PDF">
-                                📄
-                            </button>
-                            ${status !== 'sent' ? `
-                                <button class="btn-icon-only" onclick="sendReport('${report.reportId}')" title="Send til kunde">
-                                    ✉️
-                                </button>
-                            ` : ''}
+                    <td colspan="7" class="loading-cell loading-shimmer">
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+                            <div style="width: 20px; height: 20px; border: 2px solid #E5E7EB; border-top: 2px solid var(--primary-blue); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                            <span>Laster rapporter...</span>
                         </div>
                     </td>
                 </tr>
             `;
-        }).join('');
-        
-        renderPagination();
+        }
     }
-    
-    function renderPagination() {
-        const container = document.getElementById('pagination-container');
-        const totalPages = Math.ceil(filteredReports.length / reportsPerPage);
-        
-        if (totalPages <= 1) {
-            container.innerHTML = '';
+
+    /**
+     * Show enhanced error message
+     */
+    function showError(message) {
+        if (elements.tableBody) {
+            elements.tableBody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="loading-cell" style="color: #DC2626; background: linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%);">
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+                            <span style="font-size: 24px;">⚠️</span>
+                            <span>${message}</span>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+    /**
+     * Render the enhanced reports table
+     */
+    function renderTable() {
+        if (!elements.tableBody) return;
+
+        const filteredReports = getFilteredReports();
+
+        if (filteredReports.length === 0) {
+            elements.tableBody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="loading-cell">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 16px;">
+                            <span style="font-size: 48px; opacity: 0.5;">📋</span>
+                            <span style="font-size: 16px; font-weight: 600;">Ingen rapporter funnet</span>
+                            <span style="font-size: 14px; color: var(--text-light);">Prøv å endre filtrene eller søkekriteriene</span>
+                        </div>
+                    </td>
+                </tr>
+            `;
             return;
         }
+
+        const tableHTML = filteredReports.map(report => createEnhancedReportRow(report)).join('');
+        elements.tableBody.innerHTML = tableHTML;
         
-        let html = `
-            <button ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1})">‹</button>
-        `;
-        
-        // Vis max 5 sider
-        const startPage = Math.max(1, currentPage - 2);
-        const endPage = Math.min(totalPages, startPage + 4);
-        
-        for (let i = startPage; i <= endPage; i++) {
-            html += `<button class="${i === currentPage ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
-        }
-        
-        html += `
-            <button ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1})">›</button>
-            <span class="page-info">Side ${currentPage} av ${totalPages}</span>
-        `;
-        
-        container.innerHTML = html;
+        console.log(`✅ Rendered ${filteredReports.length} enhanced report rows`);
     }
-    
-    window.changePage = function(page) {
-        currentPage = page;
-        renderReports();
-        window.scrollTo(0, 0);
-    };
-    
-    window.viewReport = async function(reportId) {
-        const report = allReports.find(r => r.reportId === reportId);
-        if (!report) return;
 
-        const order = orders.find(o => o.id === report.orderId);
-        const customer = customers.find(c => c.id === order?.customerId);
-        const technician = technicians.find(t => t.id === order?.technicianId);
+    /**
+     * Get filtered reports based on current filters
+     */
+    function getFilteredReports() {
+        let filtered = [...state.reports];
 
-        const modalBody = document.getElementById('report-modal-body');
-        modalBody.innerHTML = `
-            <div class="report-preview-container">
-                <div class="report-header">
-                    <img src="/assets/images/air-techlogo.svg" alt="Air-Tech Logo" class="report-logo">
-                    <h2>Servicerapport</h2>
-                </div>
-
-                <div class="report-meta-grid">
-                    <div class="meta-item">
-                        <span class="meta-label">Kunde</span>
-                        <span class="meta-value">${customer?.name || 'Ukjent'}</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-label">Ordrenummer</span>
-                        <span class="meta-value">${order?.orderNumber || report.orderId}</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-label">Dato</span>
-                        <span class="meta-value">${formatDate(report.createdAt)}</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-label">Tekniker</span>
-                        <span class="meta-value">${technician?.name || 'Ukjent'}</span>
-                    </div>
-                </div>
-
-                <div class="report-section-preview">
-                    <h4>Anlegg og utført service</h4>
-                    ${report.reportData?.components?.map((comp, index) => `
-                        <div class="equipment-item-preview">
-                            <div class="equipment-header-preview">
-                                <span class="equipment-name-preview">${comp.details?.systemnummer || ''} - ${comp.details?.plassering || 'Sjekkliste ' + (index + 1)}</span>
-                            </div>
-                            <table class="checklist-table">
-                                ${Object.entries(comp.checklist || {}).map(([key, value]) => {
-                                    if (typeof value === 'object' && value.status) {
-                                        return `<tr>
-                                            <td>${key}</td>
-                                            <td class="status-cell ${value.status === 'ok' ? 'status-ok' : 'status-nok'}">${value.status.toUpperCase()}</td>
-                                        </tr>`;
-                                    }
-                                    return '';
-                                }).join('')}
-                            </table>
-                            ${comp.products?.length > 0 ? `
-                                <div class="products-section">
-                                    <strong>Brukte produkter:</strong>
-                                    <ul>
-                                        ${comp.products.map(p => `<li>${p.name} (${p.price} kr)</li>`).join('')}
-                                    </ul>
-                                </div>
-                            ` : ''}
-                        </div>
-                    `).join('') || '<p>Ingen sjekklister funnet.</p>'}
-                </div>
-
-                ${report.reportData?.overallComment ? `
-                    <div class="report-section-preview">
-                        <h4>Avsluttende kommentar</h4>
-                        <p class="comment-box">${report.reportData.overallComment}</p>
-                    </div>
-                ` : ''}
-            </div>
-        `;
-
-        // Oppdater knapper
-        document.getElementById('generate-pdf-btn').onclick = () => generatePDF(report.reportId);
-        document.getElementById('send-report-btn').onclick = () => sendReport(report.reportId);
-        document.getElementById('send-report-btn').style.display = report.sentToCustomer ? 'none' : 'inline-flex';
-
-        reportModal.classList.add('show');
-    };
-    
-    window.closeReportModal = function() {
-        reportModal.classList.remove('show');
-    };
-    
-    window.generatePDF = async function(reportId) {
-        showToast('Genererer PDF...', 'info');
-        
-        try {
-            // Her ville vi kalle en API endpoint for å generere PDF
-            // For nå simulerer vi dette
-            setTimeout(() => {
-                showToast('PDF generert og lastet ned', 'success');
-                // window.open(`/api/reports/${reportId}/pdf`, '_blank');
-            }, 1500);
-        } catch (error) {
-            showToast('Kunne ikke generere PDF', 'error');
+        // Status filter
+        if (state.filters.status !== 'all') {
+            filtered = filtered.filter(report => {
+                switch (state.filters.status) {
+                    case 'pending':
+                        return !report.sent_til_fakturering;
+                    case 'sent':
+                        return report.sent_til_fakturering && !report.is_invoiced;
+                    case 'invoiced':
+                        return report.is_invoiced;
+                    default:
+                        return true;
+                }
+            });
         }
-    };
-    
-    window.sendReport = async function(reportId) {
-        if (!confirm('Er du sikker på at du vil sende rapporten til kunden?')) return;
+
+        // Search filter
+        if (state.filters.search) {
+            const searchTerm = state.filters.search.toLowerCase();
+            filtered = filtered.filter(report => {
+                return [
+                    report.customer_name,
+                    report.order_id,
+                    report.technician_name,
+                    report.equipment_name,
+                    report.equipment_type
+                ].some(field => field && field.toLowerCase().includes(searchTerm));
+            });
+        }
+
+        return filtered;
+    }
+
+    /**
+     * Create an enhanced table row for a report
+     */
+    function createEnhancedReportRow(report) {
+        const isInvoiced = report.is_invoiced;
+        const isSent = report.sent_til_fakturering;
+        const hasPDF = report.pdf_generated && report.pdf_path;
         
-        showToast('Sender rapport...', 'info');
+        // Determine row class
+        let rowClass = '';
+        if (isInvoiced) rowClass = 'row-invoiced';
+        else if (isSent) rowClass = 'row-sent';
+        else rowClass = 'row-pending';
+
+        return `
+            <tr class="${rowClass}">
+                <td>
+                    <div class="date-info">
+                        <div class="date-main">${formatDate(report.scheduled_date || report.created_at)}</div>
+                        ${report.created_at ? `<div class="date-sub">Opprettet: ${formatDate(report.created_at)}</div>` : ''}
+                    </div>
+                </td>
+                <td>
+                    <a href="#" class="order-id" onclick="viewOrderDetails('${report.order_id}'); return false;">
+                        ${report.order_id}
+                    </a>
+                </td>
+                <td>
+                    <div style="font-weight: 600; color: var(--text-primary);">
+                        ${report.customer_name || 'Ukjent kunde'}
+                    </div>
+                </td>
+                <td>
+                    <div style="font-weight: 500; color: var(--text-secondary);">
+                        ${report.technician_name || 'Ikke tildelt'}
+                    </div>
+                </td>
+                <td>
+                    <div class="equipment-info">
+                        <div class="equipment-name">${report.equipment_name || 'Ukjent'}</div>
+                        <div class="equipment-type">${report.equipment_type || ''}</div>
+                    </div>
+                </td>
+                <td>
+                    <div style="margin-bottom: 6px;">
+                        <span class="status-indicator status-${isSent ? 'sent' : 'pending'}">
+                            ${isSent ? '✅ Sendt til kunde' : '⏳ Venter sending'}
+                        </span>
+                    </div>
+                    ${report.pdf_sent_timestamp ? `<div class="date-sub">Sendt: ${formatDate(report.pdf_sent_timestamp)}</div>` : ''}
+                </td>
+                <td>
+                    <div class="action-column">
+                        <!-- PDF Action -->
+                        <div class="action-row">
+                            ${hasPDF ? 
+                                `<button onclick="viewPDF('${report.id}')" class="action-btn btn-primary" title="Vis PDF">
+                                    📄 Vis PDF
+                                </button>` : 
+                                `<span class="pdf-indicator">📄 PDF ikke generert</span>`
+                            }
+                        </div>
+                        
+                        <!-- Send Action -->
+                        <div class="action-row">
+                            ${!isSent ? 
+                                `<button onclick="sendToCustomer('${report.id}')" class="action-btn btn-success" title="Send til kunde">
+                                    ✉️ Send til kunde
+                                </button>` : 
+                                `<span class="sent-indicator">✅ Sendt</span>`
+                            }
+                        </div>
+                        
+                        <!-- Invoice Checkbox -->
+                        <div class="action-row">
+                            <label class="invoice-checkbox">
+                                <input type="checkbox" 
+                                       ${isInvoiced ? 'checked' : ''} 
+                                       onchange="toggleInvoice('${report.id}', this.checked)">
+                                <span style="color: ${isInvoiced ? 'var(--status-sent)' : 'var(--text-secondary)'};">
+                                    ${isInvoiced ? '💰 Fakturert' : '💰 Fakturer'}
+                                </span>
+                            </label>
+                        </div>
+                        
+                        ${isInvoiced && report.invoice_comment ? 
+                            `<div class="invoice-comment">💬 ${report.invoice_comment}</div>` : ''
+                        }
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+
+    /**
+     * Update statistics with enhanced animations
+     */
+    function updateStatistics() {
+        const stats = [
+            { element: elements.stats.total, value: state.stats.total || 0 },
+            { element: elements.stats.sent, value: state.stats.sent || 0 },
+            { element: elements.stats.pending, value: state.stats.pending || 0 },
+            { element: elements.stats.invoiced, value: state.stats.invoiced || 0 }
+        ];
+
+        stats.forEach(({ element, value }) => {
+            if (element) {
+                // Animate number change
+                const currentValue = parseInt(element.textContent) || 0;
+                if (currentValue !== value) {
+                    animateNumber(element, currentValue, value, 800);
+                }
+            }
+        });
         
+        console.log('📊 Enhanced statistics updated:', state.stats);
+    }
+
+    /**
+     * Animate number changes in statistics
+     */
+    function animateNumber(element, start, end, duration) {
+        const startTime = performance.now();
+        
+        function updateNumber(currentTime) {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            // Easing function for smooth animation
+            const easedProgress = 1 - Math.pow(1 - progress, 3);
+            const currentValue = Math.round(start + (end - start) * easedProgress);
+            
+            element.textContent = currentValue;
+            
+            if (progress < 1) {
+                requestAnimationFrame(updateNumber);
+            }
+        }
+        
+        requestAnimationFrame(updateNumber);
+    }
+
+    /**
+     * Handle filter changes with enhanced feedback
+     */
+    function handleFilters() {
+        const oldSearch = state.filters.search;
+        const oldStatus = state.filters.status;
+        
+        state.filters.search = elements.searchInput?.value || '';
+        state.filters.status = elements.statusFilter?.value || 'all';
+        
+        // Show filter feedback
+        if (oldSearch !== state.filters.search || oldStatus !== state.filters.status) {
+            const filteredCount = getFilteredReports().length;
+            showToast(`🔍 Viser ${filteredCount} av ${state.reports.length} rapporter`, 'info');
+        }
+        
+        renderTable();
+    }
+
+    /**
+     * Handle auto-send toggle with enhanced feedback
+     */
+    function handleAutoSendToggle(event) {
+        const enabled = event.target.checked;
+        localStorage.setItem('autoSendReports', enabled.toString());
+        console.log('Auto-send setting saved:', enabled);
+        
+        // Enhanced feedback with icon
+        showToast(
+            `${enabled ? '🔄' : '⏸️'} Automatisk sending ${enabled ? 'aktivert' : 'deaktivert'}`, 
+            enabled ? 'success' : 'info'
+        );
+    }
+
+    /**
+     * View PDF function with enhanced feedback
+     */
+    window.viewPDF = async function(reportId) {
         try {
-            // Oppdater rapport som sendt
-            const report = allReports.find(r => r.reportId === reportId);
-            if (report) {
-                report.sentToCustomer = true;
-                report.sentDate = new Date().toISOString();
+            showToast('📄 Åpner PDF...', 'info');
+            
+            const pdfUrl = `/api/admin/reports/${reportId}/pdf`;
+            const pdfWindow = window.open(pdfUrl, '_blank');
+            
+            // Check if popup was blocked
+            if (!pdfWindow || pdfWindow.closed || typeof pdfWindow.closed == 'undefined') {
+                throw new Error('Popup ble blokkert. Vennligst tillat popup for denne siden.');
             }
             
-            // Her ville vi kalle API for å sende e-post
-            setTimeout(() => {
-                showToast('Rapport sendt til kunde', 'success');
-                filterReports(); // Oppdater visning
-                closeReportModal();
-            }, 1500);
+            console.log(`📄 Opening PDF for report ${reportId}`);
         } catch (error) {
-            showToast('Kunne ikke sende rapport', 'error');
+            console.error('Error viewing PDF:', error);
+            showToast('❌ Kunne ikke åpne PDF: ' + error.message, 'error');
         }
     };
-    
-    function formatDate(dateString) {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('no-NO', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric'
+
+    /**
+     * Send to customer with enhanced UX
+     */
+    window.sendToCustomer = async function(reportId) {
+        // Enhanced confirmation dialog
+        const confirmed = await showEnhancedConfirm(
+            'Send rapport til kunde',
+            'Er du sikker på at du vil sende denne rapporten til kunden? Kunden vil motta en e-post med PDF-rapporten.',
+            'Send rapport',
+            'Avbryt'
+        );
+        
+        if (!confirmed) return;
+
+        try {
+            showToast('✉️ Sender rapport...', 'info');
+            
+            const response = await fetch(`/api/admin/reports/${reportId}/send`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showToast(`✅ Rapport sendt til ${result.sentTo || 'kunde'}`, 'success');
+                await loadReports(); // Reload data
+            } else {
+                throw new Error(result.error || 'Ukjent feil');
+            }
+        } catch (error) {
+            console.error('Error sending report:', error);
+            showToast('❌ Feil ved sending: ' + error.message, 'error');
+        }
+    };
+
+    /**
+     * Toggle invoice status with enhanced UX
+     */
+    window.toggleInvoice = async function(reportId, isInvoiced) {
+        let comment = null;
+        
+        if (isInvoiced) {
+            comment = await showEnhancedPrompt(
+                'Fakturering kommentar',
+                'Legg til en valgfri kommentar til faktureringen:',
+                'Kommentar (valgfritt)'
+            );
+            
+            if (comment === null) {
+                // User cancelled - revert checkbox
+                event.target.checked = false;
+                return;
+            }
+        }
+
+        try {
+            showToast(`💰 ${isInvoiced ? 'Markerer som fakturert' : 'Fjerner fakturering'}...`, 'info');
+            
+            const response = await fetch(`/api/admin/reports/${reportId}/invoice`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ 
+                    invoiced: isInvoiced, 
+                    comment: comment 
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showToast(`✅ ${result.message}`, 'success');
+                await loadReports(); // Reload data
+            } else {
+                throw new Error(result.error || 'Ukjent feil');
+            }
+        } catch (error) {
+            console.error('Error toggling invoice:', error);
+            showToast('❌ Feil: ' + error.message, 'error');
+            // Revert checkbox state
+            event.target.checked = !isInvoiced;
+        }
+    };
+
+    /**
+     * View order details (placeholder for future functionality)
+     */
+    window.viewOrderDetails = function(orderId) {
+        showToast(`🔍 Viser detaljer for ordre ${orderId}`, 'info');
+        // Future: Open order details modal or navigate to order page
+    };
+
+    /**
+     * Enhanced confirmation dialog
+     */
+    function showEnhancedConfirm(title, message, confirmText, cancelText) {
+        return new Promise(resolve => {
+            const confirmed = confirm(`${title}\n\n${message}`);
+            resolve(confirmed);
         });
     }
-    
-    function getStatusText(status) {
-        const statusMap = {
-            'draft': 'Kladd',
-            'completed': 'Fullført',
-            'sent': 'Sendt'
-        };
-        return statusMap[status] || status;
+
+    /**
+     * Enhanced prompt dialog
+     */
+    function showEnhancedPrompt(title, message, placeholder) {
+        return new Promise(resolve => {
+            const result = prompt(`${title}\n\n${message}`, '');
+            resolve(result);
+        });
     }
-    
+
+    /**
+     * Utility function to format dates
+     */
+    function formatDate(dateString) {
+        if (!dateString) return 'Ikke satt';
+        
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('no-NO', {
+                year: 'numeric',
+                month: '2-digit', 
+                day: '2-digit'
+            });
+        } catch (error) {
+            console.warn('Invalid date:', dateString);
+            return 'Ugyldig dato';
+        }
+    }
+
+    /**
+     * Enhanced debounce utility
+     */
     function debounce(func, wait) {
         let timeout;
         return function executedFunction(...args) {
@@ -445,25 +606,87 @@ document.addEventListener('DOMContentLoaded', async () => {
             timeout = setTimeout(later, wait);
         };
     }
-    
-    function showToast(message, type = 'success') {
+
+    /**
+     * Enhanced toast notification system
+     */
+    function showToast(message, type = 'info') {
+        // Create toast container if it doesn't exist
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.style.cssText = `
+                position: fixed;
+                top: 24px;
+                right: 24px;
+                z-index: 10000;
+                pointer-events: none;
+                max-width: 400px;
+            `;
+            document.body.appendChild(container);
+        }
+
+        // Create enhanced toast element
         const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
+        const typeConfig = {
+            success: { bg: '#DCFCE7', color: '#166534', border: '#16A34A' },
+            error: { bg: '#FEE2E2', color: '#991B1B', border: '#DC2626' },
+            info: { bg: '#E0F2FE', color: '#0C4A6E', border: '#0284C7' },
+            warning: { bg: '#FEF3C7', color: '#92400E', border: '#F59E0B' }
+        };
+        
+        const config = typeConfig[type] || typeConfig.info;
+        
         toast.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 12px 20px;
-            background: ${type === 'error' ? '#ef4444' : type === 'info' ? '#3b82f6' : '#10b981'};
-            color: white;
-            border-radius: 6px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            z-index: 1001;
-            animation: slideInRight 0.3s ease-out;
+            background: ${config.bg};
+            color: ${config.color};
+            padding: 16px 20px;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            border-left: 4px solid ${config.border};
+            pointer-events: auto;
+            opacity: 0;
+            transform: translateX(120%) scale(0.8);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            font-weight: 600;
+            font-size: 14px;
+            line-height: 1.4;
+            backdrop-filter: blur(10px);
         `;
         
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
+        toast.innerHTML = message;
+        container.appendChild(toast);
+
+        // Animate in with bounce effect
+        setTimeout(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(0) scale(1)';
+        }, 10);
+
+        // Remove after delay with fade out
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(120%) scale(0.8)';
+            setTimeout(() => toast.remove(), 400);
+        }, 4500);
     }
+
+    /**
+     * Expose reload function globally for debugging
+     */
+    window.reloadReports = loadReports;
+    
+    // Add CSS for spin animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    console.log('✅ Enhanced servicerapporter JavaScript fully loaded with modern UX');
 });

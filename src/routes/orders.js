@@ -1,5 +1,7 @@
 const express = require('express');
 const db = require('../config/database');
+const path = require('path');
+const fs = require('fs').promises;
 
 const router = express.Router();
 
@@ -250,4 +252,92 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+const ServiceReportPDFGenerator = require('../services/pdfGenerator');
+
+// Generer rapporter når ordre ferdigstilles
+router.post('/:orderId/complete', async (req, res) => {
+  const { orderId } = req.params;
+  const tenantId = req.tenantId || req.session.tenantId;
+  
+  if (!req.session.technicianId) {
+    return res.status(401).json({ error: 'Ikke autentisert' });
+  }
+
+  try {
+    const pool = await db.getTenantConnection(tenantId);
+    
+    // Start transaksjon
+    await pool.query('BEGIN');
+    
+    // Oppdater ordre status til completed
+    await pool.query(
+      'UPDATE orders SET status = $1 WHERE id = $2',
+      ['completed', orderId]
+    );
+    
+    // Oppdater alle equipment til completed
+    await pool.query(
+      `UPDATE equipment 
+       SET data = data || '{"serviceStatus": "completed"}'::jsonb 
+       WHERE id IN (
+         SELECT equipment_id FROM service_reports WHERE order_id = $1
+       )`,
+      [orderId]
+    );
+    
+    // Hent alle service_reports for denne ordren
+    const serviceReportsResult = await pool.query(
+      `SELECT sr.*, e.type as equipment_type 
+       FROM service_reports sr
+       JOIN equipment e ON sr.equipment_id = e.id
+       WHERE sr.order_id = $1 AND sr.status = 'completed'`,
+      [orderId]
+    );
+    
+    // Generer PDF-er for alle rapporter
+    const pdfGenerator = new ServiceReportPDFGenerator();
+    const generatedPDFs = [];
+    
+    for (const report of serviceReportsResult.rows) {
+      try {
+        console.log(`Genererer PDF for rapport ${report.id}...`);
+        const pdfPath = await pdfGenerator.generateReport(report.id, tenantId);
+        generatedPDFs.push({
+          reportId: report.id,
+          equipmentType: report.equipment_type,
+          pdfPath: pdfPath
+        });
+        console.log(`✅ PDF generert: ${pdfPath}`);
+      } catch (pdfError) {
+        console.error(`❌ PDF-generering feilet for rapport ${report.id}:`, pdfError);
+        // Fortsett med andre rapporter selv om en feiler
+      }
+    }
+    
+    await pdfGenerator.close();
+    
+    // Commit transaksjon
+    await pool.query('COMMIT');
+    
+    console.log(`✅ Ordre ${orderId} ferdigstilt med ${generatedPDFs.length} PDF-rapporter`);
+    
+    res.json({
+      success: true,
+      message: 'Ordre ferdigstilt',
+      generatedPDFs: generatedPDFs
+    });
+    
+  } catch (error) {
+    // Rollback ved feil
+    try {
+      const pool = await db.getTenantConnection(tenantId);
+      await pool.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Rollback feilet:', rollbackError);
+    }
+    
+    console.error('Feil ved ferdigstilling av ordre:', error);
+    res.status(500).json({ error: 'Kunne ikke ferdigstille ordre' });
+  }
+});
 module.exports = router;

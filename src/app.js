@@ -92,6 +92,7 @@ module.exports = async () => {
   app.use('/api/admin/customers', require('./routes/admin/customers'));
   app.use('/api/admin/technicians', require('./routes/admin/technicians'));
   app.use('/api/admin/orders', require('./routes/admin/orders'));
+  app.use('/api/admin/reports', require('./routes/admin/reports'));
 
   // Middleware to protect admin static files
   app.use('/admin', (req, res, next) => {

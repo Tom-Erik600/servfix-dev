@@ -281,25 +281,73 @@ async function handleGlobalClick(e) {
 }
 
 async function completeOrder() {
+    // Dobbeltsjekk at alle anlegg er ferdigstilt
+    const hasEquipment = pageState.equipment.length > 0;
+    const allCompleted = hasEquipment && pageState.equipment.every(eq => {
+        const status = eq.serviceStatus || eq.data?.serviceStatus || 'not_started';
+        return status === 'completed';
+    });
+
+    if (!allCompleted) {
+        showToast('Alle anlegg må være ferdigstilt før ordre kan fullføres.', 'error');
+        return;
+    }
+
+    // Bekreftelse fra bruker
+    if (!confirm('Er du sikker på at du vil ferdigstille denne ordren?\n\nDette vil generere servicerapporter og markere ordren som fullført.')) {
+        return;
+    }
+
     setLoading(true);
+    
     try {
-        const response = await fetch(`/api/orders/${pageState.order.id}`, {
-            method: 'PUT',
+        console.log('Ferdigstiller ordre og genererer PDF-rapporter...');
+        
+        // Kall den nye /complete endepunktet som også genererer PDF-er
+        const response = await fetch(`/api/orders/${pageState.order.id}/complete`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'completed' })
+            credentials: 'include'
         });
         
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || 'Ukjent feil');
+            throw new Error(errorData.error || 'Ukjent feil ved ferdigstillelse');
         }
         
-        showToast('Ordre er fullført!', 'success');
-        setTimeout(() => window.location.href = 'index.html', 1000);
+        const result = await response.json();
+        console.log('Ordre ferdigstilt:', result);
+        
+        // Vis suksess-melding med info om genererte PDF-er
+        let message = 'Ordre er fullført!';
+        if (result.generatedPDFs && result.generatedPDFs.length > 0) {
+            message += `\n\n${result.generatedPDFs.length} servicerapporter ble generert:`;
+            result.generatedPDFs.forEach((pdf, index) => {
+                message += `\n• ${pdf.equipmentType} (${pdf.reportId.slice(-6)})`;
+            });
+        }
+        
+        showToast(message, 'success');
+        
+        // Oppdater knapp-tekst og deaktiver knappen
+        const completeBtn = document.querySelector('[data-action="complete-order"]');
+        if (completeBtn) {
+            completeBtn.textContent = 'Ordre er fullført ✓';
+            completeBtn.disabled = true;
+            completeBtn.style.backgroundColor = '#28a745';
+            completeBtn.style.opacity = '0.7';
+        }
+        
+        // Vent litt før navigering slik at bruker ser suksess-meldingen
+        setTimeout(() => {
+            window.location.href = 'index.html';
+        }, 3000);
+        
     } catch (error) {
-        console.error('Error completing order:', error);
-        showToast(`Kunne ikke fullføre ordren: ${error.message}`, 'error');
-        setLoading(false);
+        console.error('Feil ved ferdigstillelse av ordre:', error);
+        showToast(`Kunne ikke ferdigstille ordre: ${error.message}`, 'error');
+    } finally {
+        setLoading(false);  
     }
 }
 
