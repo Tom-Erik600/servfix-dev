@@ -37,12 +37,10 @@ router.get('/by-id/:equipmentId', async (req, res) => {
     }
     
     const equipment = result.rows[0];
-    // Transform data
-    equipment.systemNumber = equipment.data?.systemNumber || '';
-    equipment.systemType = equipment.data?.systemType || '';
-    equipment.operator = equipment.data?.operator || '';
+    // Transform data (forenklet)
     equipment.status = equipment.data?.status || 'active';
     equipment.serviceStatus = equipment.data?.serviceStatus || 'not_started';
+    equipment.internalNotes = equipment.data?.internalNotes || '';
     
     console.log('Returning equipment:', equipment.id);
     res.json(equipment);
@@ -77,7 +75,18 @@ router.get('/:customerId', async (req, res) => {
     
     const result = await pool.query(query, params);
     console.log(`Found ${result.rows.length} equipment for customer ${customerId}`);
-    res.json(result.rows);
+
+    // Transform data to include properties from the JSON 'data' field
+    const transformedRows = result.rows.map(equipment => {
+        return {
+            ...equipment,
+            status: equipment.data?.status || 'active',
+            serviceStatus: equipment.data?.serviceStatus || 'not_started',
+            internalNotes: equipment.data?.internalNotes || ''
+        };
+    });
+
+    res.json(transformedRows);
   } catch (error) {
     console.error('Error fetching equipment:', error);
     res.status(500).json({ error: 'Server error' });
@@ -93,13 +102,13 @@ router.post('/', async (req, res) => {
   });
   
   try {
-    const { customerId, type, name, systemNumber, systemType, operator, status, serviceStatus } = req.body;
+    const { customerId, type, name, internalNotes, status, serviceStatus } = req.body;
     
     // Valider påkrevde felter
     if (!customerId || !type || !name) {
-      return res.status(400).json({
-        error: 'Mangler påkrevde felter: customerId, type og name er påkrevd'
-      });
+        return res.status(400).json({
+            error: 'Mangler påkrevde felter: customerId, type og name er påkrevd'
+        });
     }
     
     // GENERER ID - samme format som orders
@@ -107,13 +116,11 @@ router.post('/', async (req, res) => {
     
     const pool = await db.getTenantConnection(req.session.tenantId);
 
-    // Lagre ekstra data i JSONB-feltet
+    // Lagre ekstra data i JSONB-feltet (forenklet)
     const extraData = {
-      systemNumber: systemNumber || '',
-      systemType: systemType || '',
-      operator: operator || '',
       status: status || 'active',
-      serviceStatus: serviceStatus || 'not_started'
+      serviceStatus: serviceStatus || 'not_started',
+      internalNotes: internalNotes || ''
     };
 
     const result = await pool.query(
@@ -123,11 +130,9 @@ router.post('/', async (req, res) => {
     
     // Returner data i forventet format
     const equipment = result.rows[0];
-    equipment.systemNumber = equipment.data?.systemNumber;
-    equipment.systemType = equipment.data?.systemType;
-    equipment.operator = equipment.data?.operator;
     equipment.status = equipment.data?.status;
     equipment.serviceStatus = equipment.data?.serviceStatus;
+    equipment.internalNotes = equipment.data?.internalNotes;
     
     console.log('Equipment created:', equipment);
     res.status(201).json(equipment);
@@ -178,9 +183,7 @@ router.put('/:equipmentId', async (req, res) => {
       ...existing.data,
       ...(updateData.serviceStatus && { serviceStatus: updateData.serviceStatus }),
       ...(updateData.status && { status: updateData.status }),
-      ...(updateData.systemNumber && { systemNumber: updateData.systemNumber }),
-      ...(updateData.systemType && { systemType: updateData.systemType }),
-      ...(updateData.operator && { operator: updateData.operator })
+      ...(updateData.internalNotes && { internalNotes: updateData.internalNotes })
     };
     
     // Oppdater i databasen
@@ -192,11 +195,9 @@ router.put('/:equipmentId', async (req, res) => {
     const equipment = updateResult.rows[0];
     
     // Returner i forventet format
-    equipment.systemNumber = equipment.data?.systemNumber || '';
-    equipment.systemType = equipment.data?.systemType || '';
-    equipment.operator = equipment.data?.operator || '';
     equipment.status = equipment.data?.status || 'active';
     equipment.serviceStatus = equipment.data?.serviceStatus || 'not_started';
+    equipment.internalNotes = equipment.data?.internalNotes || '';
     
     console.log('Equipment updated:', equipment.id);
     res.json(equipment);
@@ -249,9 +250,7 @@ router.delete('/:equipmentId', async (req, res) => {
     
     // Transform data for frontend (beholder eksisterende format)
     updatedEquipment.status = updatedEquipment.data?.status;
-    updatedEquipment.systemNumber = updatedEquipment.data?.systemNumber;
-    updatedEquipment.systemType = updatedEquipment.data?.systemType;
-    updatedEquipment.operator = updatedEquipment.data?.operator;
+    updatedEquipment.internalNotes = updatedEquipment.data?.internalNotes;
     updatedEquipment.serviceStatus = updatedEquipment.data?.serviceStatus;
     
     console.log('Equipment deactivated:', equipmentId);
@@ -263,6 +262,73 @@ router.delete('/:equipmentId', async (req, res) => {
   } catch (error) {
     console.error('Error deactivating equipment:', error);
     res.status(500).json({ error: 'Server error during deactivation' });
+  }
+});
+
+// PUT update equipment service status
+router.put('/:equipmentId/status', async (req, res) => {
+  console.log('Equipment status update request:', {
+    equipmentId: req.params.equipmentId,
+    body: req.body,
+    sessionTechnicianId: req.session.technicianId
+  });
+  
+  try {
+    const { equipmentId } = req.params;
+    const { serviceStatus } = req.body;
+    
+    // Valider serviceStatus
+    const validStatuses = ['not_started', 'in_progress', 'completed'];
+    if (!serviceStatus || !validStatuses.includes(serviceStatus)) {
+      return res.status(400).json({ 
+        error: 'Ugyldig serviceStatus. Må være: not_started, in_progress, eller completed' 
+      });
+    }
+    
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    
+    // Hent eksisterende equipment
+    const existing = await pool.query('SELECT * FROM equipment WHERE id = $1', [equipmentId]);
+    
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Equipment ikke funnet' });
+    }
+    
+    const currentData = existing.rows[0].data || {};
+    
+    // Oppdater serviceStatus i data JSONB felt
+    const updatedData = {
+      ...currentData,
+      serviceStatus: serviceStatus,
+      lastServiceStatusUpdate: new Date().toISOString(),
+      lastUpdatedBy: req.session.technicianId
+    };
+    
+    // Oppdater equipment
+    const result = await pool.query(
+      'UPDATE equipment SET data = $1 WHERE id = $2 RETURNING *',
+      [updatedData, equipmentId]
+    );
+    
+    const updatedEquipment = result.rows[0];
+    
+    // Transform data for frontend
+    updatedEquipment.status = updatedEquipment.data?.status || 'active';
+    updatedEquipment.serviceStatus = updatedEquipment.data?.serviceStatus;
+    updatedEquipment.internalNotes = updatedEquipment.data?.internalNotes || '';
+    
+    console.log(`✅ Equipment ${equipmentId} serviceStatus updated to: ${serviceStatus}`);
+    res.json({ 
+      message: `Equipment status oppdatert til ${serviceStatus}`, 
+      equipment: updatedEquipment 
+    });
+    
+  } catch (error) {
+    console.error('Error updating equipment service status:', error);
+    res.status(500).json({ 
+      error: 'Server feil ved oppdatering av equipment status',
+      details: error.message 
+    });
   }
 });
 

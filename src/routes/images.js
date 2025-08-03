@@ -386,7 +386,9 @@ router.get('/logo', async (req, res) => {
   }
 });
 
-// POST /api/images/upload - Last opp servicebilder
+// POST /api/images/upload - Legacy/fallback endpoint for bulk uploads
+// NOTE: Dette endepunktet brukes kanskje ikke lenger - nye uploads bruker /general og /avvik
+// Beholdes for bakoverkompatibilitet og eventuelle bulk-operasjoner
 router.post('/upload', upload.array('images', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
@@ -469,6 +471,146 @@ router.post('/upload', upload.array('images', 10), async (req, res) => {
   }
 });
 
+// POST /api/images/general - Last opp rapport-bilder (lagres i service_reports.photos array)
+router.post('/general', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Ingen fil lastet opp' });
+    }
+
+    console.log('📸 Laster opp rapport-bilde:', req.file.originalname);
+    
+    const { orderId, equipmentId, reportId } = req.body;
+    const tenantId = req.session.tenantId || 'airtech';
+    
+    if (!reportId || !orderId || !equipmentId) {
+      return res.status(400).json({ error: 'reportId, orderId og equipmentId er påkrevd' });
+    }
+
+    // Generate file path
+    const fileExtension = path.extname(req.file.originalname).slice(1) || 'jpg';
+    const filePath = generateImagePath(tenantId, orderId, equipmentId, 'general', null, fileExtension);
+    
+    // Upload to GCS
+    const imageUrl = await uploadToGCS(req.file.buffer, filePath, req.file.mimetype);
+    
+    // Save to service_reports.photos array (NOT avvik_images table)
+    const pool = await db.getTenantConnection(tenantId);
+    const result = await pool.query(
+      `UPDATE service_reports 
+       SET photos = array_append(COALESCE(photos, '{}'), $1)
+       WHERE id = $2 
+       RETURNING photos`,
+      [imageUrl, reportId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Service report ikke funnet' });
+    }
+
+    console.log(`✅ Rapport-bilde lagret i service_reports.photos: ${imageUrl}`);
+
+    res.json({
+      success: true,
+      url: imageUrl,
+      message: 'Rapport-bilde lastet opp',
+      imageType: 'general'
+    });
+
+  } catch (error) {
+    console.error('Feil ved opplasting av rapport-bilde:', error);
+    res.status(500).json({ 
+      error: 'Kunne ikke laste opp rapport-bilde',
+      details: error.message 
+    });
+  }
+});
+
+// POST /api/images/avvik - Last opp avvik-bilder (lagres i avvik_images tabell)
+router.post('/avvik', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Ingen fil lastet opp' });
+    }
+
+    console.log('📸 Laster opp avvik-bilde:', req.file.originalname);
+    
+    const { orderId, equipmentId, reportId, avvikId } = req.body;
+    const tenantId = req.session.tenantId || 'airtech';
+    
+    if (!reportId || !orderId || !equipmentId) {
+      return res.status(400).json({ error: 'reportId, orderId og equipmentId er påkrevd' });
+    }
+
+    const pool = await db.getTenantConnection(tenantId);
+    
+    // KORREKT: Bruk auto-increment funksjon for å få neste avvik-nummer
+    const avvikNumberResult = await pool.query(
+      `SELECT COALESCE(MAX(avvik_number), 0) + 1 as next_avvik_number
+       FROM avvik_images 
+       WHERE service_report_id = $1`,
+      [reportId]
+    );
+    
+    const avvikNumber = avvikNumberResult.rows[0].next_avvik_number; // 1, 2, 3, etc.
+    console.log('📊 Generated avvik number:', avvikNumber);
+
+    // Generate file path med korrekt nummer
+    const fileExtension = path.extname(req.file.originalname).slice(1) || 'jpg';
+    const filePath = generateImagePath(tenantId, orderId, equipmentId, 'avvik', avvikNumber, fileExtension);
+    
+    console.log('📁 Generated file path:', filePath);
+    
+    // Upload to GCS
+    const imageUrl = await uploadToGCS(req.file.buffer, filePath, req.file.mimetype);
+    
+    console.log('☁️ Uploaded to GCS:', imageUrl);
+    
+    // Save to avvik_images table med korrekte kolonner
+    const imageRecord = await pool.query(
+      `INSERT INTO avvik_images (service_report_id, avvik_number, checklist_item_id, image_url, image_type, metadata, uploaded_at, uploaded_by)
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7)
+       RETURNING *`,
+      [
+        reportId,
+        avvikNumber,                    // INTEGER: 1, 2, 3, etc.
+        avvikId || null,               // checklist_item_id
+        imageUrl,
+        'avvik',
+        JSON.stringify({
+          originalName: req.file.originalname,
+          fileSize: req.file.size,
+          imageType: 'avvik',
+          filePath: filePath,
+          avvikId: avvikId
+        }),
+        req.session.technicianId
+      ]
+    );
+
+    console.log(`✅ Avvik-bilde lagret i avvik_images: ${imageUrl}`);
+
+    res.json({
+      success: true,
+      url: imageUrl,
+      avvikNumber: avvikNumber,                                    // Backend returnerer: 1
+      formattedAvvikNumber: String(avvikNumber).padStart(3, '0'),  // Frontend får: "001"
+      message: `Avvik-bilde #${avvikNumber} lastet opp`,
+      imageType: 'avvik',
+      id: imageRecord.rows[0].id
+    });
+
+  } catch (error) {
+    console.error('🚨 Feil ved opplasting av avvik-bilde:', error);
+    console.error('🚨 Error stack:', error.stack);
+    console.error('🚨 Request body:', req.body);
+    res.status(500).json({ 
+      error: 'Kunne ikke laste opp avvik-bilde',
+      details: error.message 
+    });
+  }
+});
+
 // Helper: Generate image path for service images
 function generateImagePath(tenantId, orderId, equipmentId, imageType, avvikNumber = null, fileExtension = 'jpg') {
   const now = new Date();
@@ -496,18 +638,58 @@ router.get('/avvik/:reportId', async (req, res) => {
     const pool = await db.getTenantConnection(req.session.tenantId);
     
     const result = await pool.query(
-      `SELECT service_report_id, avvik_number, image_url, uploaded_at, metadata
+      `SELECT service_report_id, avvik_number, image_url, uploaded_at, metadata, checklist_item_id
        FROM avvik_images 
        WHERE service_report_id = $1 
        ORDER BY avvik_number ASC`,
       [reportId]
     );
     
-    console.log(`Found ${result.rows.length} avvik images for report ${reportId}`);
-    res.json(result.rows);
+    // Legg til formatted_avvik_number for frontend
+    const formattedResults = result.rows.map(row => ({
+      ...row,
+      formatted_avvik_number: String(row.avvik_number).replace('AVVIK-', '')
+    }));
+    
+    console.log(`Found ${formattedResults.length} avvik images for report ${reportId}`);
+    res.json(formattedResults);
   } catch (error) {
     console.error('Feil ved henting av avvik-bilder:', error);
     res.status(500).json({ error: 'Kunne ikke hente avvik-bilder' });
+  }
+});
+
+// GET /api/images/general/:reportId - Hent alle rapport-bilder for en rapport
+router.get('/general/:reportId', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    
+    const result = await pool.query(
+      `SELECT photos FROM service_reports WHERE id = $1`,
+      [reportId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Service report ikke funnet' });
+    }
+    
+    const photos = result.rows[0].photos || [];
+    
+    // Format for frontend
+    const formattedPhotos = photos.map((url, index) => ({
+      image_url: url,
+      uploaded_at: new Date().toISOString(), // Fallback since we don't store timestamp in array
+      imageType: 'general',
+      index: index
+    }));
+    
+    console.log(`Found ${formattedPhotos.length} general images for report ${reportId}`);
+    res.json(formattedPhotos);
+  } catch (error) {
+    console.error('Feil ved henting av rapport-bilder:', error);
+    res.status(500).json({ error: 'Kunne ikke hente rapport-bilder' });
   }
 });
 

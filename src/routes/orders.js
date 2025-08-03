@@ -38,15 +38,20 @@ router.get('/', async (req, res) => {
         try {
             // Hent equipment for denne ordren
             const equipmentResult = await pool.query(
-                `SELECT id, data->>'serviceStatus' as service_status 
-                 FROM equipment 
-                 WHERE customer_id = $1`,
-                [order.customer_id]
+                `SELECT 
+                    e.id, 
+                    e.data->>'serviceStatus' as service_status,
+                    COALESCE(sr.status, 'not_started') as service_report_status
+                 FROM equipment e
+                 LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
+                 WHERE e.customer_id = $1`,
+                [order.customer_id, order.id]
             );
             
             equipment = equipmentResult.rows.map(eq => ({
                 id: eq.id,
-                serviceStatus: eq.service_status || 'not_started'
+                serviceStatus: eq.service_status || 'not_started',
+                serviceReportStatus: eq.service_report_status || 'not_started'
             }));
             
         } catch (error) {
@@ -92,15 +97,20 @@ router.get('/today', async (req, res) => {
         try {
             // Hent equipment for denne ordren
             const equipmentResult = await pool.query(
-                `SELECT id, data->>'serviceStatus' as service_status 
-                 FROM equipment 
-                 WHERE customer_id = $1`,
-                [order.customer_id]
+                `SELECT 
+                    e.id, 
+                    e.data->>'serviceStatus' as service_status,
+                    COALESCE(sr.status, 'not_started') as service_report_status
+                 FROM equipment e
+                 LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
+                 WHERE e.customer_id = $1`,
+                [order.customer_id, order.id]
             );
             
             order.equipment = equipmentResult.rows.map(eq => ({
                 id: eq.id,
-                serviceStatus: eq.service_status || 'not_started'
+                serviceStatus: eq.service_status || 'not_started',
+                serviceReportStatus: eq.service_report_status || 'not_started'
             }));
             
         } catch (error) {
@@ -148,7 +158,7 @@ router.get('/:id', async (req, res) => {
 
 // Prøv å hente fullstendig kundeinformasjon fra Tripletex
 try {
-    const tripletexService = require('../../services/tripletexService');
+    const tripletexService = require('../services/tripletexService');
     const customerDetails = await tripletexService.getCustomer(order.customer_id);
     
     if (customerDetails) {

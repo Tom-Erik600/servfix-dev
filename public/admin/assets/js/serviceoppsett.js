@@ -33,6 +33,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const checklistItemModal = document.getElementById('checklist-item-modal');
     const checklistItemLabelInput = document.getElementById('checklist-item-label');
     const checklistItemInputTypeSelect = document.getElementById('checklist-item-input-type');
+    const dropdownOptionsSection = document.getElementById('dropdown-options-section');
+    const dropdownOptionsTextarea = document.getElementById('dropdown-options-textarea');
     const hasSubpointsCheckbox = document.getElementById('has-subpoints-checkbox');
     const subpointsSection = document.getElementById('subpoints-section');
     const subpointsContainer = document.getElementById('subpoints-container');
@@ -193,6 +195,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 inputHtml = ``; // No direct input for group selection
             }
 
+            // Legg til støtte for dropdown options
+            let optionsHtml = '';
+            if (item.inputType === 'dropdown_ok_avvik' || item.inputType === 'dropdown_ok_avvik_comment') {
+                const options = item.dropdownOptions || [];
+                optionsHtml = `
+                    <div class="dropdown-options-config" style="margin-top: 8px;">
+                        <label style="font-size: 12px; color: #666;">Dropdown alternativer (ett per linje):</label>
+                        <textarea data-id="${item.id}" data-field="dropdownOptions" 
+                                 style="width: 100%; min-height: 60px; font-size: 12px; margin-top: 4px;"
+                                 placeholder="Roterende varmegjenvinner\nFast plate varmeveksler\nKryssveksler">${options.join('\n')}</textarea>
+                    </div>
+                `;
+            }
+
             div.innerHTML = `
                 <span class="drag-handle">☰</span>
                 ${item.subpoints && item.subpoints.length > 0 ? '<span class="subpoint-toggle">▶</span>' : ''}
@@ -203,10 +219,25 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <option value="ok_byttet_avvik" ${item.inputType === 'ok_byttet_avvik' ? 'selected' : ''}>OK / Byttet / Avvik</option>
                     <option value="numeric" ${item.inputType === 'numeric' ? 'selected' : ''}>Numerisk</option>
                     <option value="text" ${item.inputType === 'text' ? 'selected' : ''}>Tekst</option>
+                    <option value="textarea" ${item.inputType === 'textarea' ? 'selected' : ''}>Langt tekstfelt</option>
                     <option value="comment" ${item.inputType === 'comment' ? 'selected' : ''}>Kommentar</option>
+                    <option value="multi_checkbox">Multi Checkbox</option>
+                    <option value="timer">Timer</option>
+                    <option value="rengjort_ikke_rengjort">Rengjort / Ikke Rengjort</option>
+                    <option value="virkningsgrad">Virkningsgrad</option>
+                    <option value="image_only">Kun Bilde</option>
+                    <option value="dropdown">Dropdown</option>
                     <option value="group_selection" ${item.inputType === 'group_selection' ? 'selected' : ''}>Gruppevalg</option>
+                    <option value="switch_select" ${item.inputType === 'switch_select' ? 'selected' : ''}>Bryter/Status</option>
+                    <option value="dropdown_ok_avvik" ${item.inputType === 'dropdown_ok_avvik' ? 'selected' : ''}>Dropdown + OK/Avvik</option>
+                    <option value="dropdown_ok_avvik_comment" ${item.inputType === 'dropdown_ok_avvik_comment' ? 'selected' : ''}>Dropdown + OK/Avvik + Kommentar</option>
+                    <option value="temperature" ${item.inputType === 'temperature' ? 'selected' : ''}>Temperatur (°C + OK/Avvik)</option>
+                    <option value="virkningsgrad" ${item.inputType === 'virkningsgrad' ? 'selected' : ''}>Virkningsgrad (%)</option>
+                    <option value="tilstandsgrad_dropdown" ${item.inputType === 'tilstandsgrad_dropdown' ? 'selected' : ''}>Tilstandsgrad (TG)</option>
+                    <option value="konsekvensgrad_dropdown" ${item.inputType === 'konsekvensgrad_dropdown' ? 'selected' : ''}>Konsekvensgrad (KG)</option>
                 </select>
                 ${inputHtml}
+                ${optionsHtml}
                 <button class="edit-item-btn" data-id="${item.id}">✏️</button>
                 <button class="delete-item-btn" data-id="${item.id}">🗑️</button>
             `;
@@ -335,15 +366,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function addInputListeners() {
-        checklistItemsContainer.querySelectorAll('input[type="text"], select').forEach(input => {
+        checklistItemsContainer.querySelectorAll('input[type="text"], select, textarea').forEach(input => {
             input.addEventListener('change', (e) => {
                 const itemId = e.target.dataset.id;
                 const field = e.target.dataset.field;
                 const value = e.target.value;
                 // This needs to be updated to handle nested items correctly
-                const item = currentFacilityType.checklistItems.find(i => i.id === itemId);
+                const item = findChecklistItemById(currentFacilityType.checklistItems, itemId);
                 if (item) {
-                    item[field] = value;
+                    if (field === 'dropdownOptions') {
+                        const options = value.split('\n').filter(opt => opt.trim());
+                        item.dropdownOptions = options;
+                    } else {
+                        item[field] = value;
+                    }
                 }
             });
         });
@@ -358,6 +394,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (editingChecklistItem) {
                     checklistItemLabelInput.value = editingChecklistItem.label;
                     checklistItemInputTypeSelect.value = editingChecklistItem.inputType;
+
+                    // Handle dropdown options visibility
+                    const isDropdown = ['dropdown_ok_avvik', 'dropdown_ok_avvik_comment', 'dropdown'].includes(editingChecklistItem.inputType);
+                    dropdownOptionsSection.style.display = isDropdown ? 'block' : 'none';
+                    dropdownOptionsTextarea.value = isDropdown ? (editingChecklistItem.dropdownOptions || []).join('\n') : '';
+
                     hasSubpointsCheckbox.checked = editingChecklistItem.subpoints && editingChecklistItem.subpoints.length > 0;
                     subpointsSection.style.display = hasSubpointsCheckbox.checked ? 'block' : 'none';
                     subpointsContainer.innerHTML = '';
@@ -493,7 +535,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <option value="ok_byttet_avvik" ${inputType === 'ok_byttet_avvik' ? 'selected' : ''}>OK / Byttet / Avvik</option>
                 <option value="numeric" ${inputType === 'numeric' ? 'selected' : ''}>Numerisk</option>
                 <option value="text" ${inputType === 'text' ? 'selected' : ''}>Tekst</option>
+                <option value="textarea" ${inputType === 'textarea' ? 'selected' : ''}>Langt tekstfelt</option>
                 <option value="comment" ${inputType === 'comment' ? 'selected' : ''}>Kommentar</option>
+                <option value="group_selection" ${inputType === 'group_selection' ? 'selected' : ''}>Gruppevalg</option>
+                <option value="switch_select" ${inputType === 'switch_select' ? 'selected' : ''}>Bryter/Status</option>
+                <option value="dropdown_ok_avvik" ${inputType === 'dropdown_ok_avvik' ? 'selected' : ''}>Dropdown + OK/Avvik</option>
+                <option value="dropdown_ok_avvik_comment" ${inputType === 'dropdown_ok_avvik_comment' ? 'selected' : ''}>Dropdown + OK/Avvik + Kommentar</option>
+                <option value="temperature" ${inputType === 'temperature' ? 'selected' : ''}>Temperatur (°C + OK/Avvik)</option>
+                <option value="virkningsgrad" ${inputType === 'virkningsgrad' ? 'selected' : ''}>Virkningsgrad (%)</option>
+                <option value="tilstandsgrad_dropdown" ${inputType === 'tilstandsgrad_dropdown' ? 'selected' : ''}>Tilstandsgrad (TG)</option>
+                <option value="konsekvensgrad_dropdown" ${inputType === 'konsekvensgrad_dropdown' ? 'selected' : ''}>Konsekvensgrad (KG)</option>
+                <option value="multi_checkbox">Multi Checkbox</option>
+                <option value="timer">Timer</option>
+                <option value="rengjort_ikke_rengjort">Rengjort / Ikke Rengjort</option>
+                <option value="image_only">Kun Bilde</option>
+                <option value="dropdown">Dropdown</option>
             </select>
             <input type="text" value="${showWhen ? showWhen.parentId : ''}" data-field-prop="showWhenParentId" placeholder="Vis når (Parent ID)">
             <input type="text" value="${showWhen ? showWhen.parentValue : ''}" data-field-prop="showWhenParentValue" placeholder="Vis når (Parent Value)">

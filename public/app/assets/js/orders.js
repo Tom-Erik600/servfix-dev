@@ -73,9 +73,7 @@ async function initializePage() {
         pageState.equipment = pageState.equipment.map(eq => ({
             ...eq,
             serviceStatus: eq.serviceStatus || eq.data?.serviceStatus || 'not_started',
-            systemNumber: eq.systemNumber || eq.data?.systemNumber || '',
-            systemType: eq.systemType || eq.data?.systemType || '',
-            operator: eq.operator || eq.data?.operator || ''
+            internalNotes: eq.internalNotes || eq.data?.internalNotes || ''
         }));
 
         // Verifiser at customerId faktisk er satt
@@ -194,7 +192,6 @@ function renderActionButtons() {
     // Strengere validering - ALLE anlegg må være completed
     const hasEquipment = pageState.equipment.length > 0;
     const allCompleted = hasEquipment && pageState.equipment.every(eq => {
-        // Sjekk både serviceStatus og data.serviceStatus for å være sikker
         const status = eq.serviceStatus || eq.data?.serviceStatus || 'not_started';
         return status === 'completed';
     });
@@ -232,7 +229,13 @@ function createEquipmentCardHTML(eq) {
         <div class="system-item ${statusClass}" data-equipment-id="${eq.id}">
             <div class="system-content-wrapper">
                 <div class="system-header"><span class="system-badge">ID: ${eq.id}</span><button class="delete-icon-btn" data-action="delete-start" title="Deaktiver anlegg">🗑️</button></div>
-                <div class="system-info"><div class="system-name">${eq.name}</div><div class="system-details"><span>Systemtype: ${eq.type}</span><span>Betjener: ${eq.operator || 'Ikke angitt'}</span></div></div>
+                <div class="system-info">
+                    <div class="system-name">${eq.name}</div>
+                    <div class="system-details">
+                        <span>Type: ${eq.type}</span>
+                        ${eq.internalNotes ? `<span class="internal-notes">💡 ${eq.internalNotes}</span>` : ''}
+                    </div>
+                </div>
                 <div class="system-status"><span class="status-text">${statusText}</span></div>
             </div>
             <div class="confirm-delete-container">
@@ -407,9 +410,10 @@ async function deactivateEquipment(cardElement) {
         }, 300);
     } catch (error) { 
         console.error('Deactivation error:', error);
-        showToast(`Deaktivering feilet: ${error.message}`, 'error');
-    } finally {
-        setLoading(false);
+        showToast(`Deaktivering feilet: ${error.message}`, 'error'); 
+    } 
+    finally { 
+        setLoading(false); 
     }
 }
 
@@ -667,8 +671,17 @@ function showAddEquipmentForm() {
     if (pageState.selectedEquipmentType === 'custom') {
         formFields = `<div class="form-group"><label for="plassering">Beskrivelse</label><input type="text" id="plassering" required placeholder="F.eks. Kontroll av taksluk, etc."></div>`;
     } else {
-        formFields = `<div class="form-group"><label for="plassering">Plassering</label><input type="text" id="plassering" required placeholder="F.eks. Teknisk rom, Tak, etc."></div><div class="form-group"><label for="systemNumber">Systemnummer</label><input type="text" id="systemNumber" required placeholder="F.eks. VA-1001"></div><div class="form-group"><label for="systemType">Systemtype</label><input type="text" id="systemType" required placeholder="F.eks. Aggregat A, Sentralvifte"></div><div class="form-group"><label for="operator">Betjener</label><input type="text" id="operator" placeholder="F.eks. Kontorlokaler, Leilighet 404"></div>`;
-    }
+    formFields = `
+        <div class="form-group">
+            <label for="plassering">Plassering</label>
+            <input type="text" id="plassering" required placeholder="F.eks. Teknisk rom 1. etasje, Tak aggregat A">
+        </div>
+        <div class="form-group">
+            <label for="internalNotes">Intern kommentar <span style="color: #6c757d; font-weight: normal;">(valgfritt)</span></label>
+            <textarea id="internalNotes" rows="3" placeholder="F.eks. Trenger stige for adgang, nøkkel hos vaktmester, kun originale deler..." style="width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-family: inherit; font-size: 14px; resize: vertical; box-sizing: border-box;"></textarea>
+        </div>
+    `;
+}
 
     modalContent.innerHTML = `<form id="equipment-form"><div class="modal-header"><h3>Legg til anlegg: ${typeName}</h3><button type="button" class="close-btn" data-action="close-modal">×</button></div><div class="modal-body">${formFields}</div><div class="modal-footer"><button type="button" class="btn-secondary" data-action="close-modal">Avbryt</button><button type="submit" class="btn-primary">Legg til anlegg</button></div></form>`;
     document.getElementById('equipment-form').addEventListener('submit', handleSaveEquipment);
@@ -687,15 +700,11 @@ async function handleSaveEquipment(event) {
     }
     
     const newEquipmentData = {
-        customerId: customerId, // Bruker variabelen
-        customerId: customerId, // Bruker variabelen
+        customerId: customerId,
         type: pageState.selectedEquipmentType,
         name: document.getElementById('plassering').value,
-        systemNumber: document.getElementById('systemNumber')?.value || 'N/A',
-        systemType: document.getElementById('systemType')?.value || 'N/A',
-        operator: document.getElementById('operator')?.value || '',
-        status: 'active',
-        serviceStatus: 'not_started'
+        internalNotes: document.getElementById('internalNotes')?.value || '',
+        status: 'active'
     };
     
     console.log('Sender equipment data:', newEquipmentData); // Debug logging
@@ -734,7 +743,7 @@ async function handleSaveEquipment(event) {
     }
 }
 
-function hideModal() { 
+function hideModal() {
     const modal = document.getElementById('add-equipment-modal');
     modal.style.display = 'none';
     modal.removeEventListener('click', handleModalClicks);

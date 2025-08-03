@@ -343,6 +343,8 @@
     background: var(--gray-300);
     color: var(--gray-500);
     cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
 
 /* ==== QUOTES SECTION ==== */
@@ -994,4 +996,10 @@
 .btn-secondary:focus {
     outline: 2px solid var(--primary-color);
     outline-offset: 1px;
+}
+
+.internal-notes {
+    color: #4A90E2 !important;
+    font-style: italic;
+    font-weight: 500;
 }

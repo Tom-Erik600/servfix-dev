@@ -107,6 +107,7 @@
 .modal-btn.delete:hover {
     background: #dc2626;
 }
+
 /*
  * Air-Tech AS - Service Side Stilark (v7.9 - Med modal og custom fix)
 */
@@ -128,39 +129,164 @@
 .anlegg-info-grid .info-item .label { font-size: 11px; color: #6c757d; display: block; }
 .anlegg-info-grid .info-item .value { font-size: 13px; font-weight: 600; color: #343a40;}
 
-#component-details-form .component-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px 12px; }
+/* Component grid felter - virkningsgrad og setpunkt */
+#component-details-form .component-grid { 
+    display: grid; 
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); 
+    gap: 10px 12px; 
+}
+
+#component-details-form .component-grid input {
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    background: white;
+}
+
+#component-details-form .component-grid input:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+/* Generell styling for alle input/textarea/select i service-delen */
+.checklist-card input, 
+.checklist-card textarea, 
+.checklist-card select,
+.component-form-section input,
+.component-form-section textarea,
+.component-form-section select {
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    background: white;
+    font-family: inherit;
+}
+
+.checklist-card input:focus,
+.checklist-card textarea:focus,
+.checklist-card select:focus,
+.component-form-section input:focus,
+.component-form-section textarea:focus,
+.component-form-section select:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
 
 .checklist-item {
-    padding: 8px 10px; border: 1px solid #e9ecef;
-    border-radius: 8px; margin-bottom: 6px; display: flex;
-    justify-content: space-between; align-items: center; gap: 16px;
+    padding: 12px; border: 1px solid #e9ecef;
+    border-radius: 12px; margin-bottom: 8px; display: flex;
+    justify-content: space-between; align-items: center; gap: 12px;
     background-color: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 
 .checklist-item-fullwidth {
-    padding: 8px 10px; border: 1px solid #e9ecef;
-    border-radius: 8px; margin-bottom: 6px; display: flex;
+    padding: 12px; border: 1px solid #e9ecef;
+    border-radius: 12px; margin-bottom: 8px; display: flex;
     flex-direction: column; align-items: flex-start; gap: 8px;
     background-color: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 
-.item-label { font-size: 13px; font-weight: 500; flex-shrink: 0; }
-.item-actions { display: flex; gap: 6px; }
+.item-label { 
+    font-size: 13px; 
+    font-weight: 500; 
+    flex-shrink: 0; 
+    word-wrap: break-word;
+    line-height: 1.4;
+    max-width: 40%;
+}
 
-.checklist-input-number { width: 80px; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 6px; text-align: right; font-size: 13px; }
+/* Layout for items with dropdowns + OK/Avvik - horisontal */
+.item-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
 
-.status-btn { padding: 5px 12px; font-size: 12px; font-weight: 600; border-radius: 16px; border: 2px solid #e9ecef; background: white; color: #495057; cursor: pointer; transition: all 0.2s ease; }
+.item-controls .checklist-dropdown {
+    min-width: 120px;
+    padding: 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 13px;
+    background: white;
+}
+
+.item-actions { 
+    display: flex; 
+    gap: 6px; 
+    justify-content: flex-start;
+}
+
+/* Temperature inputs - smaller for 99.99 format */
+.checklist-input-number { 
+    width: 60px; 
+    padding: 6px 8px; 
+    border: 1px solid #ced4da; 
+    border-radius: 8px; 
+    text-align: center; 
+    font-size: 13px;
+    transition: border-color 0.2s ease;
+}
+
+.checklist-input-number:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+/* Status buttons with better spacing */
+.status-btn { 
+    padding: 5px 12px; 
+    font-size: 12px; 
+    font-weight: 600; 
+    border-radius: 16px; 
+    border: 2px solid #e9ecef; 
+    background: white; 
+    color: #495057; 
+    cursor: pointer; 
+    transition: all 0.2s ease;
+    min-width: 45px;
+}
 .status-btn.active.ok { background: #28a745; color: white; border-color: #28a745; }
 .status-btn.active.avvik { background: #dc3545; color: white; border-color: #dc3545; }
 .status-btn.active.byttet, .status-btn.active.rengjort { background: #ffc107; color: #212529; border-color: #ffc107; }
 
-.avvik-container, .byttet-container { margin-top: 10px; padding: 10px; border-radius: 8px; display: none; }
+.avvik-container, .byttet-container { 
+    margin-top: 10px; 
+    padding: 12px; 
+    border-radius: 12px; 
+    display: none; 
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
 .avvik-container.show, .byttet-container.show { display: block; animation: fadeIn 0.3s ease; }
-.avvik-container { background-color: #f8d7da; border: 1px solid #f5c6cb; }
-.byttet-container { background-color: #fff9e6; border: 1px solid #ffecb3; }
-.avvik-container textarea, .byttet-container textarea { width: 100%; min-height: 60px; border-radius: 6px; padding: 8px; font-size: 13px; }
-.avvik-container textarea { border: 1px solid #f5c6cb; }
-.byttet-container textarea { border: 1px solid #ffe082; }
+.avvik-container { background-color: #fef2f2; border: 1px solid #fecaca; }
+.byttet-container { background-color: #fffbeb; border: 1px solid #fed7aa; }
+.avvik-container textarea, .byttet-container textarea { 
+    width: 100%; 
+    min-height: 60px; 
+    border-radius: 8px; 
+    padding: 10px; 
+    font-size: 13px;
+    border: 1px solid #ced4da;
+    transition: border-color 0.2s ease;
+}
+.avvik-container textarea:focus, .byttet-container textarea:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+.avvik-container textarea { border: 1px solid #fecaca; }
+.byttet-container textarea { border: 1px solid #fed7aa; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .page-footer { padding: 12px; border-top: 1px solid #e9ecef; display: flex; gap: 10px; background: #f8f9fa; }
@@ -232,43 +358,223 @@
 }
 .add-line-btn-icon:hover { background-color: #cde6ff; }
 
-.line-item.product-item { 
+/* PRODUKTER - Kompakt layout */
+.product-item { 
     display: flex; 
-    gap: 6px; 
+    gap: 8px; 
     align-items: center; 
     width: 100%;
+    margin-bottom: 8px;
+    padding: 8px;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
 }
 
-.line-item.product-item .line-input.product-name { 
-    flex: 1 1 70%; 
-    min-width: 0;
-    max-width: calc(100% - 125px);
+/* Produktnavn - tar mest plass */
+.product-item .product-name,
+.product-item input[placeholder="Produktnavn"] { 
+    flex: 1 1 auto; 
+    min-width: 120px;
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
 }
 
-.line-item.product-item .line-input.product-price { 
-    flex: 0 0 75px !important; 
-    width: 75px !important;
-    max-width: 75px !important;
+.product-item input[placeholder="Produktnavn"]:focus { 
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
 }
 
-.line-item.work-item {
-    display: flex; flex-direction: column; gap: 8px;
-    padding: 10px; border: 1px solid #e9ecef;
-    background-color: #f8f9fa; border-radius: 8px;
+/* Antall - liten (maks 99) */
+.product-item .product-quantity,
+.product-item input[placeholder="Antall"] { 
+    flex: 0 0 45px;
+    width: 45px;
+    max-width: 45px;
+    padding: 8px 4px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    text-align: center;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
 }
-.work-item-main .work-description { width: 100%; resize: vertical; }
-.work-item-footer { display: flex; align-items: flex-end; gap: 10px; }
-.work-item-footer .input-group { display: flex; flex-direction: column; }
-.work-item-footer .input-group label { font-size: 10px; color: #6c757d; margin-bottom: 2px; }
-.work-item-footer .input-group input { padding: 6px 8px; }
-.work-item-footer .work-hours { width: 60px; }
-.work-item-footer .work-price { width: 85px; }
 
-.product-item .action-btn-icon { background-color: #f8f9fa; color: #dc3545; border: 1px solid #dee2e6; }
-.product-item .action-btn-icon:hover { background-color: #dc3545; color: white; }
+.product-item input[placeholder="Antall"]:focus { 
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
 
-.work-item .action-btn-icon { align-self: flex-end; background-color: #f8f9fa; color: #dc3545; border: 1px solid #dee2e6; }
-.work-item .action-btn-icon:hover { background-color: #dc3545; color: white; }
+/* Pris - medium størrelse */
+.product-item .product-price,
+.product-item input[placeholder="Pris"] { 
+    flex: 0 0 70px;
+    width: 70px;
+    max-width: 70px;
+    padding: 8px 6px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    text-align: right;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.product-item input[placeholder="Pris"]:focus { 
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+/* Fjern-knapp - bare søppelbøtte */
+.product-item .remove-line-btn,
+.product-item .action-btn-icon { 
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    opacity: 0.6;
+}
+
+.product-item .remove-line-btn:hover,
+.product-item .action-btn-icon:hover { 
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.product-item .remove-line-btn::before,
+.product-item .action-btn-icon::before {
+    content: "🗑️";
+    font-size: 16px;
+}
+
+/* TILLEGGSARBEID - Beskrivelse øverst, timer/pris/X nederst */
+.work-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px; 
+    border: 1px solid #e9ecef;
+    background-color: #f8f9fa; 
+    border-radius: 12px;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+/* Beskrivelse - tar full bredde på første rad */
+.work-item .work-description,
+.work-item input[placeholder="Beskrivelse"] { 
+    width: 100%;
+    min-height: 50px;
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.2s ease;
+}
+
+.work-item input[placeholder="Beskrivelse"]:focus { 
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+/* Nederste rad - Timer, Pris og Fjern-knapp på samme linje */
+.work-item-bottom {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Timer - liten */
+.work-item .work-hours,
+.work-item input[placeholder="Timer"] { 
+    width: 60px;
+    padding: 6px 8px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.work-item input[placeholder="Timer"]:focus { 
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+/* Pris - medium */
+.work-item .work-price,
+.work-item input[placeholder="Pris"] { 
+    width: 80px;
+    padding: 6px 8px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    text-align: right;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.work-item input[placeholder="Pris"]:focus { 
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+/* Fjern-knapp - rødt X på samme linje som timer/pris */
+.work-item .remove-line-btn,
+.work-item .action-btn-icon { 
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid #fecaca;
+    background: #fef2f2;
+    color: #dc2626;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    text-indent: -9999px;
+    overflow: hidden;
+    margin-left: auto;
+}
+
+.work-item .remove-line-btn:hover,
+.work-item .action-btn-icon:hover { 
+    background: #dc2626;
+    color: white;
+    border-color: #dc2626;
+    transform: scale(1.1);
+}
+
+.work-item .remove-line-btn::before,
+.work-item .action-btn-icon::before {
+    content: "×";
+    font-size: 16px;
+    line-height: 1;
+    text-indent: 0;
+    position: absolute;
+}
 
 .attachment-section { margin-top: 24px; }
 .attachment-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; }
@@ -280,8 +586,61 @@
 .attachment-info .filename { font-size: 12px; font-weight: 500; color: #343a40; }
 .attachment-info .filesize { font-size: 11px; color: #6c757d; }
 
-.line-input, .line-textarea { padding: 8px 10px; border: 1px solid #ced4da; border-radius: 6px; font-size: 13px; transition: all 0.2s ease; }
-.line-input:focus, .line-textarea:focus { border-color: #4A90E2; box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1); }
+/* Line inputs og textarea spesifikt */
+.line-input, .line-textarea { 
+    padding: 8px 12px; 
+    border: 1px solid #ced4da; 
+    border-radius: 8px; 
+    font-size: 14px; 
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    background: white;
+}
+.line-input:focus, .line-textarea:focus { 
+    border-color: #4A90E2; 
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1); 
+    outline: none;
+}
+
+/* Checklist dropdowns og selects spesifikt */
+.checklist-input-select,
+.checklist-dropdown {
+    padding: 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 13px;
+    background: white;
+    transition: border-color 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+
+.checklist-input-select:focus,
+.checklist-dropdown:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+/* Textarea fields spesifikt */
+.checklist-input-textarea {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    transition: border-color 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    background: white;
+}
+
+.checklist-input-textarea:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
 
 #deviation-images-container, #work-images-container {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px;

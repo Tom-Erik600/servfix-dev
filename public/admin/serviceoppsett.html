@@ -517,17 +517,9 @@
                     <label for="checklist-item-label">Sjekkpunkt navn</label>
                     <input type="text" id="checklist-item-label" class="form-control" required>
                 </div>
-                <div class="form-group">
-                    <label for="checklist-item-input-type">Input Type</label>
-                    <select id="checklist-item-input-type" class="form-control">
-                        <option value="checkbox">Checkbox</option>
-                        <option value="ok_avvik">OK / Avvik</option>
-                        <option value="ok_byttet_avvik">OK / Byttet / Avvik</option>
-                        <option value="numeric">Numerisk</option>
-                        <option value="text">Tekst</option>
-                        <option value="comment">Kommentar</option>
-                        <option value="group_selection">Gruppevalg</option>
-                    </select>
+                <div id="dropdown-options-section" class="form-group" style="display: none;">
+                    <label for="dropdown-options-textarea">Dropdown Alternativer (ett per linje)</label>
+                    <textarea id="dropdown-options-textarea" class="form-control" rows="4"></textarea>
                 </div>
 
                 <div class="section-toggle">

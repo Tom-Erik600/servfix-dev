@@ -220,23 +220,19 @@ function renderHeader() {
 
 
 function deriveOrderStatus(order) {
-    // BEHOLD DENNE LINJEN - dette er korrekt
-    // Hvis ordre allerede er eksplisitt markert som completed i databasen, returner det
+    // Hvis ordre allerede er eksplisitt markert som completed, returner det
     if (order.status === 'completed') return 'completed';
     
-    // ERSTATT MED DENNE ENKLE LOGIKKEN:
-    // Sjekk kun om noen anlegg har startet arbeid for å sette in_progress
+    // Sjekk service_reports status i stedet for equipment serviceStatus
     if (order.equipment && order.equipment.length > 0) {
-        const anyEquipmentStarted = order.equipment.some(eq => 
-            eq.serviceStatus === 'in_progress' || 
-            eq.serviceStatus === 'completed' ||
-            (eq.data && (eq.data.serviceStatus === 'in_progress' || eq.data.serviceStatus === 'completed'))
+        const anyServiceStarted = order.equipment.some(eq => 
+            eq.serviceReportStatus === 'in_progress' || 
+            eq.serviceReportStatus === 'completed'
         );
         
-        if (anyEquipmentStarted) return 'in_progress';
+        if (anyServiceStarted) return 'in_progress';
     }
     
-    // Standard status hvis ikke eksplisitt completed eller in_progress
     return order.status || 'scheduled';
 }
 
