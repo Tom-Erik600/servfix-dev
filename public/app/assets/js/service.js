@@ -2512,10 +2512,11 @@ function addProductLine(product = {}) {
         <input type="text" class="product-name" placeholder="Produktnavn" value="${product.name || ''}">
         <input type="number" class="product-quantity" placeholder="Antall" value="${product.quantity || ''}">
         <input type="number" class="product-price" placeholder="Pris" value="${product.price || ''}">
-        <button type="button" class="remove-line-btn" data-action="remove-line">Fjern</button>
+        <button type="button" class="remove-line-btn" data-action="remove-line" title="Fjern produkt"></button>
     `;
     container.appendChild(line);
 }
+
 
 function addAdditionalWorkLine(work = {}) {
     const container = document.getElementById('additional-work-lines-container');
@@ -2525,9 +2526,11 @@ function addAdditionalWorkLine(work = {}) {
     line.className = 'work-item';
     line.innerHTML = `
         <input type="text" class="work-description" placeholder="Beskrivelse" value="${work.description || ''}">
-        <input type="number" class="work-hours" placeholder="Timer" value="${work.hours || ''}">
-        <input type="number" class="work-price" placeholder="Pris" value="${work.price || ''}">
-        <button type="button" class="remove-line-btn" data-action="remove-line">Fjern</button>
+        <div class="work-item-bottom">
+            <input type="number" class="work-hours" placeholder="Timer" value="${work.hours || ''}">
+            <input type="number" class="work-price" placeholder="Pris" value="${work.price || ''}">
+            <button type="button" class="remove-line-btn" data-action="remove-line" title="Fjern arbeid"></button>
+        </div>
     `;
     container.appendChild(line);
 }
