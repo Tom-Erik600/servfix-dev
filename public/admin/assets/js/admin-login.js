@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('login-form');
     const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
-    const errorMessage = document.getElementById('errorMessage');
+    const errorMessage = document.getElementById('error-message');
     const submitButton = form.querySelector('button[type="submit"]');
 
     // Clear error message when user starts typing

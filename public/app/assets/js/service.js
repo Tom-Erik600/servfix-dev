@@ -159,7 +159,7 @@ async function saveAndContinue(targetUrl) {
         if (overallComment.trim() !== '') {
             state.serviceReport.reportData.overallComment = overallComment;
             
-            await api.put(`/servicereports/${state.serviceReport.reportId}`, {
+            await api.put(`/reports/${state.serviceReport.reportId}`, {
                 orderId: state.orderId,
                 equipmentId: state.equipmentId,
                 reportData: state.serviceReport.reportData
@@ -270,7 +270,7 @@ async function saveAndContinue(targetUrl) {
         if (overallComment.trim() !== '') {
             state.serviceReport.reportData.overallComment = overallComment;
             
-            await api.put(`/servicereports/${state.serviceReport.reportId}`, {
+            await api.put(`/reports/${state.serviceReport.reportId}`, {
                 orderId: state.orderId,
                 equipmentId: state.equipmentId,
                 reportData: state.serviceReport.reportData
@@ -744,6 +744,30 @@ async function loadServiceReport() {
             };
             
             console.log('Created new report with reportId:', newReportId);
+            
+            try {
+                const response = await fetch('/api/reports', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        reportId: state.serviceReport.reportId,
+                        orderId: state.orderId,
+                        equipmentId: state.equipmentId,
+                        reportData: state.serviceReport.reportData
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Kunne ikke opprette rapport');
+                }
+                
+                console.log('Report created in database');
+            } catch (error) {
+                console.error('Failed to create report:', error);
+                showToast('Kunne ikke opprette rapport. Prøv igjen.', 'error');
+                throw error;
+            }
         }
         
         // DEBUGGING: Verifiser at reportId er satt
@@ -1048,16 +1072,18 @@ function renderChecklist() {
         .join('');
     
     container.innerHTML = itemsHTML;
-    
-    // Initialize lucide icons if available
-    if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
-    }
 
     // Render avvik-bilder som finnes
     setTimeout(() => {
         renderAvvikImagesForChecklist();
-    }, 100);  // Kort delay for å sikre DOM er klar
+    }, 100);
+
+    // Initialize lucide icons BARE EN GANG
+    setTimeout(() => {
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }, 150); // Litt lengre delay for å sikre alt er klart
 }
 
 function createChecklistItemHTML(item) {
@@ -1172,8 +1198,8 @@ function createOkByttetAvvikItemHTML(item) {
                     <i data-lucide="camera"></i>Ta bilde<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
                 </button>
                 <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
-                    <button onclick="openPhotoOption('camera')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
-                    <button onclick="openPhotoOption('upload')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
+                    <button class="photo-option" data-action="camera" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
+                    <button class="photo-option" data-action="upload" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
                 </div>
             </div>
         </div>
@@ -1184,8 +1210,8 @@ function createOkByttetAvvikItemHTML(item) {
                     <i data-lucide="camera"></i>Ta bilde<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
                 </button>
                 <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
-                    <button onclick="openPhotoOption('camera')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
-                    <button onclick="openPhotoOption('upload')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
+                    <button class="photo-option" data-action="camera" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
+                    <button class="photo-option" data-action="upload" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
                 </div>
             <div id="avvik-images-container-${item.id}" class="avvik-images-container"></div>
         </div>
@@ -1196,8 +1222,8 @@ function createOkByttetAvvikItemHTML(item) {
                     <i data-lucide="camera"></i>Ta bilde<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
                 </button>
                 <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
-                    <button onclick="openPhotoOption('camera')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
-                    <button onclick="openPhotoOption('upload')" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
+                    <button class="photo-option" data-action="camera" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
+                    <button class="photo-option" data-action="upload" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
                 </div>
             </div>
             <div id="byttet-images-container-${item.id}" class="avvik-images-container"></div>
@@ -2015,7 +2041,7 @@ async function saveChecklist(e) {
     
     try {
         // Save to server - include all required fields
-        await api.put(`/servicereports/${state.serviceReport.reportId}`, {
+        await api.put(`/reports/${state.serviceReport.reportId}`, {
             orderId: state.orderId,
             equipmentId: state.equipmentId,
             reportData: state.serviceReport.reportData
@@ -2482,7 +2508,7 @@ async function deleteChecklist(index) {
     
     try {
         // Save updated report to server
-        await api.put(`/servicereports/${state.serviceReport.reportId}`, {
+        await api.put(`/reports/${state.serviceReport.reportId}`, {
             orderId: state.orderId,
             equipmentId: state.equipmentId,
             reportData: state.serviceReport.reportData
@@ -2633,7 +2659,7 @@ async function finalizeAnlegg() {
         state.serviceReport.reportData.overallComment = overallComment;
         
         // Lagre endelig rapport
-        await api.put(`/servicereports/${state.serviceReport.reportId}`, {
+        await api.put(`/reports/${state.serviceReport.reportId}`, {
             orderId: state.orderId,
             equipmentId: state.equipmentId,
             reportData: state.serviceReport.reportData
@@ -2724,7 +2750,6 @@ function showToast(message, type = 'info') {
 }
 
 // Photo upload functionality
-// Finn og erstatt photo option click handler
 document.addEventListener('click', function(e) {
     // Fiks photo button clicks
     if (e.target.closest('.photo-option')) {
@@ -2774,8 +2799,10 @@ document.addEventListener('click', function(e) {
             console.error('Could not find parent container for photo option.');
         }
     }
-    
-    // Photo button dropdown toggle
+});
+
+document.addEventListener('click', function(e) {
+    // Håndter photo button clicks for å vise/skjule dropdown
     if (e.target.closest('.photo-btn')) {
         e.preventDefault();
         e.stopPropagation();
@@ -2784,27 +2811,29 @@ document.addEventListener('click', function(e) {
         const dropdown = btn.nextElementSibling;
         
         if (dropdown && dropdown.classList.contains('photo-dropdown')) {
+            // Toggle dropdown
             const isVisible = dropdown.style.visibility === 'visible';
             
-            // Hide all other dropdowns
-            document.querySelectorAll('.photo-dropdown').forEach(d => {
-                d.style.opacity = '0';
-                d.style.visibility = 'hidden';
+            // Lukk alle andre dropdowns først
+            document.querySelectorAll('.photo-dropdown').forEach(dd => {
+                dd.style.opacity = '0';
+                dd.style.visibility = 'hidden';
             });
             
-            // Toggle current dropdown
             if (!isVisible) {
                 dropdown.style.opacity = '1';
                 dropdown.style.visibility = 'visible';
             }
         }
     }
-    
-    // Close dropdowns when clicking outside
+});
+
+// Lukk dropdowns når man klikker utenfor
+document.addEventListener('click', function(e) {
     if (!e.target.closest('.photo-dropdown-wrapper')) {
-        document.querySelectorAll('.photo-dropdown').forEach(dropdown => {
-            dropdown.style.opacity = '0';
-            dropdown.style.visibility = 'hidden';
+        document.querySelectorAll('.photo-dropdown').forEach(dd => {
+            dd.style.opacity = '0';
+            dd.style.visibility = 'hidden';
         });
     }
 });
@@ -2863,6 +2892,47 @@ async function uploadImageToServer(file, imageType) {
     markFormAsDirty();
 
     return result;
+}
+
+
+
+// Separat funksjon for å håndtere foto-filer
+async function handlePhotoFile(file) {
+    console.log('📷 File selected:', file.name);
+    console.log('📷 Current context:', currentPhotoContext);
+    
+    // Sjekk at vi har nødvendig data
+    if (!state.order?.id || !state.equipment?.id || !state.serviceReport?.reportId) {
+        showToast('❌ Feil: Mangler ordre- eller anleggsdata. Prøv å laste siden på nytt.', 'error');
+        return;
+    }
+    
+    // Bestem bildetype basert på lagret kontekst
+    const imageType = currentPhotoContext?.type || 'general';
+    
+    console.log('📷 Image type determined:', imageType);
+    
+    try {
+        // Vis loading melding
+        showToast(`⏳ Laster opp ${imageType === 'avvik' ? 'avviksbilde' : 'bilde'}...`, 'info');
+        
+        // Last opp bildet
+        const uploadResult = await uploadImageToServer(file, imageType);
+        
+        if (uploadResult.imageUrl) {
+            // Vis bildet i UI
+            if (imageType === 'avvik' && currentPhotoContext?.itemId) {
+                await displayAvvikImage(currentPhotoContext.itemId, uploadResult.imageUrl);
+            } else {
+                await displayGeneralImage(uploadResult.imageUrl);
+            }
+            
+            showToast('✅ Bilde lastet opp!', 'success');
+        }
+    } catch (error) {
+        console.error('❌ Feil ved opplasting:', error);
+        showToast('❌ Kunne ikke laste opp bilde: ' + error.message, 'error');
+    }
 }
 
 async function openPhotoOption(type) {

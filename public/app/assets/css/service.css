@@ -1585,3 +1585,58 @@ button[type="submit"].action-btn.primary:hover {
         width: 70px;
     }
 }
+
+@media (max-width: 767px) {
+    .checklist-item {
+        padding: 10px;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+        overflow-x: hidden; /* Forhindre horizontal scroll */
+    }
+    
+    .item-label {
+        flex: 1 1 auto;
+        min-width: 0; /* Tillat tekst å krympe */
+        margin-right: 8px;
+    }
+    
+    .item-actions {
+        flex: 0 0 auto;
+        width: auto !important; /* Override 100% width */
+        justify-content: flex-end;
+        flex-wrap: nowrap; /* Hold knapper på samme linje */
+        gap: 4px;
+    }
+    
+    .status-btn {
+        padding: 6px 10px;
+        font-size: 12px;
+        min-width: 45px;
+        white-space: nowrap;
+    }
+    
+    /* For temperature og dropdown items */
+    .checklist-item[data-item-type="temperature"] .item-controls,
+    .checklist-item[data-item-type="dropdown_ok_avvik"] .item-controls {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .temperature-input {
+        flex: 0 0 auto;
+    }
+    
+    /* Sikre at photo dropdown ikke går utenfor skjermen */
+    .photo-dropdown-wrapper {
+        position: relative !important;
+    }
+    
+    .photo-dropdown {
+        right: 0 !important; /* Align til høyre på mobil */
+        left: auto !important;
+    }
+}
