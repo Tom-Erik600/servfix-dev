@@ -40,14 +40,15 @@ router.get('/', async (req, res) => {
             const equipmentResult = await pool.query(
                 `SELECT 
                     e.id, 
-                    e.data->>'serviceStatus' as service_status,
+                    -- e.data->>'serviceStatus' as service_status, FJERNET
+                    COALESCE(sr.status, 'not_started') as service_status,
                     COALESCE(sr.status, 'not_started') as service_report_status
-                 FROM equipment e
-                 LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
-                 WHERE e.customer_id = $1`,
+                FROM equipment e
+                LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
+                WHERE e.customer_id = $1`,
                 [order.customer_id, order.id]
             );
-            
+
             equipment = equipmentResult.rows.map(eq => ({
                 id: eq.id,
                 serviceStatus: eq.service_status || 'not_started',
@@ -99,15 +100,16 @@ router.get('/today', async (req, res) => {
             const equipmentResult = await pool.query(
                 `SELECT 
                     e.id, 
-                    e.data->>'serviceStatus' as service_status,
+                    -- e.data->>'serviceStatus' as service_status, FJERNET
+                    COALESCE(sr.status, 'not_started') as service_status,
                     COALESCE(sr.status, 'not_started') as service_report_status
-                 FROM equipment e
-                 LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
-                 WHERE e.customer_id = $1`,
+                FROM equipment e
+                LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
+                WHERE e.customer_id = $1`,
                 [order.customer_id, order.id]
             );
-            
-            order.equipment = equipmentResult.rows.map(eq => ({
+
+            equipment = equipmentResult.rows.map(eq => ({
                 id: eq.id,
                 serviceStatus: eq.service_status || 'not_started',
                 serviceReportStatus: eq.service_report_status || 'not_started'
@@ -180,21 +182,23 @@ try {
     // (Dette krever at du har en customers tabell, ellers skip denne delen)
 
     // Fetch equipment data for the customer
-    const equipmentResult = await pool.query(
+   const equipmentResult = await pool.query(
         `SELECT 
-            id, 
-            customer_id, 
-            type, 
-            name, 
-            location, 
-            data,
-            data->>'serviceStatus' as service_status,
-            data->>'systemNumber' as system_number,
-            data->>'systemType' as system_type,
-            data->>'operator' as operator
-        FROM equipment 
-        WHERE customer_id = $1`,
-        [order.customer_id || order.customerId]
+            e.id, 
+            e.customer_id, 
+            e.type, 
+            e.name, 
+            e.location, 
+            e.data,
+            -- Fjernet: data->>'serviceStatus' as service_status,
+            COALESCE(sr.status, 'not_started') as service_status,
+            e.data->>'systemNumber' as system_number,
+            e.data->>'systemType' as system_type,
+            e.data->>'operator' as operator
+        FROM equipment e
+        LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
+        WHERE e.customer_id = $1`,
+        [order.customer_id || order.customerId, order.id]
     );
 
     // Transform equipment data
@@ -297,17 +301,7 @@ router.post('/:orderId/complete', async (req, res) => {
       'UPDATE orders SET status = $1 WHERE id = $2',
       ['completed', orderId]
     );
-    
-    // Oppdater alle equipment til completed
-    await pool.query(
-      `UPDATE equipment 
-       SET data = data || '{"serviceStatus": "completed"}'::jsonb 
-       WHERE id IN (
-         SELECT equipment_id FROM service_reports WHERE order_id = $1
-       )`,
-      [orderId]
-    );
-    
+   
     // Hent alle service_reports for denne ordren
     const serviceReportsResult = await pool.query(
       `SELECT sr.*, e.type as equipment_type, e.name as equipment_name

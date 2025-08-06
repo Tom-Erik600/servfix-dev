@@ -188,8 +188,30 @@ router.put('/:equipmentId', async (req, res) => {
     
     // Oppdater i databasen
     const updateResult = await pool.query(
-      'UPDATE equipment SET data = $1 WHERE id = $2 RETURNING *',
-      [updatedData, equipmentId]
+      `UPDATE service_reports 
+       SET checklist_data = $1, 
+           products_used = $2, 
+           additional_work = $3,
+           photos = $4
+           ${reportData.status ? ', status = $6' : ''}
+       WHERE id = $5 
+       RETURNING *`,
+      reportData.status ? 
+        [
+          JSON.stringify(dbData.checklist_data),
+          JSON.stringify(dbData.products_used),
+          JSON.stringify(dbData.additional_work),
+          dbData.photos,
+          reportId,
+          reportData.status
+        ] :
+        [
+          JSON.stringify(dbData.checklist_data),
+          JSON.stringify(dbData.products_used),
+          JSON.stringify(dbData.additional_work),
+          dbData.photos,
+          reportId
+        ]
     );
     
     const equipment = updateResult.rows[0];
@@ -275,7 +297,14 @@ router.put('/:equipmentId/status', async (req, res) => {
   
   try {
     const { equipmentId } = req.params;
-    const { serviceStatus } = req.body;
+    const { serviceStatus, orderId } = req.body;
+    
+    // Krev orderId
+    if (!orderId) {
+      return res.status(400).json({ 
+        error: 'orderId er påkrevd for å oppdatere status' 
+      });
+    }
     
     // Valider serviceStatus
     const validStatuses = ['not_started', 'in_progress', 'completed'];
@@ -287,46 +316,111 @@ router.put('/:equipmentId/status', async (req, res) => {
     
     const pool = await db.getTenantConnection(req.session.tenantId);
     
-    // Hent eksisterende equipment
-    const existing = await pool.query('SELECT * FROM equipment WHERE id = $1', [equipmentId]);
-    
-    if (existing.rows.length === 0) {
-      return res.status(404).json({ error: 'Equipment ikke funnet' });
-    }
-    
-    const currentData = existing.rows[0].data || {};
-    
-    // Oppdater serviceStatus i data JSONB felt
-    const updatedData = {
-      ...currentData,
-      serviceStatus: serviceStatus,
-      lastServiceStatusUpdate: new Date().toISOString(),
-      lastUpdatedBy: req.session.technicianId
-    };
-    
-    // Oppdater equipment
-    const result = await pool.query(
-      'UPDATE equipment SET data = $1 WHERE id = $2 RETURNING *',
-      [updatedData, equipmentId]
+    // Oppdater service_reports status, IKKE equipment
+    await pool.query(
+      `UPDATE service_reports 
+       SET status = $1 
+       WHERE equipment_id = $2 AND order_id = $3`,
+      [serviceStatus, equipmentId, orderId]
     );
     
-    const updatedEquipment = result.rows[0];
-    
-    // Transform data for frontend
-    updatedEquipment.status = updatedEquipment.data?.status || 'active';
-    updatedEquipment.serviceStatus = updatedEquipment.data?.serviceStatus;
-    updatedEquipment.internalNotes = updatedEquipment.data?.internalNotes || '';
-    
-    console.log(`✅ Equipment ${equipmentId} serviceStatus updated to: ${serviceStatus}`);
+    console.log(`✅ Service report status for equipment ${equipmentId} updated to: ${serviceStatus}`);
     res.json({ 
-      message: `Equipment status oppdatert til ${serviceStatus}`, 
-      equipment: updatedEquipment 
+      message: `Status oppdatert til ${serviceStatus}`,
+      serviceStatus: serviceStatus
     });
     
   } catch (error) {
-    console.error('Error updating equipment service status:', error);
+    console.error('Error updating service report status:', error);
     res.status(500).json({ 
-      error: 'Server feil ved oppdatering av equipment status',
+      error: 'Server feil ved oppdatering av status',
+      details: error.message 
+    });
+  }
+});
+
+// Complete equipment service
+router.post('/:equipmentId/complete', async (req, res) => {
+  console.log('Equipment complete request:', {
+    equipmentId: req.params.equipmentId,
+    body: req.body
+  });
+  
+  try {
+    const { equipmentId } = req.params;
+    const { orderId, reportId } = req.body;
+    
+    if (!orderId) {
+      return res.status(400).json({ 
+        error: 'orderId er påkrevd' 
+      });
+    }
+    
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    
+    // Start en transaksjon for å sikre at begge tabeller oppdateres
+    await pool.query('BEGIN');
+    
+    try {
+      // 1. Oppdater service_reports status til completed
+      const reportResult = await pool.query(
+        `UPDATE service_reports 
+         SET status = 'completed' 
+         WHERE equipment_id = $1 AND order_id = $2
+         RETURNING *`,
+        [equipmentId, orderId]
+      );
+      
+      if (reportResult.rows.length === 0) {
+        throw new Error('Service report ikke funnet');
+      }
+      
+      // 2. Oppdater equipment data med serviceStatus
+      const equipmentResult = await pool.query(
+        `UPDATE equipment 
+         SET data = jsonb_set(
+           COALESCE(data, '{}')::jsonb, 
+           '{serviceStatus}', 
+           '"completed"'
+         )
+         WHERE id = $1
+         RETURNING *`,
+        [equipmentId]
+      );
+      
+      if (equipmentResult.rows.length === 0) {
+        throw new Error('Equipment ikke funnet');
+      }
+      
+      // Commit transaksjonen
+      await pool.query('COMMIT');
+      
+      console.log(`✅ Equipment ${equipmentId} service completed - both tables updated`);
+      
+      res.json({ 
+        message: 'Anlegg ferdigstilt',
+        serviceStatus: 'completed',
+        report: reportResult.rows[0],
+        equipment: equipmentResult.rows[0]
+      });
+      
+    } catch (error) {
+      // Rollback ved feil
+      await pool.query('ROLLBACK');
+      throw error;
+    }
+    
+  } catch (error) {
+    console.error('Error completing equipment service:', error);
+    
+    if (error.message === 'Service report ikke funnet') {
+      return res.status(404).json({ error: error.message });
+    } else if (error.message === 'Equipment ikke funnet') {
+      return res.status(404).json({ error: error.message });
+    }
+    
+    res.status(500).json({ 
+      error: 'Kunne ikke ferdigstille anlegg',
       details: error.message 
     });
   }

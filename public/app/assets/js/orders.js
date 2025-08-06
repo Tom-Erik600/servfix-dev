@@ -72,7 +72,7 @@ async function initializePage() {
         // Transformer equipment data for å sikre serviceStatus er tilgjengelig
         pageState.equipment = pageState.equipment.map(eq => ({
             ...eq,
-            serviceStatus: eq.serviceStatus || eq.data?.serviceStatus || 'not_started',
+            serviceStatus: eq.serviceStatus || 'not_started', // Fjern eq.data?.serviceStatus
             internalNotes: eq.internalNotes || eq.data?.internalNotes || ''
         }));
 

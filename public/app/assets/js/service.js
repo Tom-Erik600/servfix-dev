@@ -1,8 +1,6 @@
 // Global state for change tracking
 const changeTracker = {
-    hasUnsavedChanges: false,
-    uploadedImages: [], // Buffer for bilder før lagring
-    originalData: null
+    hasUnsavedChanges: false
 };
 
 // Mark form as dirty when changes occur
@@ -136,42 +134,54 @@ function showSavePrompt(targetUrl = null) {
 }
 
 // Save and continue navigation
-// Save and continue navigation
 async function saveAndContinue(targetUrl) {
-    const isValid = validateRequiredFields();
-    
-    if (!isValid) {
-        showToast('❌ Fyll ut alle obligatoriske felter før lagring', 'error');
-        return;
-    }
+    console.log('🔄 saveAndContinue kallt med targetUrl:', targetUrl);
     
     try {
-        // 1. Lagre sjekklisten (hvis det er en aktiv sjekkliste)
-        const hasActiveComponent = state.editingComponentIndex !== null || 
-                                 document.querySelector('#component-form [name="etasje"]')?.value;
-        
-        if (hasActiveComponent) {
-            await saveComponent();
-        }
-        
-        // 2. Lagre "Øvrige kommentarer til rapport"
-        const overallComment = document.getElementById('overall-comment')?.value || '';
-        if (overallComment.trim() !== '') {
-            state.serviceReport.reportData.overallComment = overallComment;
+        // 1. Lagre komponenten hvis vi er i redigeringsmodus
+        if (state.editingComponentIndex !== null) {
+            console.log('💾 Lagrer eksisterende komponent...');
+            const componentData = collectComponentData();
+            state.serviceReport.reportData.components[state.editingComponentIndex] = componentData;
+            
+            const updateData = {
+                components: state.serviceReport.reportData.components,
+                overallComment: state.serviceReport.reportData.overallComment || ''
+            };
             
             await api.put(`/reports/${state.serviceReport.reportId}`, {
                 orderId: state.orderId,
                 equipmentId: state.equipmentId,
-                reportData: state.serviceReport.reportData
+                reportData: updateData
             });
-            
-            console.log('💬 Overall comment saved:', overallComment);
         }
         
-        // 3. Bilder er allerede lagret når de ble lastet opp, så ingen ekstra handling trengs
+        // 2. Lagre overall comment hvis den finnes
+        const overallComment = document.getElementById('overall-comment')?.value || '';
+        if (overallComment.trim() !== '') {
+            state.serviceReport.reportData.overallComment = overallComment;
+            
+            const updateData = {
+                components: state.serviceReport.reportData.components,
+                overallComment: overallComment
+            };
+            
+            await api.put(`/reports/${state.serviceReport.reportId}`, {
+                orderId: state.orderId,
+                equipmentId: state.equipmentId,
+                reportData: updateData
+            });
+            
+            console.log('💬 Overall comment saved');
+        }
         
-        // 4. Merk som clean og naviger
+        // 3. Merk som clean og naviger
         markFormAsClean();
+        
+        // NYTT: Eksplisitt nullstill changeTracker for å unngå beforeunload warning
+        changeTracker.hasUnsavedChanges = false;
+        changeTracker.uploadedImages = [];
+        
         closeSavePrompt();
         
         showToast('✅ Alt er lagret!', 'success');
@@ -185,6 +195,45 @@ async function saveAndContinue(targetUrl) {
     } catch (error) {
         console.error('Error in saveAndContinue:', error);
         showToast('❌ Kunne ikke lagre: ' + error.message, 'error');
+    }
+}
+window.saveAndContinue = saveAndContinue;
+
+//Oppdater også saveComponent funksjonen
+async function saveComponent() {
+    const componentData = collectComponentData();
+    
+    // Add or update component
+    if (state.editingComponentIndex === null) {
+        state.serviceReport.reportData.components.push(componentData);
+    } else {
+        state.serviceReport.reportData.components[state.editingComponentIndex] = componentData;
+    }
+    
+    try {
+        // VIKTIG: Ikke send photos med i PUT request for komponenter
+        const updateData = {
+            components: state.serviceReport.reportData.components,
+            overallComment: state.serviceReport.reportData.overallComment || ''
+        };
+        
+        await api.put(`/reports/${state.serviceReport.reportId}`, {
+            orderId: state.orderId,
+            equipmentId: state.equipmentId,
+            reportData: updateData  // Send kun components og overallComment
+        });
+        
+        // Update UI
+        renderComponentList();
+        resetForm();
+        showToast('Sjekkliste lagret', 'success');
+        
+        // Mark form as clean
+        markFormAsClean();
+        
+    } catch (error) {
+        console.error('Error saving component:', error);
+        showToast(`Kunne ikke lagre: ${error.message}`, 'error');
     }
 }
 window.saveAndContinue = saveAndContinue;
@@ -262,52 +311,31 @@ function showUploadedImagesPreview() {
 
 // Save and continue navigation
 async function saveAndContinue(targetUrl) {
-    console.log('💾 Lagrer og fortsetter...');
+    const isValid = validateRequiredFields();
+    
+    if (!isValid) {
+        showToast('❌ Fyll ut alle obligatoriske felter før lagring', 'error');
+        return;
+    }
     
     try {
-        // 1. Lagre "Øvrige kommentarer til rapport" hvis det finnes
-        const overallComment = document.getElementById('overall-comment')?.value || '';
-        if (overallComment.trim() !== '') {
-            state.serviceReport.reportData.overallComment = overallComment;
-            
-            await api.put(`/reports/${state.serviceReport.reportId}`, {
-                orderId: state.orderId,
-                equipmentId: state.equipmentId,
-                reportData: state.serviceReport.reportData
-            });
-            
-            console.log('💬 Overall comment saved:', overallComment);
-        }
+        // Auto-lagre alt
+        await autoSaveEverything();
         
-        // 2. Bilder er allerede lagret når de ble lastet opp
-        // 3. Sjekklister er allerede lagret når de ble lagret
-        // 4. Alt annet er allerede lagret
-        
-        // Merk som clean og naviger
-        markFormAsClean();
+        // Lukk modal og naviger
         closeSavePrompt();
         
-        showToast('✅ Alt lagret!', 'success');
+        showToast('✅ Alt er lagret!', 'success');
         
         if (targetUrl && targetUrl !== 'null' && targetUrl !== '') {
             setTimeout(() => {
                 window.location.href = targetUrl;
-            }, 800);
+            }, 500);
         }
         
     } catch (error) {
         console.error('Error in saveAndContinue:', error);
         showToast('❌ Kunne ikke lagre: ' + error.message, 'error');
-    }
-}
-// Discard changes and continue
-function discardAndContinue(targetUrl) {
-    // TODO: Delete uploaded images from GCS if not saved
-    markFormAsClean();
-    closeSavePrompt();
-    
-    if (targetUrl && targetUrl !== 'null') {
-        window.location.href = targetUrl;
     }
 }
 
@@ -363,11 +391,13 @@ const imageGallery = {
 
 // Navigation guard - prevent accidental navigation
 window.addEventListener('beforeunload', function(e) {
-    if (changeTracker.hasUnsavedChanges || changeTracker.hasUploadedImages) {
+    // Sjekk om vi faktisk har ulagrede endringer
+    if (changeTracker.hasUnsavedChanges || (changeTracker.uploadedImages && changeTracker.uploadedImages.length > 0)) {
         e.preventDefault();
         e.returnValue = 'Du har ulagrede endringer. Er du sikker på at du vil forlate siden?';
         return e.returnValue;
     }
+    // Hvis ingen endringer, la navigasjon skje uten advarsel
 });
 
 // Custom navigation guard for internal links
@@ -380,17 +410,83 @@ function confirmNavigation(targetUrl) {
     showSavePrompt(targetUrl);
 }
 
-// Override back button and link clicks
 document.addEventListener('click', function(e) {
-    // Detect navigation attempts
-    if (e.target.closest('a[href]') && !e.target.closest('.photo-option')) {
-        const href = e.target.closest('a').getAttribute('href');
-        if (href && !href.startsWith('#') && (changeTracker.hasUnsavedChanges || changeTracker.hasUploadedImages)) {
-            e.preventDefault();
-            confirmNavigation(href);
+    // Håndter photo-option clicks
+    if (e.target.closest('.photo-option')) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const option = e.target.closest('.photo-option');
+        const action = option.dataset.action;
+        
+        // Start fra photo-dropdown-wrapper som er nærmeste forelder
+        const photoWrapper = option.closest('.photo-dropdown-wrapper');
+        
+        let photoContext = null;
+        
+        if (photoWrapper) {
+            // Sjekk om wrapper er inne i avvik-container
+            const avvikContainer = photoWrapper.closest('.avvik-container');
+            if (avvikContainer) {
+                const avvikId = avvikContainer.id; // e.g., "avvik-item3"
+                photoContext = {
+                    type: 'avvik',
+                    container: avvikContainer,
+                    avvikId: avvikId,
+                    itemId: avvikId.replace('avvik-', '')
+                };
+                console.log('📷 Avvik photo context:', photoContext);
+            }
+        }
+        
+        // Hvis vi IKKE er i avvik, sjekk om det er generelle bilder
+        if (!photoContext) {
+            const attachmentsSection = option.closest('#attachments-section');
+            if (attachmentsSection) {
+                photoContext = {
+                    type: 'general',
+                    container: attachmentsSection
+                };
+                console.log('📷 General photo context:', photoContext);
+            }
+        }
+        
+        if (photoContext) {
+            currentPhotoContext = photoContext;
+            
+            // Skjul dropdown
+            const dropdown = option.closest('.photo-dropdown');
+            if (dropdown) {
+                dropdown.style.opacity = '0';
+                dropdown.style.visibility = 'hidden';
+            }
+            
+            // Trigger photo action
+            openPhotoOption(action);
+        } else {
+            console.error('Could not find parent container for photo option.');
+            console.error('Debug info:', {
+                photoWrapper: photoWrapper,
+                closestAvvik: photoWrapper?.closest('.avvik-container'),
+                closestAttachments: option.closest('#attachments-section')
+            });
+            showToast('Kunne ikke finne bildecontainer. Prøv igjen.', 'error');
         }
     }
 });
+
+// Lukk dropdowns når man klikker utenfor - BEHOLD DENNE
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.photo-dropdown-wrapper')) {
+        document.querySelectorAll('.photo-dropdown').forEach(dd => {
+            dd.style.opacity = '0';
+            dd.style.visibility = 'hidden';
+        });
+    }
+});
+
+
+
 
 // Mark form as dirty when changes occur
 function markFormAsDirty() {
@@ -401,8 +497,16 @@ function markFormAsDirty() {
 // Mark form as clean after successful save
 function markFormAsClean() {
     changeTracker.hasUnsavedChanges = false;
-    changeTracker.hasUploadedImages = false;
-    console.log('✅ Form marked as clean');
+    changeTracker.uploadedImages = [];
+    
+    // Fjern eventuelle advarsler i UI
+    const saveBtn = document.getElementById('save-component-btn');
+    if (saveBtn) {
+        saveBtn.style.background = '#28a745'; // Grønn for lagret
+        saveBtn.textContent = '💾 Lagre sjekkliste';
+    }
+    
+    console.log('📝 Form marked as clean');
 }
 
 // DEBUGGING: Test backend endepunkter direkte
@@ -456,12 +560,15 @@ async function debugImageEndpoints() {
 }
 
 const api = {
-    async request(endpoint, options = {}) {
+    request: async (endpoint, options = {}) => {
         try {
             const response = await fetch(`/api${endpoint}`, {
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
                 ...options,
+                credentials: 'include', // KRITISK: Inkluder cookies/session
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                },
                 body: options.body ? JSON.stringify(options.body) : null
             });
             if (!response.ok) {
@@ -803,6 +910,22 @@ function renderAll() {
         }
     } catch (e) { console.error('Error setting overall comment:', e); }
     
+    // LEGG TIL DETTE - VIS ALLTID attachments og overall comment sections
+    try {
+        const attachmentsSection = document.getElementById('attachments-section');
+        const overallCommentSection = document.getElementById('overall-comment-section');
+        
+        if (attachmentsSection) {
+            attachmentsSection.style.display = 'block';
+            console.log('✅ Attachments section made visible');
+        }
+        
+        if (overallCommentSection) {
+            overallCommentSection.style.display = 'block';
+            console.log('✅ Overall comment section made visible');
+        }
+    } catch (e) { console.error('Error showing sections:', e); }
+    
     try { updateFinalizeButtonState(); } catch (e) { console.error('Error in updateFinalizeButtonState:', e); }
     try { updatePageFooterVisibility(); } catch (e) { console.error('Error in updatePageFooterVisibility:', e); }
     try { renderGeneralImages(); } catch (e) { console.error('Error in renderGeneralImages:', e); }
@@ -1041,10 +1164,9 @@ function renderComponentDetailsForm() {
 }
 
 function renderChecklist() {
-    console.log('Rendering checklist...');
     const container = document.getElementById('checklist-items-container');
     if (!container) {
-        console.error("Container 'checklist-items-container' not found!");
+        console.error("Checklist container not found");
         return;
     }
     
@@ -1073,19 +1195,48 @@ function renderChecklist() {
     
     container.innerHTML = itemsHTML;
 
-    // Render avvik-bilder som finnes
+    // Chain initialization med riktig timing
     setTimeout(() => {
-        renderAvvikImagesForChecklist();
-    }, 100);
-
-    // Initialize lucide icons BARE EN GANG
-    setTimeout(() => {
+        console.log('🎨 Step 1: Creating Lucide icons...');
         if (typeof lucide !== 'undefined') {
             lucide.createIcons();
         }
-    }, 150); // Litt lengre delay for å sikre alt er klart
+        
+        setTimeout(() => {
+            console.log('📸 Step 2: Re-initializing photo handlers...');
+            reinitializePhotoHandlers();
+            
+            setTimeout(() => {
+                console.log('🖼️ Step 3: Rendering avvik images...');
+                renderAvvikImagesForChecklist();
+            }, 100);
+        }, 100);
+    }, 100);
 }
 
+// Også oppdater reinitializePhotoHandlers for bedre logging
+function reinitializePhotoHandlers() {
+    console.log('🔄 Re-initializing photo handlers...');
+    
+    // Fjern gamle handlers
+    if (window._photoClickHandler) {
+        document.removeEventListener('click', window._photoClickHandler, true);
+        console.log('✅ Old handlers removed');
+    }
+    
+    // Setup nye handlers
+    setupPhotoDropdownHandlers();
+    
+    // Re-create lucide icons for nye elementer
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+        console.log('✅ Lucide icons recreated');
+    }
+    
+    // Verifiser at alt fungerer
+    const photoButtons = document.querySelectorAll('.photo-btn');
+    console.log(`✅ Found ${photoButtons.length} photo buttons after re-init`);
+}
 function createChecklistItemHTML(item) {
     // Fiks for gamle datastrukturer som mangler inputType og har 'text' i stedet for 'label'
     if (!item.inputType) {
@@ -1202,35 +1353,13 @@ function createOkByttetAvvikItemHTML(item) {
                     <button class="photo-option" data-action="upload" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
                 </div>
             </div>
-        </div>
-        <div class="byttet-container" id="byttet-${item.id}">
-            <textarea placeholder="Kommentar..."></textarea>
-            <div class="photo-dropdown-wrapper" style="position: relative; display: inline-block;">
-                <button type="button" class="photo-btn" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer;">
-                    <i data-lucide="camera"></i>Ta bilde<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
-                </button>
-                <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
-                    <button class="photo-option" data-action="camera" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
-                    <button class="photo-option" data-action="upload" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
-                </div>
             <div id="avvik-images-container-${item.id}" class="avvik-images-container"></div>
         </div>
         <div class="byttet-container" id="byttet-${item.id}">
-            <textarea placeholder="Kommentar..."></textarea>
-            <div class="photo-dropdown-wrapper" style="position: relative; display: inline-block;">
-                <button type="button" class="photo-btn" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer;">
-                    <i data-lucide="camera"></i>Ta bilde<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
-                </button>
-                <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
-                    <button class="photo-option" data-action="camera" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
-                    <button class="photo-option" data-action="upload" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
-                </div>
-            </div>
-            <div id="byttet-images-container-${item.id}" class="avvik-images-container"></div>
+            <textarea placeholder="Kommentar (f.eks. dato for bytte, type filter, etc.)..."></textarea>
         </div>
     `;
 }
-
 function createNumberItemHTML(item) {
     return `
         <div class="checklist-item" data-item-id="${item.id}" data-item-type="numeric">
@@ -1366,9 +1495,9 @@ function createDropdownOkAvvikCommentItemHTML(item) {
                 </select>
                 <div class="item-actions">${buttonsHTML}</div>
             </div>
-            <div class="comment-section">
-                <textarea id="comment-${item.id}" placeholder="Kommentar..." class="checklist-input-textarea"></textarea>
-            </div>
+        </div>
+        <div class="comment-section" style="margin-top: 10px;">
+            <textarea id="comment-${item.id}" placeholder="Kommentar..." class="checklist-input-textarea"></textarea>
         </div>
         <div class="avvik-container" id="avvik-${item.id}">
             <textarea placeholder="Beskriv avvik..."></textarea>
@@ -1694,11 +1823,39 @@ function resetAndLoadForm(isEditing = false) {
     const workContainer = document.getElementById('additional-work-lines-container');
     if (workContainer) workContainer.innerHTML = '';
     
-    // Reset checklist buttons
+    // Reset checklist buttons og containere - OPPDATERT KODE
     const checklistContainer = document.getElementById('checklist-items-container');
     if (checklistContainer) {
-        checklistContainer.querySelectorAll('.status-btn.active').forEach(btn => btn.classList.remove('active'));
-        checklistContainer.querySelectorAll('.avvik-container.show, .byttet-container.show').forEach(el => el.classList.remove('show'));
+        // Fjern active klasse fra alle status-knapper
+        checklistContainer.querySelectorAll('.status-btn.active').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        // Reset avvik-containere fullstendig
+        checklistContainer.querySelectorAll('.avvik-container, .byttet-container').forEach(container => {
+            container.classList.remove('show');
+            container.style.display = 'none'; // VIKTIG: Eksplisitt skjul
+            
+            // Tøm også textarea verdiene
+            const textarea = container.querySelector('textarea');
+            if (textarea) {
+                textarea.value = '';
+            }
+        });
+        
+        // Reset andre input-felter i sjekklisten
+        checklistContainer.querySelectorAll('input[type="text"], input[type="number"], textarea:not(.avvik-container textarea):not(.byttet-container textarea), select').forEach(input => {
+            if (input.type === 'checkbox') {
+                input.checked = false;
+            } else {
+                input.value = '';
+            }
+        });
+        
+        // Reset dropdown-verdier til default
+        checklistContainer.querySelectorAll('.checklist-dropdown').forEach(dropdown => {
+            dropdown.selectedIndex = 0;
+        });
     }
     
     // Load data if editing
@@ -1706,7 +1863,6 @@ function resetAndLoadForm(isEditing = false) {
         loadChecklistForEditing(state.editingComponentIndex);
     }
 }
-
 function loadChecklistForEditing(index) {
     const component = state.serviceReport.reportData.components[index];
     if (!component) return;
@@ -1925,6 +2081,8 @@ function setupEventListeners() {
     // Dynamic lines (products/work)
     document.getElementById('new-component-form')?.addEventListener('click', handleDynamicLineClick);
 
+    setupPhotoDropdownHandlers();
+
     // Legg til virkningsgrad-beregning
     setupVirkningsgradCalculation();
 }
@@ -1945,21 +2103,38 @@ function handleStatusClick(e) {
         button.classList.add('active');
     }
     
-    // Handle avvik/byttet containers
+    // Handle avvik containers - VIKTIG DEL
     const avvikContainer = document.getElementById(`avvik-${itemId}`);
-    const byttetContainer = document.getElementById(`byttet-${itemId}`);
     
     if (avvikContainer) {
-        avvikContainer.classList.toggle('show', 
-            button.dataset.status === 'avvik' && button.classList.contains('active')
-        );
+        const shouldShow = button.dataset.status === 'avvik' && button.classList.contains('active');
+        avvikContainer.classList.toggle('show', shouldShow);
+        
+        // LEGG TIL EKSPLISITT DISPLAY STYLE
+        if (shouldShow) {
+            avvikContainer.style.display = 'block';
+            console.log(`✅ Avvik container ${itemId} is now visible`);
+        } else {
+            avvikContainer.style.display = 'none';
+        }
     }
     
-    if (byttetContainer) {
-        byttetContainer.classList.toggle('show', 
-            button.dataset.status === 'byttet' && button.classList.contains('active')
-        );
-    }
+  
+}
+
+// Debug: Sjekk status på alle avvik-containers
+function debugAvvikContainers() {
+    console.log('=== DEBUG AVVIK CONTAINERS ===');
+    const avvikContainers = document.querySelectorAll('.avvik-container');
+    avvikContainers.forEach((container, index) => {
+        console.log(`Avvik container ${index}:`, {
+            id: container.id,
+            display: container.style.display,
+            hasShowClass: container.classList.contains('show'),
+            visible: container.offsetParent !== null,
+            innerHTML: container.innerHTML.substring(0, 100) + '...'
+        });
+    });
 }
 
 function handleComponentListClick(e) {
@@ -2010,6 +2185,7 @@ function handleDynamicLineClick(e) {
 
 async function saveChecklist(e) {
     e.preventDefault();
+    console.log('Saving checklist...');
     
     // Validate system fields
     const hasSystemFields = state.checklistTemplate?.systemFields && 
@@ -2029,37 +2205,27 @@ async function saveChecklist(e) {
     
     setLoading(true);
     
-    // Collect all form data
-    const componentData = collectComponentData();
-    
-    // Add or update component
-    if (state.editingComponentIndex === null) {
-        state.serviceReport.reportData.components.push(componentData);
-    } else {
-        state.serviceReport.reportData.components[state.editingComponentIndex] = componentData;
-    }
-    
     try {
-        // Save to server - include all required fields
+        // Collect all form data
+        const componentData = collectComponentData();
+        
+        // Add or update component
+        if (state.editingComponentIndex === null) {
+            state.serviceReport.reportData.components.push(componentData);
+        } else {
+            state.serviceReport.reportData.components[state.editingComponentIndex] = componentData;
+        }
+        
+        // VIKTIG: Ikke send photos i reportData
+        const updateData = {
+            components: state.serviceReport.reportData.components,
+            overallComment: document.getElementById('overall-comment')?.value || ''
+        };
+        
         await api.put(`/reports/${state.serviceReport.reportId}`, {
             orderId: state.orderId,
             equipmentId: state.equipmentId,
-            reportData: state.serviceReport.reportData
-        });
-        
-        // DEBUGGING: Check component after save
-        const savedComponents = state.serviceReport.reportData.components;
-        const lastComponent = savedComponents[savedComponents.length - 1];
-        
-        console.log('🔍 COMPONENT AFTER SAVE:', {
-            lastComponent,
-            isComplete: isChecklistComplete(lastComponent),
-            allComponents: savedComponents.map((comp, i) => ({
-                index: i,
-                isComplete: isChecklistComplete(comp),
-                details: comp.details,
-                checklist: comp.checklist
-            }))
+            reportData: updateData
         });
         
         // Reset form and update UI
@@ -2070,15 +2236,22 @@ async function saveChecklist(e) {
         updateFinalizeButtonState();
         showToast('Sjekkliste lagret!', 'success');
         markFormAsClean();
-
-        // Mark form as clean after successful save
-        markFormAsClean();
         
     } catch (error) {
+        console.error('Save error:', error);
         showToast(`Kunne ikke lagre: ${error.message}`, 'error');
     } finally {
         setLoading(false);
     }
+}
+
+// 2. FIKS: Legg til resetForm funksjon som mangler
+function resetForm() {
+    resetAndLoadForm(false);
+}
+
+function resetForm() {
+    resetAndLoadForm(false);
 }
 
 function collectComponentData() {
@@ -2641,11 +2814,20 @@ function updateFinalizeButtonState() {
 }
 
 async function finalizeAnlegg() {
+    console.log('🏁 Starting finalize process...');
+    
     // Sjekk at minst en sjekkliste er lagret
-    if (state.serviceReport.reportData.components.length === 0) {
+    if (!state.serviceReport?.reportData?.components || state.serviceReport.reportData.components.length === 0) {
         showToast("Du må lagre minst én sjekkliste før ferdigstilling.", 'error');
         return;
     }
+    
+    // Debug: Vis hva som skal sendes
+    console.log('📋 Service report state:', {
+        reportId: state.serviceReport.reportId,
+        components: state.serviceReport.reportData.components.length,
+        status: state.serviceReport.status
+    });
     
     if (!confirm('Er du sikker på at du vil ferdigstille dette anlegget?\n\nDu kan ikke gjøre endringer etterpå.')) {
         return;
@@ -2654,47 +2836,78 @@ async function finalizeAnlegg() {
     setLoading(true);
     
     try {
-        // Lagre overall comment først
-        const overallComment = document.getElementById('overall-comment')?.value || '';
-        state.serviceReport.reportData.overallComment = overallComment;
-        
-        // Lagre endelig rapport
-        await api.put(`/reports/${state.serviceReport.reportId}`, {
-            orderId: state.orderId,
-            equipmentId: state.equipmentId,
-            reportData: state.serviceReport.reportData
+        // Først, sjekk at alle sjekklister er komplette
+        const allComplete = state.serviceReport.reportData.components.every(component => {
+            const isComplete = isChecklistComplete(component);
+            if (!isComplete) {
+                console.log('❌ Incomplete component:', component);
+            }
+            return isComplete;
         });
         
-        // Oppdater equipment status til "completed"
-        const equipmentResponse = await fetch(`/api/equipment/${state.equipmentId}/status`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ 
-                serviceStatus: 'completed' 
-            })
-        });
-        
-        if (!equipmentResponse.ok) {
-            const errorData = await equipmentResponse.json();
-            throw new Error(errorData.error || 'Kunne ikke oppdatere anlegg-status');
+        if (!allComplete) {
+            showToast("Alle sjekklister må være fullført før ferdigstilling.", 'error');
+            setLoading(false);
+            return;
         }
         
-        // Oppdater lokal state
-        state.equipment.serviceStatus = 'completed';
+        // Prepare the finalize data
+        const finalizeData = {
+            orderId: state.orderId,
+            equipmentId: state.equipmentId,
+            reportData: {
+                components: state.serviceReport.reportData.components,
+                overallComment: document.getElementById('overall-comment')?.value || ''
+            },
+            status: 'completed'
+        };
         
-        // Vis suksess-melding
+        console.log('📤 Sending finalize request:', finalizeData);
+        
+        // Oppdater rapport
+        const response = await api.put(`/reports/${state.serviceReport.reportId}`, finalizeData);
+        
+        console.log('✅ Finalize response:', response);
+        
+        // NYTT: Oppdater også equipment status via complete endpoint
+        console.log('📤 Updating equipment status...');
+        const equipmentResponse = await api.post(`/equipment/${state.equipmentId}/complete`, {
+            orderId: state.orderId,
+            reportId: state.serviceReport.reportId
+        });
+        
+        console.log('✅ Equipment status updated:', equipmentResponse);
+        
+        // Update the local state
+        state.serviceReport.status = 'completed';
+        
+        // NYTT: Marker form som ren før navigering
+        markFormAsClean();
+        changeTracker.hasUnsavedChanges = false;
+        
         showToast('✅ Anlegg ferdigstilt!', 'success');
         
-        // Kort pause så bruker ser meldingen
+        // Wait a bit before redirecting
         setTimeout(() => {
-            // Naviger tilbake til ordren
-            window.location.href = `orders.html?id=${state.orderId}`;
+            window.location.href = `/app/orders.html?id=${state.orderId}`;
         }, 1500);
         
     } catch (error) {
-        console.error('Error finalizing equipment:', error);
-        showToast(`❌ Kunne ikke ferdigstille: ${error.message}`, 'error');
+        console.error('❌ Error finalizing equipment:', error);
+        
+        // Gi mer detaljert feilmelding basert på feilen
+        let errorMessage = 'Kunne ikke ferdigstille anlegg';
+        
+        if (error.message.includes('500')) {
+            errorMessage = 'Server-feil ved ferdigstilling. Sjekk at alle felter er korrekt utfylt.';
+        } else if (error.message.includes('400')) {
+            errorMessage = 'Ugyldig data. Sjekk at alle påkrevde felter er fylt ut.';
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        showToast(errorMessage, 'error');
+    } finally {
         setLoading(false);
     }
 }
@@ -2749,95 +2962,7 @@ function showToast(message, type = 'info') {
     }, 5000);
 }
 
-// Photo upload functionality
-document.addEventListener('click', function(e) {
-    // Fiks photo button clicks
-    if (e.target.closest('.photo-option')) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const option = e.target.closest('.photo-option');
-        const action = option.dataset.action;
-        
-        // Find parent container to determine context
-        const avvikContainer = option.closest('.avvik-container');
-        const attachmentsSection = option.closest('#attachments-section');
-        
-        let photoContext = null;
-        
-        if (avvikContainer) {
-            // Avvik context
-            const avvikId = avvikContainer.id; // e.g., "avvik-item3"
-            photoContext = {
-                type: 'avvik',
-                container: avvikContainer,
-                avvikId: avvikId,
-                itemId: avvikId.replace('avvik-', '') // e.g., "item3"
-            };
-        } else if (attachmentsSection) {
-            // General context
-            photoContext = {
-                type: 'general',
-                container: attachmentsSection
-            };
-        }
-        
-        if (photoContext) {
-            currentPhotoContext = photoContext;
-            console.log('📷 Photo context set:', photoContext);
-            
-            // Hide dropdown
-            const dropdown = option.closest('.photo-dropdown');
-            if (dropdown) {
-                dropdown.style.opacity = '0';
-                dropdown.style.visibility = 'hidden';
-            }
-            
-            // Trigger photo action
-            openPhotoOption(action);
-        } else {
-            console.error('Could not find parent container for photo option.');
-        }
-    }
-});
-
-document.addEventListener('click', function(e) {
-    // Håndter photo button clicks for å vise/skjule dropdown
-    if (e.target.closest('.photo-btn')) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const btn = e.target.closest('.photo-btn');
-        const dropdown = btn.nextElementSibling;
-        
-        if (dropdown && dropdown.classList.contains('photo-dropdown')) {
-            // Toggle dropdown
-            const isVisible = dropdown.style.visibility === 'visible';
-            
-            // Lukk alle andre dropdowns først
-            document.querySelectorAll('.photo-dropdown').forEach(dd => {
-                dd.style.opacity = '0';
-                dd.style.visibility = 'hidden';
-            });
-            
-            if (!isVisible) {
-                dropdown.style.opacity = '1';
-                dropdown.style.visibility = 'visible';
-            }
-        }
-    }
-});
-
-// Lukk dropdowns når man klikker utenfor
-document.addEventListener('click', function(e) {
-    if (!e.target.closest('.photo-dropdown-wrapper')) {
-        document.querySelectorAll('.photo-dropdown').forEach(dd => {
-            dd.style.opacity = '0';
-            dd.style.visibility = 'hidden';
-        });
-    }
-});
-
+// Upload image to server
 // Upload image to server
 async function uploadImageToServer(file, imageType) {
     console.log('📤 Uploading to server:', {
@@ -2845,60 +2970,66 @@ async function uploadImageToServer(file, imageType) {
         imageType: imageType,
         endpoint: imageType === 'avvik' ? '/api/images/avvik' : '/api/images/general'
     });
-
+    
     const formData = new FormData();
-    formData.append('image', file);
+    // ENDRET: Fra 'file' til 'image' for å matche backend
+    formData.append('image', file);  // ← DETTE ER ENDRINGEN
+    formData.append('reportId', state.serviceReport.reportId);
     formData.append('orderId', state.order.id);
     formData.append('equipmentId', state.equipment.id);
-    formData.append('reportId', state.serviceReport.reportId);
-
-    // For avvik-bilder, legg til avvikId
+    
     if (imageType === 'avvik' && currentPhotoContext?.itemId) {
-        formData.append('avvikId', currentPhotoContext.itemId);
-        
         console.log('📷 Avvik detaljer:', {
             itemId: currentPhotoContext.itemId,
             context: currentPhotoContext
         });
+        // ENDRET: Fra 'checklistItemId' til 'avvikId' for å matche backend
+        formData.append('avvikId', currentPhotoContext.itemId);  // ← OGSÅ ENDRET
     }
-
+    
     const endpoint = imageType === 'avvik' ? '/api/images/avvik' : '/api/images/general';
     console.log('📤 Using endpoint:', endpoint);
-
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        credentials: 'include',
-        body: formData
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage;
-        try {
-            const errorData = JSON.parse(errorText);
-            errorMessage = errorData.error || `HTTP ${response.status}`;
-        } catch {
-            errorMessage = `HTTP ${response.status}: ${errorText}`;
-        }
-        throw new Error(errorMessage);
-    }
-
     
-    const result = await response.json();
-    console.log('📤 Upload result:', result);
-
-    // Mark as having uploaded images (triggers navigation guard)
-    changeTracker.hasUploadedImages = true;
-    markFormAsDirty();
-
-    return result;
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            body: formData,
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Upload error response:', errorText);
+            
+            try {
+                const errorData = JSON.parse(errorText);
+                throw new Error(errorData.error || `Server error: ${response.status}`);
+            } catch {
+                throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+            }
+        }
+        
+        const result = await response.json();
+        console.log('📷 Upload successful:', result);
+        
+        // Returner hele result objektet, ikke bare URL
+        return result;
+        
+    } catch (error) {
+        console.error('📷 Upload error:', error);
+        throw new Error(
+            imageType === 'avvik' 
+                ? `Kunne ikke laste opp avvik-bilde: ${error.message}` 
+                : `Kunne ikke laste opp rapport-bilde: ${error.message}`
+        );
+    }
 }
 
 
 
 // Separat funksjon for å håndtere foto-filer
 async function handlePhotoFile(file) {
-    console.log('📷 File selected:', file.name);
+    console.log('📷 File selected:', file.name, 'Size:', Math.round(file.size/1024) + 'KB');
     console.log('📷 Current context:', currentPhotoContext);
     
     // Sjekk at vi har nødvendig data
@@ -2914,17 +3045,28 @@ async function handlePhotoFile(file) {
     
     try {
         // Vis loading melding
-        showToast(`⏳ Laster opp ${imageType === 'avvik' ? 'avviksbilde' : 'bilde'}...`, 'info');
+        showToast(`⏳ Optimaliserer og laster opp ${imageType === 'avvik' ? 'avviksbilde' : 'bilde'}...`, 'info');
+        
+        // NYTT: Resize bilde før opplasting
+        let fileToUpload = file;
+        if (file.type.startsWith('image/')) {
+            try {
+                fileToUpload = await resizeImageBeforeUpload(file);
+            } catch (resizeError) {
+                console.warn('Kunne ikke optimalisere bilde, bruker original:', resizeError);
+                // Fortsett med original fil hvis resize feiler
+            }
+        }
         
         // Last opp bildet
-        const uploadResult = await uploadImageToServer(file, imageType);
+        const uploadResult = await uploadImageToServer(fileToUpload, imageType);
         
-        if (uploadResult.imageUrl) {
+        if (uploadResult.url) {
             // Vis bildet i UI
             if (imageType === 'avvik' && currentPhotoContext?.itemId) {
-                await displayAvvikImage(currentPhotoContext.itemId, uploadResult.imageUrl);
+                await displayAvvikImage(currentPhotoContext.itemId, uploadResult.url);
             } else {
-                await displayGeneralImage(uploadResult.imageUrl);
+                await displayGeneralImage(uploadResult.url);
             }
             
             showToast('✅ Bilde lastet opp!', 'success');
@@ -2933,6 +3075,23 @@ async function handlePhotoFile(file) {
         console.error('❌ Feil ved opplasting:', error);
         showToast('❌ Kunne ikke laste opp bilde: ' + error.message, 'error');
     }
+}
+
+// 2. LEGG TIL disse manglende funksjonene:
+// Display general image after upload
+async function displayGeneralImage(imageUrl) {
+    console.log('📸 Displaying general image:', imageUrl);
+    
+    // Reload general images to show the new one
+    await renderGeneralImages();
+}
+
+// Display avvik image after upload
+async function displayAvvikImage(itemId, imageUrl) {
+    console.log('📸 Displaying avvik image for item:', itemId, imageUrl);
+    
+    // Reload avvik images to show the new one
+    await renderAvvikImagesForChecklist();
 }
 
 async function openPhotoOption(type) {
@@ -2946,11 +3105,15 @@ async function openPhotoOption(type) {
     input.onchange = async (e) => {
         if (e.target.files[0]) {
             const file = e.target.files[0];
-            console.log('📷 File selected:', file.name);
-            console.log('📷 Current context:', currentPhotoContext);
+            console.log('📷 File selected:', file.name, 'Size:', Math.round(file.size/1024) + 'KB');
             
             // Sjekk at vi har nødvendig data
             if (!state.order?.id || !state.equipment?.id || !state.serviceReport?.reportId) {
+                console.error('❌ Missing data:', {
+                    orderId: state.order?.id,
+                    equipmentId: state.equipment?.id,
+                    reportId: state.serviceReport?.reportId
+                });
                 showToast('❌ Feil: Mangler ordre- eller anleggsdata. Prøv å laste siden på nytt.', 'error');
                 return;
             }
@@ -2962,24 +3125,40 @@ async function openPhotoOption(type) {
             
             try {
                 // Vis loading melding
-                showToast(`⏳ Laster opp ${imageType === 'avvik' ? 'avvik-' : ''}bilde...`, 'info');
+                showToast(`⏳ Optimaliserer og laster opp ${imageType === 'avvik' ? 'avvik-' : ''}bilde...`, 'info');
                 
-                const result = await uploadImageToServer(file, imageType);
+                // NYTT: Resize bilde før opplasting
+                let fileToUpload = file;
+                if (file.type.startsWith('image/')) {
+                    try {
+                        fileToUpload = await resizeImageBeforeUpload(file);
+                        console.log('✅ Image resized successfully');
+                    } catch (resizeError) {
+                        console.warn('Kunne ikke optimalisere bilde, bruker original:', resizeError);
+                    }
+                }
                 
-                if (result.success) {
+                const result = await uploadImageToServer(fileToUpload, imageType);
+                console.log('📷 Upload result:', result);
+                
+                if (result.success || result.url) {
                     if (imageType === 'avvik' && result.avvikNumber) {
                         showToast(`✅ Avvik #${result.formattedAvvikNumber} bilde lastet opp!`, 'success');
-                        // Refresh avvik images
-                        setTimeout(() => renderAvvikImagesForChecklist(), 1000);
+                        // Vent litt før rendering for å sikre at backend har lagret bildet
+                        setTimeout(() => {
+                            console.log('🔄 Rendering avvik images...');
+                            renderAvvikImagesForChecklist();
+                        }, 500);
                     } else {
                         showToast(`✅ Rapport-bilde lastet opp!`, 'success');
-                        // Refresh general images  
+                        // Vent litt før rendering for å sikre at backend har lagret bildet
                         setTimeout(() => {
-                            // Reload general images directly
+                            console.log('🔄 Rendering general images...');
                             renderGeneralImages();
-                        }, 1000);
+                        }, 500);
                     }
                 } else {
+                    console.error('❌ Upload failed:', result);
                     showToast(`❌ Opplasting feilet: ${result.error || 'Ukjent feil'}`, 'error');
                 }
             } catch (error) {
@@ -2990,6 +3169,7 @@ async function openPhotoOption(type) {
     };
     
     // Trigger file selection
+    console.log('📷 Triggering file input click...');
     input.click();
 }
 
@@ -3113,19 +3293,22 @@ async function renderGeneralImages() {
             const generalImages = await generalResponse.json();
             console.log('📸 Reloaded general images:', generalImages);
             
-            // Clear and rebuild general gallery
             const container = document.getElementById('general-images-gallery');
             if (container && generalImages.length > 0) {
+                // Alltid bruk progressiv lasting siden vi alltid er på mobil
                 container.innerHTML = generalImages.map((img, index) => `
-                    <div class="image-thumbnail" onclick="openImageModal('${img.image_url}', 'Bilde ${index + 1}')">
-                        <img src="${img.image_url}" alt="Bilde ${index + 1}" loading="lazy">
+                    <div class="image-thumbnail" data-index="${index}">
+                        <div class="image-loading-placeholder"></div>
                         <div class="image-info">
                             <span class="image-title">Bilde ${index + 1}</span>
                         </div>
                     </div>
                 `).join('');
                 
-                // Show attachments section
+                // Last inn bilder ett om gangen for bedre ytelse på mobil
+                loadImagesProgressively(generalImages);
+                
+                // Vis attachments section
                 const attachmentsSection = document.getElementById('attachments-section');
                 if (attachmentsSection) {
                     attachmentsSection.style.display = 'block';
@@ -3137,47 +3320,460 @@ async function renderGeneralImages() {
     }
 }
 
+// Progressiv bildelasting optimalisert for mobil
+function loadImagesProgressively(images) {
+    images.forEach((img, index) => {
+        // Øk delay mellom bilder for å ikke overbelaste mobil
+        setTimeout(() => {
+            const thumbnail = document.querySelector(`.image-thumbnail[data-index="${index}"]`);
+            if (thumbnail) {
+                const imgElement = new Image();
+                
+                imgElement.onload = function() {
+                    thumbnail.innerHTML = `
+                        <img src="${img.image_url}" alt="Bilde ${index + 1}">
+                        <div class="image-info">
+                            <span class="image-title">Bilde ${index + 1}</span>
+                        </div>
+                    `;
+                    thumbnail.onclick = () => openImageModal(img.image_url, `Bilde ${index + 1}`);
+                    thumbnail.classList.add('loaded');
+                };
+                
+                imgElement.onerror = function() {
+                    thumbnail.innerHTML = `
+                        <div class="image-error">⚠️</div>
+                        <div class="image-info">
+                            <span class="image-title">Kunne ikke laste</span>
+                        </div>
+                    `;
+                };
+                
+                imgElement.src = img.image_url;
+            }
+        }, index * 300); // 300ms mellom hver - bedre for mobil
+    });
+}
+// Legg også til en funksjon for å sjekke om bildene faktisk er lagret i databasen
+async function debugCheckPhotosInDB() {
+    try {
+        const response = await fetch(`/api/reports/equipment/${state.equipmentId}?orderId=${state.orderId}`);
+        const report = await response.json();
+        console.log('📸 Photos in database:', report.photos);
+        console.log('📸 Report data:', report);
+    } catch (error) {
+        console.error('Debug check failed:', error);
+    }
+}
+
+function reinitializePhotoHandlers() {
+    // Fjern gamle handlers
+    if (window._photoClickHandler) {
+        document.removeEventListener('click', window._photoClickHandler, true);
+    }
+    
+    // Setup nye handlers
+    setupPhotoDropdownHandlers();
+    
+    // Re-create lucide icons for nye elementer
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
+}
+
+
+
 // Simple image modal
 function openImageModal(imageUrl, imageTitle) {
-    // Create modal if it doesn't exist
+    // Prevent scrolling on body when modal is open
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    
     let modal = document.getElementById('imageModal');
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'imageModal';
         modal.innerHTML = `
-            <div class="modal-overlay" onclick="closeImageModal()" style="
-                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                background: rgba(0,0,0,0.8); display: flex; align-items: center;
-                justify-content: center; z-index: 10000;">
-                <div onclick="event.stopPropagation()" style="
-                    position: relative; max-width: 90vw; max-height: 90vh;
-                    background: white; border-radius: 8px; overflow: hidden;">
-                    <span onclick="closeImageModal()" style="
-                        position: absolute; top: 10px; right: 15px; color: white;
-                        font-size: 24px; cursor: pointer; z-index: 1;
-                        background: rgba(0,0,0,0.5); width: 30px; height: 30px;
-                        border-radius: 50%; display: flex; align-items: center;
-                        justify-content: center;">&times;</span>
-                    <img id="modalImage" src="" style="width: 100%; height: auto; display: block;">
-                    <div id="modalTitle" style="padding: 12px; background: #f8f9fa; text-align: center; font-weight: 500;"></div>
+            <div class="image-modal-overlay" onclick="closeImageModal()">
+                <div class="image-modal-container" onclick="event.stopPropagation()">
+                    <div class="image-modal-header">
+                        <span class="image-modal-title">${imageTitle}</span>
+                        <button class="image-modal-close" onclick="closeImageModal()">✕</button>
+                    </div>
+                    <div class="image-modal-body">
+                        <img id="modalImage" src="${imageUrl}" alt="${imageTitle}">
+                    </div>
                 </div>
             </div>
         `;
         document.body.appendChild(modal);
+        
+        // Legg til swipe-down for å lukke
+        addSwipeToClose(modal);
+    } else {
+        document.getElementById('modalImage').src = imageUrl;
+        modal.querySelector('.image-modal-title').textContent = imageTitle;
     }
     
-    // Show image
-    document.getElementById('modalImage').src = imageUrl;
-    document.getElementById('modalTitle').textContent = imageTitle;
-    modal.style.display = 'flex';
+    modal.classList.add('show');
 }
 
+function setupPhotoDropdownHandlers() {
+    console.log('🔧 Setting up photo dropdown handlers...');
+    
+    // Fjern eksisterende handlers først
+    if (window._photoClickHandler) {
+        document.removeEventListener('click', window._photoClickHandler, true);
+    }
+    
+    // Ny handler som bruker event delegation
+    window._photoClickHandler = function(e) {
+        // Sjekk om vi klikket på photo-btn
+        const photoBtn = e.target.closest('.photo-btn');
+        
+        if (photoBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const wrapper = photoBtn.closest('.photo-dropdown-wrapper');
+            const dropdown = wrapper?.querySelector('.photo-dropdown');
+            
+            if (dropdown) {
+                const isOpen = dropdown.classList.contains('show');
+                
+                // Lukk alle andre dropdowns
+                document.querySelectorAll('.photo-dropdown.show').forEach(dd => {
+                    if (dd !== dropdown) {
+                        dd.classList.remove('show');
+                        dd.style.opacity = '0';
+                        dd.style.visibility = 'hidden';
+                    }
+                });
+                
+                // Toggle denne dropdown
+                if (!isOpen) {
+                    dropdown.classList.add('show');
+                    dropdown.style.opacity = '1';
+                    dropdown.style.visibility = 'visible';
+                    console.log('📷 Dropdown opened');
+                } else {
+                    dropdown.classList.remove('show');
+                    dropdown.style.opacity = '0';
+                    dropdown.style.visibility = 'hidden';
+                    console.log('📷 Dropdown closed');
+                }
+            }
+            return;
+        }
+        
+        // Sjekk om vi klikket på photo-option
+        const photoOption = e.target.closest('.photo-option');
+        if (photoOption) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const action = photoOption.dataset.action;
+            const wrapper = photoOption.closest('.photo-dropdown-wrapper');
+            
+            // Finn kontekst
+            let photoContext = null;
+            const avvikContainer = wrapper?.closest('.avvik-container');
+            
+            if (avvikContainer) {
+                photoContext = {
+                    type: 'avvik',
+                    container: avvikContainer,
+                    avvikId: avvikContainer.id,
+                    itemId: avvikContainer.id.replace('avvik-', '')
+                };
+            } else {
+                const attachmentsSection = wrapper?.closest('#attachments-section');
+                if (attachmentsSection) {
+                    photoContext = {
+                        type: 'general',
+                        container: attachmentsSection
+                    };
+                }
+            }
+            
+            if (photoContext) {
+                currentPhotoContext = photoContext;
+                
+                // Lukk dropdown
+                const dropdown = wrapper?.querySelector('.photo-dropdown');
+                if (dropdown) {
+                    dropdown.classList.remove('show');
+                    dropdown.style.opacity = '0';
+                    dropdown.style.visibility = 'hidden';
+                }
+                
+                // Åpne foto-valg
+                openPhotoOption(action);
+            } else {
+                console.error('Could not find photo context');
+                showToast('Kunne ikke finne bildecontainer', 'error');
+            }
+            return;
+        }
+        
+        // Klikk utenfor - lukk alle dropdowns
+        if (!e.target.closest('.photo-dropdown-wrapper')) {
+            document.querySelectorAll('.photo-dropdown.show').forEach(dropdown => {
+                dropdown.classList.remove('show');
+                dropdown.style.opacity = '0';
+                dropdown.style.visibility = 'hidden';
+            });
+        }
+    };
+    
+    // Legg til handler med capture
+    document.addEventListener('click', window._photoClickHandler, true);
+    
+    console.log('✅ Photo dropdown handlers setup complete');
+}
+
+// 1. Resize-funksjonen
+async function resizeImageBeforeUpload(file, maxWidth = 800, maxHeight = 600) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+            const img = new Image();
+            
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                
+                console.log(`📐 Original størrelse: ${width}x${height}`);
+                
+                // Beregn nye dimensjoner
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height = Math.round(height * (maxWidth / width));
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width = Math.round(width * (maxHeight / height));
+                        height = maxHeight;
+                    }
+                }
+                
+                console.log(`📐 Ny størrelse: ${width}x${height}`);
+                
+                // Sett canvas størrelse
+                canvas.width = width;
+                canvas.height = height;
+                
+                // Tegn resized bilde
+                const ctx = canvas.getContext('2d');
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Konverter til blob
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        const resizedFile = new File([blob], file.name, { 
+                            type: 'image/jpeg',
+                            lastModified: Date.now()
+                        });
+                        console.log(`✅ Bilde optimalisert: ${Math.round(file.size/1024)}KB → ${Math.round(blob.size/1024)}KB`);
+                        resolve(resizedFile);
+                    } else {
+                        reject(new Error('Kunne ikke konvertere bilde'));
+                    }
+                }, 'image/jpeg', 0.85); // 85% kvalitet
+            };
+            
+            img.onerror = () => {
+                reject(new Error('Kunne ikke laste bilde'));
+            };
+            
+            img.src = e.target.result;
+        };
+        
+        reader.onerror = () => {
+            reject(new Error('Kunne ikke lese fil'));
+        };
+        
+        reader.readAsDataURL(file);
+    });
+}
 function closeImageModal() {
     const modal = document.getElementById('imageModal');
     if (modal) {
-        modal.style.display = 'none';
+        modal.classList.remove('show');
+        
+        // Restore body scroll
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.width = '';
+        
+        // Fjern modal etter animasjon
+        setTimeout(() => {
+            modal.remove();
+        }, 300);
     }
 }
 
+// Lag denne som global funksjon
+window.closeImageModal = closeImageModal;
+
+function addSwipeToClose(modal) {
+    let startY = 0;
+    let currentY = 0;
+    let modalContainer = modal.querySelector('.image-modal-container');
+    
+    modalContainer.addEventListener('touchstart', (e) => {
+        startY = e.touches[0].clientY;
+    }, { passive: true });
+    
+    modalContainer.addEventListener('touchmove', (e) => {
+        currentY = e.touches[0].clientY;
+        let deltaY = currentY - startY;
+        
+        if (deltaY > 0) { // Only allow swipe down
+            modalContainer.style.transform = `translateY(${deltaY}px)`;
+            modalContainer.style.opacity = 1 - (deltaY / 300);
+        }
+    }, { passive: true });
+    
+    modalContainer.addEventListener('touchend', (e) => {
+        let deltaY = currentY - startY;
+        
+        if (deltaY > 100) { // Threshold for closing
+            closeImageModal();
+        } else {
+            // Snap back
+            modalContainer.style.transform = '';
+            modalContainer.style.opacity = '';
+        }
+    }, { passive: true });
+}
+
+async function autoSaveBeforeNavigation() {
+    try {
+        const overallComment = document.getElementById('overall-comment')?.value || '';
+        
+        if (overallComment.trim() !== '') {
+            console.log('💾 Auto-saving comment before navigation...');
+            
+            state.serviceReport.reportData.overallComment = overallComment;
+            
+            const updateData = {
+                ...state.serviceReport.reportData
+            };
+            delete updateData.photos;
+            
+            await api.put(`/reports/${state.serviceReport.reportId}`, {
+                orderId: state.orderId,
+                equipmentId: state.equipmentId,
+                reportData: updateData
+            });
+            
+            console.log('✅ Comment auto-saved');
+        }
+        
+        markFormAsClean();
+        
+    } catch (error) {
+        console.error('Error auto-saving:', error);
+    }
+}
+
+// NY FUNKSJON 2
+async function autoSaveEverything() {
+    try {
+        console.log('🔄 Auto-saving everything before navigation...');
+        
+        const hasActiveComponent = state.editingComponentIndex !== null || 
+                                 document.querySelector('#component-form [name="etasje"]')?.value;
+        
+        if (hasActiveComponent) {
+            await saveComponent();
+        }
+        
+        await autoSaveBeforeNavigation();
+        
+        console.log('✅ Everything auto-saved successfully');
+        
+    } catch (error) {
+        console.error('Error in autoSaveEverything:', error);
+        throw error;
+    }
+}
+
+// NY VARIABEL OG FUNKSJON 3
+let autoSaveInterval;
+
+function startAutoSave() {
+    if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+    }
+    
+    autoSaveInterval = setInterval(async () => {
+        if (changeTracker.hasUnsavedChanges) {
+            console.log('⏰ Auto-saving changes...');
+            try {
+                await autoSaveEverything();
+                showToast('💾 Endringer auto-lagret', 'info');
+            } catch (error) {
+                console.error('Auto-save failed:', error);
+            }
+        }
+    }, 60000);
+}
+
+// OPPDATERT DOMContentLoaded (erstatter den gamle)
+document.addEventListener('DOMContentLoaded', function() {
+    // Original init
+    initializePage();
+    
+    // Start auto-save
+    startAutoSave();
+    
+    // Håndter tilbake-knapp
+    const backButton = document.querySelector('.back-btn');
+    if (!backButton) {
+        const orderLink = document.querySelector('[href*="orders.html"]');
+        if (orderLink) {
+            orderLink.addEventListener('click', async function(e) {
+                e.preventDefault();
+                const targetUrl = this.getAttribute('href');
+                
+                try {
+                    await autoSaveEverything();
+                    window.location.href = targetUrl;
+                } catch (error) {
+                    console.error('Error during auto-save:', error);
+                    window.location.href = targetUrl;
+                }
+            });
+        }
+    } else {
+        backButton.addEventListener('click', async function(e) {
+            e.preventDefault();
+            const targetUrl = this.getAttribute('href') || '/app/orders.html?id=' + state.orderId;
+            
+            try {
+                await autoSaveEverything();
+                window.location.href = targetUrl;
+            } catch (error) {
+                console.error('Error during auto-save:', error);
+                window.location.href = targetUrl;
+            }
+        });
+    }
+});
+
+// NY: Cleanup ved window unload
+window.addEventListener('beforeunload', function() {
+    if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+    }
+});
 // Initialize the page when the DOM is fully loaded
 document.addEventListener('DOMContentLoaded', initializePage);

@@ -16,52 +16,87 @@ const db = require('../config/database');
 
 // Helper funksjon for å splitte frontend reportData til database kolonner
 function splitReportDataForDB(reportData) {
+  // Sikker initialisering
   const dbData = {
     checklist_data: {
       components: [],
-      overallComment: reportData.overallComment || ''
+      overallComment: ''
     },
     products_used: [],
     additional_work: [],
-    photos: reportData.photos || []
+    photos: []
   };
 
-  // Prosesser hver komponent
+  // Håndter tilfelle hvor reportData er null eller undefined
+  if (!reportData) {
+    console.warn('splitReportDataForDB: reportData er null eller undefined');
+    return dbData;
+  }
+
+  // Sett overallComment hvis den finnes
+  if (reportData.overallComment !== undefined) {
+    dbData.checklist_data.overallComment = reportData.overallComment;
+  }
+
+  // Håndter photos BARE hvis de er eksplisitt inkludert
+  if (reportData.hasOwnProperty('photos')) {
+    dbData.photos = reportData.photos || [];
+  }
+
+  // Prosesser komponenter hvis de finnes
   if (reportData.components && Array.isArray(reportData.components)) {
-    reportData.components.forEach(component => {
-      // Lagre sjekkliste-komponenten uten produkter og tilleggsarbeid
-      const cleanComponent = {
-        details: component.details || {},
-        checklist: component.checklist || {},
-        driftSchedule: component.driftSchedule || {}
-      };
-      dbData.checklist_data.components.push(cleanComponent);
+    reportData.components.forEach((component, index) => {
+      try {
+        // Lagre sjekkliste-komponenten uten produkter og tilleggsarbeid
+        const cleanComponent = {
+          details: component.details || {},
+          checklist: component.checklist || {},
+          driftSchedule: component.driftSchedule || {}
+        };
+        dbData.checklist_data.components.push(cleanComponent);
 
-      // Samle produkter
-      if (component.products && Array.isArray(component.products)) {
-        component.products.forEach(product => {
-          if (product.name || product.price > 0) {
-            dbData.products_used.push({
-              ...product,
-              componentDetails: component.details || {}
-            });
-          }
-        });
-      }
+        // Samle produkter - håndter både quantity og price
+        if (component.products && Array.isArray(component.products)) {
+          component.products.forEach(product => {
+            // Sjekk at produktet har innhold (navn eller pris)
+            if (product.name || (product.price && product.price > 0)) {
+              dbData.products_used.push({
+                name: product.name || '',
+                quantity: product.quantity || 0,
+                price: product.price || 0,
+                componentDetails: component.details || {}
+              });
+            }
+          });
+        }
 
-      // Samle tilleggsarbeid
-      if (component.additionalWork && Array.isArray(component.additionalWork)) {
-        component.additionalWork.forEach(work => {
-          if (work.description || work.hours > 0 || work.price > 0) {
-            dbData.additional_work.push({
-              ...work,
-              componentDetails: component.details || {}
-            });
-          }
-        });
+        // Samle tilleggsarbeid - håndter alle felter trygt
+        if (component.additionalWork && Array.isArray(component.additionalWork)) {
+          component.additionalWork.forEach(work => {
+            // Sjekk at arbeidet har innhold
+            if (work.description || (work.hours && work.hours > 0) || (work.price && work.price > 0)) {
+              dbData.additional_work.push({
+                description: work.description || '',
+                hours: work.hours || 0,
+                price: work.price || 0,
+                componentDetails: component.details || {}
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.error(`Feil ved prosessering av komponent ${index}:`, err);
+        // Fortsett med neste komponent selv om en feiler
       }
     });
   }
+
+  console.log('splitReportDataForDB result:', {
+    components: dbData.checklist_data.components.length,
+    products: dbData.products_used.length,
+    work: dbData.additional_work.length,
+    hasPhotos: dbData.photos !== undefined
+  });
 
   return dbData;
 }
@@ -243,8 +278,8 @@ router.put('/:reportId', async (req, res) => {
     hasReportData: !!reportData,
     hasOrderId: !!orderId,
     hasEquipmentId: !!equipmentId,
-    technicianId: req.session.technicianId,
-    tenantId: req.session.tenantId
+    hasPhotosInRequest: !!(reportData && reportData.photos),
+    photosCount: reportData?.photos?.length || 0
   });
   
   if (!req.session.technicianId) {
@@ -270,91 +305,55 @@ router.put('/:reportId', async (req, res) => {
     );
     
     if (checkResult.rows.length === 0) {
-      console.log('Rapport eksisterer ikke, oppretter ny...');
-      
-      // Valider påkrevde felt for ny rapport
-      if (!orderId || !equipmentId) {
-        console.error('Mangler orderId eller equipmentId for ny rapport');
-        return res.status(400).json({ error: 'Mangler orderId eller equipmentId' });
-      }
-      
-      // Splitt reportData til passende kolonner
-      const dbData = splitReportDataForDB(reportData);
-      
-      const insertResult = await pool.query(
-        `INSERT INTO service_reports 
-         (id, order_id, equipment_id, checklist_data, products_used, 
-          additional_work, photos, status) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
-         RETURNING *`,
-        [
-          reportId, 
-          orderId, 
-          equipmentId, 
-          JSON.stringify(dbData.checklist_data),
-          JSON.stringify(dbData.products_used),
-          JSON.stringify(dbData.additional_work),
-          dbData.photos || [],
-          'draft'
-        ]
-      );
-      
-      console.log('Rapport opprettet');
-      res.json(transformDbRowToFrontend(insertResult.rows[0]));
-    } else {
-      console.log('Oppdaterer eksisterende rapport...');
-      
-      // Splitt reportData til passende kolonner
-      const dbData = splitReportDataForDB(reportData);
-      
-      // Bestem status basert på kompletthet
-      let status = 'draft';
-      if (dbData.checklist_data.components.length > 0) {
-        // Sjekk om alle komponenter har sjekkliste data
-        const allComplete = dbData.checklist_data.components.every(comp => 
-          comp.checklist && Object.keys(comp.checklist).length > 0
-        );
-        if (allComplete) {
-          status = 'completed';
-        }
-      }
-      
-      const updateResult = await pool.query(
-        `UPDATE service_reports 
-         SET checklist_data = $1, 
-             products_used = $2,
-             additional_work = $3,
-             photos = $4,
-             status = $5
-         WHERE id = $6 
-         RETURNING *`,
-        [
-          JSON.stringify(dbData.checklist_data),
-          JSON.stringify(dbData.products_used),
-          JSON.stringify(dbData.additional_work),
-          dbData.photos || [],
-          status,
-          reportId
-        ]
-      );
-      
-      console.log('Rapport oppdatert');
-      res.json(transformDbRowToFrontend(updateResult.rows[0]));
+      return res.status(404).json({ error: 'Rapport ikke funnet' });
     }
+    
+    // Oppdater eksisterende rapport
+    console.log('Oppdaterer eksisterende rapport...');
+    
+    // KRITISK: Hent eksisterende photos array FØR oppdatering
+    const existingPhotos = checkResult.rows[0].photos || [];
+    console.log(`📸 Eksisterende bilder i DB: ${existingPhotos.length}`);
+    
+    // Splitt reportData til passende kolonner
+    const dbData = splitReportDataForDB(reportData);
+    
+    // FORBEDRET LOGIKK: Sjekk om photos faktisk er sendt med intensjon
+    if (!reportData.hasOwnProperty('photos')) {
+      dbData.photos = existingPhotos;
+      console.log('📸 Beholder eksisterende bilder - photos ikke inkludert i request');
+    } else if (reportData.photos && reportData.photos.length === 0 && existingPhotos.length > 0) {
+      // Hvis tom array er sendt OG det finnes eksisterende bilder, behold dem
+      dbData.photos = existingPhotos;
+      console.log('📸 Beholder eksisterende bilder - tom array sendt men bilder finnes');
+    }
+    
+    // Oppdater rapport MED separat photos-håndtering
+    const updateResult = await pool.query(
+      `UPDATE service_reports 
+       SET checklist_data = $1, 
+           products_used = $2, 
+           additional_work = $3,
+           photos = $4
+       WHERE id = $5 
+       RETURNING *`,
+      [
+        JSON.stringify(dbData.checklist_data),
+        JSON.stringify(dbData.products_used),
+        JSON.stringify(dbData.additional_work),
+        dbData.photos, // Bruker enten eksisterende eller nye bilder
+        reportId
+      ]
+    );
+    
+    console.log(`✅ Rapport oppdatert. Antall bilder: ${updateResult.rows[0].photos?.length || 0}`);
+    
+    res.json(transformDbRowToFrontend(updateResult.rows[0]));
   } catch (error) {
-    console.error('Database feil i PUT /servicereports/:reportId:', error);
-    console.error('Feildetaljer:', {
-      message: error.message,
-      code: error.code,
-      detail: error.detail
-    });
-    res.status(500).json({ 
-      error: 'Intern serverfeil',
-      details: error.message
-    });
+    console.error('Feil ved oppdatering av servicerapport:', error);
+    res.status(500).json({ error: 'Intern serverfeil', details: error.message });
   }
 });
-
 // Fullfør en servicerapport (ferdigstill)
 router.post('/:reportId/complete', async (req, res) => {
   const { reportId } = req.params;

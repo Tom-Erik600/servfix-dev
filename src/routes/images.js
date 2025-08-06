@@ -493,29 +493,107 @@ router.post('/general', upload.single('image'), async (req, res) => {
     
     // Upload to GCS
     const imageUrl = await uploadToGCS(req.file.buffer, filePath, req.file.mimetype);
+    console.log('✅ Bilde lastet opp til GCS:', imageUrl);
     
-    // Save to service_reports.photos array (NOT avvik_images table)
+    // KRITISK ENDRING: Mer robust array-håndtering for Cloud SQL
     const pool = await db.getTenantConnection(tenantId);
-    const result = await pool.query(
-      `UPDATE service_reports 
-       SET photos = array_append(COALESCE(photos, '{}'), $1)
-       WHERE id = $2 
-       RETURNING photos`,
-      [imageUrl, reportId]
-    );
     
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Service report ikke funnet' });
+    try {
+      // Metode 1: Prøv først med array_append (fungerer i de fleste tilfeller)
+      const result = await pool.query(
+        `UPDATE service_reports 
+         SET photos = array_append(COALESCE(photos, ARRAY[]::text[]), $1)
+         WHERE id = $2 
+         RETURNING photos`,
+        [imageUrl, reportId]
+      );
+      
+      if (result.rows.length === 0) {
+        throw new Error('Rapport ikke funnet');
+      }
+      
+      console.log(`✅ Bilde lagret med array_append. Total bilder: ${result.rows[0].photos.length}`);
+      
+      res.json({
+        success: true,
+        url: imageUrl,
+        message: 'Rapport-bilde lastet opp',
+        imageType: 'general',
+        totalPhotos: result.rows[0].photos.length
+      });
+      
+    } catch (arrayAppendError) {
+      console.warn('⚠️ array_append feilet, prøver alternativ metode:', arrayAppendError.message);
+      
+      // Metode 2: Hent eksisterende array og oppdater manuelt
+      try {
+        // Hent eksisterende photos
+        const selectResult = await pool.query(
+          'SELECT photos FROM service_reports WHERE id = $1',
+          [reportId]
+        );
+        
+        if (selectResult.rows.length === 0) {
+          return res.status(404).json({ error: 'Service report ikke funnet' });
+        }
+        
+        // Hent eksisterende bilder eller initialiser tom array
+        let existingPhotos = selectResult.rows[0].photos;
+        
+        // Håndter ulike array-formater
+        if (!existingPhotos) {
+          existingPhotos = [];
+        } else if (typeof existingPhotos === 'string') {
+          // Hvis det er en string, prøv å parse den
+          try {
+            existingPhotos = JSON.parse(existingPhotos);
+          } catch {
+            existingPhotos = [];
+          }
+        } else if (!Array.isArray(existingPhotos)) {
+          existingPhotos = [];
+        }
+        
+        console.log('📸 Eksisterende bilder:', existingPhotos.length);
+        
+        // Legg til nytt bilde
+        existingPhotos.push(imageUrl);
+        
+        // Oppdater med hele arrayet - bruk PostgreSQL array literal format
+        const updateResult = await pool.query(
+          `UPDATE service_reports 
+           SET photos = $1::text[]
+           WHERE id = $2 
+           RETURNING photos`,
+          [existingPhotos, reportId]
+        );
+        
+        console.log(`✅ Bilde lagret med manuell array-update. Total bilder: ${updateResult.rows[0].photos.length}`);
+        
+        res.json({
+          success: true,
+          url: imageUrl,
+          message: 'Rapport-bilde lastet opp',
+          imageType: 'general',
+          totalPhotos: updateResult.rows[0].photos.length
+        });
+        
+      } catch (manualUpdateError) {
+        console.error('❌ Begge update-metoder feilet:', manualUpdateError);
+        
+        // Som siste utvei, logg detaljert feilinfo
+        console.error('Stack:', manualUpdateError.stack);
+        
+        // Returner success siden bildet ble lastet opp til GCS
+        res.json({
+          success: true,
+          url: imageUrl,
+          message: 'Bilde lastet opp (database-oppdatering feilet)',
+          imageType: 'general',
+          warning: 'Database update failed but image uploaded to storage'
+        });
+      }
     }
-
-    console.log(`✅ Rapport-bilde lagret i service_reports.photos: ${imageUrl}`);
-
-    res.json({
-      success: true,
-      url: imageUrl,
-      message: 'Rapport-bilde lastet opp',
-      imageType: 'general'
-    });
 
   } catch (error) {
     console.error('Feil ved opplasting av rapport-bilde:', error);
@@ -582,7 +660,8 @@ router.post('/avvik', upload.single('image'), async (req, res) => {
           fileSize: req.file.size,
           imageType: 'avvik',
           filePath: filePath,
-          avvikId: avvikId
+          avvikId: avvikId,
+          componentIndex: req.body.componentIndex || null  // VIKTIG: Lagre component index
         }),
         req.session.technicianId
       ]
@@ -690,6 +769,51 @@ router.get('/general/:reportId', async (req, res) => {
   } catch (error) {
     console.error('Feil ved henting av rapport-bilder:', error);
     res.status(500).json({ error: 'Kunne ikke hente rapport-bilder' });
+  }
+});
+
+// POST /api/images/cleanup - Slett foreldreløse bilder
+router.post('/cleanup', async (req, res) => {
+  try {
+    const { imageUrls } = req.body;
+    const tenantId = req.session.tenantId || 'airtech';
+
+    if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
+      return res.status(400).json({ error: 'Mangler liste med bilde-URLer' });
+    }
+
+    console.log(`🗑️ Starter opprydding av ${imageUrls.length} bilder for tenant: ${tenantId}`);
+
+    const deletePromises = imageUrls.map(async (url) => {
+      try {
+        // Hent filsti fra URL
+        const urlPath = new URL(url).pathname;
+        const filePath = urlPath.substring(urlPath.indexOf(bucketName) + bucketName.length + 1);
+        
+        const decodedFilePath = decodeURIComponent(filePath);
+
+        console.log(`   - Sletter fil: ${decodedFilePath}`)
+
+        // Slett fra GCS
+        await bucket.file(decodedFilePath).delete();
+        return { url, status: 'deleted' };
+      } catch (error) {
+        console.error(`   - Kunne ikke slette ${url}:`, error.message);
+        return { url, status: 'error', reason: error.message };
+      }
+    });
+
+    const results = await Promise.all(deletePromises);
+
+    console.log('✅ Opprydding fullført');
+    res.json({ success: true, message: 'Bilder slettet', results });
+
+  } catch (error) {
+    console.error('Feil under opprydding av bilder:', error);
+    res.status(500).json({ 
+      error: 'Kunne ikke rydde opp i bilder',
+      details: error.message 
+    });
   }
 });
 
