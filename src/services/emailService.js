@@ -1,10 +1,18 @@
 const nodemailer = require('nodemailer');
 const tripletexService = require('./tripletexService');
 const path = require('path');
+const { Storage } = require('@google-cloud/storage');
 
 class EmailService {
   constructor() {
     this.transporter = null;
+    
+    // Google Cloud Storage setup
+    this.storage = new Storage({
+      projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
+      keyFilename: process.env.GOOGLE_CLOUD_KEY_FILE,
+    });
+    this.bucket = this.storage.bucket(process.env.GCS_BUCKET_NAME || 'servfix-files');
   }
 
   async init() {
@@ -51,7 +59,7 @@ class EmailService {
         throw new Error('Ingen e-postadresse funnet for kunde');
       }
       
-      // NYTT: Hent from-adresse fra lagrede innstillinger
+      // Hent from-adresse fra lagrede innstillinger
       let fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
       try {
         const settingsResponse = await fetch(`http://localhost:${process.env.PORT || 3000}/api/images/settings`);
@@ -64,13 +72,42 @@ class EmailService {
         console.warn('Could not load sender email from settings, using default:', error.message);
       }
       
-      // Sjekk om PDF finnes
-      const pdfPath = path.join(__dirname, '../servfix-files/tenants', tenantId, report.pdf_path);
+      // Hent PDF - eksakt samme tilnærming som admin/reports.js
+      let attachmentOptions;
+      
+      // Bygg GCS path og public URL (samme som admin/reports.js)
+      const bucketName = process.env.GCS_BUCKET_NAME || 'servfix-files';
+      const gcsPath = `tenants/${tenantId}/${report.pdf_path}`;
+      const publicUrl = `https://storage.googleapis.com/${bucketName}/${gcsPath}`;
+      
+      console.log(`📥 Fetching PDF for email attachment:`);
+      console.log(`  Report ID: ${reportId}`);
+      console.log(`  GCS Path: ${gcsPath}`);
+      console.log(`  Public URL: ${publicUrl}`);
       
       try {
-        await require('fs').promises.access(pdfPath);
-      } catch (error) {
-        throw new Error('PDF-fil ikke funnet');
+        // Prøv å laste ned PDF fra GCS
+        const file = this.bucket.file(gcsPath);
+        const [pdfBuffer] = await file.download();
+        
+        console.log(`✅ PDF downloaded from GCS (${Math.round(pdfBuffer.length / 1024)}KB)`);
+        
+        // Bruk buffer for attachment
+        attachmentOptions = {
+          filename: `servicerapport_${reportId}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        };
+        
+      } catch (downloadError) {
+        console.warn('⚠️ Could not download PDF from GCS, using public URL:', downloadError.message);
+        
+        // Fallback: Bruk public URL direkte
+        // Nodemailer kan hente fra URL hvis bucket er public
+        attachmentOptions = {
+          filename: `servicerapport_${reportId}.pdf`,
+          path: publicUrl
+        };
       }
       
       // Send e-post
@@ -85,14 +122,17 @@ class EmailService {
           <p>Servicedato: ${new Date(report.scheduled_date).toLocaleDateString('no-NO')}</p>
           <p>Med vennlig hilsen,<br>Air-Tech AS</p>
         `,
-        attachments: [{
-          filename: `servicerapport_${reportId}.pdf`,
-          path: pdfPath
-        }]
+        attachments: [attachmentOptions]
       };
       
       console.log(`📧 Sending email from ${fromEmail} to ${customerEmail}`);
       const result = await this.transporter.sendMail(mailOptions);
+      
+      // Oppdater rapport status når e-post er sendt
+      await pool.query(
+        'UPDATE service_reports SET sent_til_fakturering = true, pdf_sent_timestamp = NOW() WHERE id = $1',
+        [reportId]
+      );
       
       return {
         success: true,
