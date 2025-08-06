@@ -42,7 +42,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { customerId, customerName, description, serviceType, technicianId, scheduledDate } = req.body;
+    const { customerId, customerName, description, serviceType, technicianId, scheduledDate, customerData } = req.body;
     
     // Bruk RIKTIG ID-format
     const orderId = `PROJ-${new Date().getFullYear()}-${Date.now()}`;
@@ -54,13 +54,20 @@ router.post('/', async (req, res) => {
 
     const pool = await db.getTenantConnection(req.adminTenantId);
     
-    // Fjern order_number fra INSERT
+    // Opprett customer_data objekt hvis det ikke er sendt
+    const customer_data = customerData || {
+      id: customerId,
+      name: customerName,
+      snapshot_date: new Date().toISOString()
+    };
+    
+    // Oppdatert INSERT med customer_data kolonne
     const result = await pool.query(
       `INSERT INTO orders (
-        id, customer_id, customer_name, description, 
+        id, customer_id, customer_name, customer_data, description, 
         service_type, technician_id, scheduled_date, status
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [orderId, customerId, customerName, description, 
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [orderId, customerId, customerName, JSON.stringify(customer_data), description, 
        serviceType || 'Generell service', technicianId, 
        scheduledDate, technicianId ? 'scheduled' : 'pending']
     );

@@ -266,13 +266,20 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Load the new unified PDF generator
-const UnifiedPDFGenerator = require('../services/unifiedPdfGenerator');
+// ENHANCED: Load all available PDF generators
+const ServiceReportPDFGenerator = require('../services/pdfGenerator'); // Original
+const PDFGeneratorWithSettings = require('../services/pdfGeneratorWithSettings'); // With logo support
 
-// Ferdigstill ordre med ny PDF-generering
-// Ferdigstill ordre med ny PDF-generering
-// I src/routes/orders.js - Erstatt hele POST /:orderId/complete endpointet:
+let DynamicPDFGenerator;
+try {
+  DynamicPDFGenerator = require('../services/dynamicPdfGenerator'); // Dynamic templates
+  console.log('✅ Dynamic PDF Generator loaded');
+} catch (error) {
+  console.log('⚠️ Dynamic PDF Generator not available:', error.message);
+  DynamicPDFGenerator = null;
+}
 
+// ENHANCED: Ferdigstill ordre med smart PDF-generering
 router.post('/:orderId/complete', async (req, res) => {
   const { orderId } = req.params;
   const tenantId = req.tenantId || req.session.tenantId;
@@ -281,18 +288,13 @@ router.post('/:orderId/complete', async (req, res) => {
     return res.status(401).json({ error: 'Ikke autentisert' });
   }
 
-  let pool;
-  let serviceReportsResult;
-  const generatedPDFs = [];
-  let pdfGenerator = null;
-
   try {
-    pool = await db.getTenantConnection(tenantId);
+    const pool = await db.getTenantConnection(tenantId);
     
     // Start transaksjon
     await pool.query('BEGIN');
     
-    console.log(`🚀 Ferdigstiller ordre ${orderId}...`);
+    console.log(`🚀 Ferdigstiller ordre ${orderId} med enhanced PDF-generering...`);
     
     // Oppdater ordre status til completed
     await pool.query(
@@ -301,7 +303,7 @@ router.post('/:orderId/complete', async (req, res) => {
     );
    
     // Hent alle service_reports for denne ordren
-    serviceReportsResult = await pool.query(
+    const serviceReportsResult = await pool.query(
       `SELECT sr.*, e.type as equipment_type, e.name as equipment_name
        FROM service_reports sr
        JOIN equipment e ON sr.equipment_id = e.id
@@ -311,85 +313,125 @@ router.post('/:orderId/complete', async (req, res) => {
     
     console.log(`📋 Fant ${serviceReportsResult.rows.length} rapporter å generere PDF-er for`);
     
-    // Sjekk om det finnes rapporter å generere
-    if (serviceReportsResult.rows.length > 0) {
+    // ENHANCED: Smart PDF generator selection
+    const generatedPDFs = [];
+    let pdfGenerator;
+    let generatorType = 'original';
+    
+    // Priority: 1. Settings-based (with logo), 2. Dynamic, 3. Original
+    try {
+      pdfGenerator = new PDFGeneratorWithSettings();
+      await pdfGenerator.init(); // Test initialization
+      generatorType = 'with-settings';
+      console.log('📄 Using enhanced PDF generator with logo and settings support');
+    } catch (settingsError) {
+      console.warn('⚠️ Settings PDF generator failed, trying dynamic:', settingsError.message);
+      
+      if (DynamicPDFGenerator) {
+        try {
+          pdfGenerator = new DynamicPDFGenerator();
+          await pdfGenerator.init();
+          generatorType = 'dynamic';
+          console.log('📄 Using dynamic PDF generator with templates');
+        } catch (dynamicError) {
+          console.warn('⚠️ Dynamic PDF generator failed, using original:', dynamicError.message);
+          pdfGenerator = new ServiceReportPDFGenerator();
+          generatorType = 'original';
+        }
+      } else {
+        pdfGenerator = new ServiceReportPDFGenerator();
+        generatorType = 'original';
+      }
+    }
+    
+    console.log(`📄 Selected PDF generator: ${generatorType}`);
+    
+    // Generer PDF-er for alle rapporter
+    for (const report of serviceReportsResult.rows) {
       try {
-        // Initialiser PDF generator
-        pdfGenerator = new UnifiedPDFGenerator();
-        await pdfGenerator.init();
+        console.log(`📄 Genererer ${generatorType} PDF for rapport ${report.id} (${report.equipment_type})...`);
         
-        // Generer PDF-er for alle rapporter
-        for (const report of serviceReportsResult.rows) {
+        const pdfPath = await pdfGenerator.generateReport(report.id, tenantId);
+        
+        generatedPDFs.push({
+          reportId: report.id,
+          equipmentType: report.equipment_type,
+          equipmentName: report.equipment_name,
+          pdfPath: pdfPath,
+          generatorType: generatorType,
+          hasLogo: generatorType === 'with-settings'
+        });
+        
+        console.log(`✅ ${generatorType} PDF generert: ${pdfPath}`);
+        
+      } catch (pdfError) {
+        console.error(`❌ ${generatorType} PDF-generering feilet for rapport ${report.id}:`, pdfError);
+        
+        // Fallback chain: settings -> dynamic -> original
+        if (generatorType !== 'original') {
           try {
-            console.log(`📄 Genererer PDF for rapport ${report.id} (${report.equipment_type})...`);
-            
-            const pdfPath = await pdfGenerator.generateReport(report.id, tenantId);
+            console.log(`🔄 Prøver original PDF-generator som fallback...`);
+            const fallbackGenerator = new ServiceReportPDFGenerator();
+            const pdfPath = await fallbackGenerator.generateReport(report.id, tenantId);
+            await fallbackGenerator.close();
             
             generatedPDFs.push({
               reportId: report.id,
               equipmentType: report.equipment_type,
               equipmentName: report.equipment_name,
-              pdfPath: pdfPath
+              pdfPath: pdfPath,
+              generatorType: 'original',
+              hasLogo: false,
+              fallback: true
             });
             
-            console.log(`✅ PDF generert: ${pdfPath}`);
-            
-          } catch (pdfError) {
-            console.error(`❌ PDF-generering feilet for rapport ${report.id}:`, pdfError);
-            // Fortsett med andre rapporter selv om én feiler
-          }
-        }
-        
-      } catch (pdfInitError) {
-        console.error('❌ Kunne ikke initialisere PDF-generator:', pdfInitError);
-        // Fortsett uten PDF-generering
-      } finally {
-        // Lukk PDF generator hvis den ble initialisert
-        if (pdfGenerator) {
-          try {
-            await pdfGenerator.close();
-          } catch (closeError) {
-            console.error('Feil ved lukking av PDF-generator:', closeError);
+            console.log(`✅ Fallback PDF generert: ${pdfPath}`);
+          } catch (fallbackError) {
+            console.error(`❌ Også fallback feilet for rapport ${report.id}:`, fallbackError);
+            // Fortsett med andre rapporter
           }
         }
       }
     }
+    
+    await pdfGenerator.close();
     
     // Commit transaksjon
     await pool.query('COMMIT');
     
-    console.log(`✅ Ordre ${orderId} ferdigstilt med ${generatedPDFs.length} PDF-er generert`);
+    const successCount = generatedPDFs.length;
+    const withLogoCount = generatedPDFs.filter(p => p.hasLogo).length;
+    const dynamicCount = generatedPDFs.filter(p => p.generatorType === 'dynamic').length;
     
-    // Send alltid response tilbake
+    console.log(`✅ Ordre ${orderId} ferdigstilt med ${successCount} PDF-rapporter:`);
+    console.log(`   - ${withLogoCount} med logo og bedriftsinfo`);
+    console.log(`   - ${dynamicCount} med dynamiske templates`);
+    console.log(`   - ${generatedPDFs.filter(p => p.fallback).length} fallback`);
+    
     res.json({
       success: true,
-      orderId: orderId,
-      message: generatedPDFs.length > 0 
-        ? `Ordre ferdigstilt med ${generatedPDFs.length} servicerapporter`
-        : 'Ordre ferdigstilt (PDF-generering feilet eller ingen rapporter)',
+      message: 'Ordre ferdigstilt med enhanced PDF-rapporter',
       generatedPDFs: generatedPDFs,
-      warning: generatedPDFs.length === 0 && serviceReportsResult.rows.length > 0
-        ? 'PDF-generering feilet, men ordre er ferdigstilt'
-        : null
+      stats: {
+        total: successCount,
+        withLogo: withLogoCount,
+        dynamic: dynamicCount,
+        fallback: generatedPDFs.filter(p => p.fallback).length,
+        generatorUsed: generatorType
+      }
     });
     
   } catch (error) {
-    console.error('❌ Feil ved ferdigstilling av ordre:', error);
-    
-    // Rollback hvis mulig
-    if (pool) {
-      try {
-        await pool.query('ROLLBACK');
-      } catch (rollbackError) {
-        console.error('Feil ved rollback:', rollbackError);
-      }
+    // Rollback ved feil
+    try {
+      const pool = await db.getTenantConnection(tenantId);
+      await pool.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Rollback feilet:', rollbackError);
     }
     
-    // Send alltid feilresponse
-    res.status(500).json({ 
-      error: 'Kunne ikke ferdigstille ordre',
-      details: error.message 
-    });
+    console.error('Feil ved ferdigstilling av ordre:', error);
+    res.status(500).json({ error: 'Kunne ikke ferdigstille ordre' });
   }
 });
 
@@ -430,36 +472,73 @@ router.get('/:id/reports', async (req, res) => {
   }
 });
 
-// Oppdatert preview endpoint
-router.get('/service-report/:reportId/preview', async (req, res) => {
-  const { reportId } = req.params;
-  const tenantId = req.tenantId || req.session.tenantId;
-  
-  if (!req.session.technicianId) {
-    return res.status(401).json({ error: 'Ikke autentisert' });
-  }
-  
+// Preview PDF med logo support
+router.get('/:id/pdf-preview/:reportId', async (req, res) => {
   try {
-    console.log(`📄 Genererer PDF-forhåndsvisning for rapport ${reportId}...`);
+    const { reportId } = req.params;
+    const tenantId = req.session.tenantId;
     
-    const pdfGenerator = new UnifiedPDFGenerator();
+    console.log(`📄 Generating enhanced PDF preview for report ${reportId}`);
     
-    // Generate PDF in memory (don't save to disk)
-    await pdfGenerator.init();
-    const reportData = await pdfGenerator.fetchReportData(reportId, tenantId);
-    const companySettings = await pdfGenerator.loadCompanySettings(tenantId);
-    const html = await pdfGenerator.generateHTML(reportData, companySettings);
-    const pdfBuffer = await pdfGenerator.generatePDF(html);
-    await pdfGenerator.close();
+    // Prøv enhanced generator med logo først
+    let pdfBuffer;
+    let templateUsed = 'original';
+    
+    try {
+      const enhancedGenerator = new PDFGeneratorWithSettings();
+      await enhancedGenerator.init();
+      
+      pdfBuffer = await enhancedGenerator.generateReport(reportId, tenantId);
+      templateUsed = 'enhanced-with-logo';
+      
+      await enhancedGenerator.close();
+      
+    } catch (enhancedError) {
+      console.warn('Enhanced preview failed, trying dynamic:', enhancedError.message);
+      
+      if (DynamicPDFGenerator) {
+        try {
+          const dynamicGenerator = new DynamicPDFGenerator();
+          await dynamicGenerator.init();
+          
+          const reportData = await dynamicGenerator.fetchReportData(reportId, tenantId);
+          const template = dynamicGenerator.getTemplateForEquipment(reportData.equipment_type, reportData.equipment_name);
+          const design = dynamicGenerator.getTemplateDesign(template);
+          
+          const html = await dynamicGenerator.generateDynamicHTML(reportData, template, design);
+          pdfBuffer = await dynamicGenerator.generatePDF(html);
+          
+          await dynamicGenerator.close();
+          templateUsed = template.name;
+          
+        } catch (dynamicError) {
+          console.warn('Dynamic preview failed, using original:', dynamicError.message);
+          
+          // Final fallback
+          const originalGenerator = new ServiceReportPDFGenerator();
+          const reportData = await originalGenerator.fetchReportData(reportId, tenantId);
+          const html = await originalGenerator.generateHTML(reportData);
+          pdfBuffer = await originalGenerator.generatePDF(html);
+          await originalGenerator.close();
+        }
+      } else {
+        // Kun original tilgjengelig
+        const originalGenerator = new ServiceReportPDFGenerator();
+        const reportData = await originalGenerator.fetchReportData(reportId, tenantId);
+        const html = await originalGenerator.generateHTML(reportData);
+        pdfBuffer = await originalGenerator.generatePDF(html);
+        await originalGenerator.close();
+      }
+    }
     
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="preview_${reportId}.pdf"`);
     res.send(pdfBuffer);
     
-    console.log(`✅ PDF forhåndsvisning generert for rapport ${reportId}`);
+    console.log(`✅ Enhanced PDF preview generated for report ${reportId} using: ${templateUsed}`);
     
   } catch (error) {
-    console.error('Feil ved generering av PDF-forhåndsvisning:', error);
+    console.error('Error generating enhanced PDF preview:', error);
     res.status(500).json({ 
       error: 'Kunne ikke generere PDF-forhåndsvisning',
       details: error.message 

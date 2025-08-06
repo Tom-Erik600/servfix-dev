@@ -601,6 +601,7 @@ function generateReportId() {
 }
 
 // Main initialization function
+// Main initialization function
 async function initializePage() {
     setLoading(true);
     
@@ -616,15 +617,23 @@ async function initializePage() {
         console.log('Initializing with:', { orderId: state.orderId, equipmentId: state.equipmentId });
         
         // Load all necessary data in parallel
-        const [order, equipment, technician] = await Promise.all([
-            loadOrder(state.orderId),
+        const [equipment, technician] = await Promise.all([
             loadEquipmentData(state.equipmentId),
             loadTechnician()
         ]);
         
-        state.order = order;
         state.equipment = equipment;
         state.technician = technician;
+        
+        // For service.js, we don't need full order data
+        // Just set the minimum needed from what we have
+        state.order = {
+            id: state.orderId,
+            orderNumber: state.orderId,
+            customer: {
+                name: 'Laster...' // Will be loaded from equipment endpoint if needed
+            }
+        };
         
         // Load or create service report
         await loadServiceReport();
@@ -637,24 +646,10 @@ async function initializePage() {
         
     } catch (error) {
         console.error('Initialization error:', error);
-        showToast(`Feil ved lasting: ${error.message}`, 'error');
-    } finally {
+        showToast(error.message || 'Kunne ikke laste siden', 'error');
         setLoading(false);
     }
 }
-
-async function loadOrder(orderId) {
-    try {
-        const response = await api.get(`/orders/${orderId}`);
-        console.log('Order loaded:', response);
-        // Handle both direct order response and wrapped response
-        const order = response.order || response;
-        return order;
-    } catch (error) {
-        throw new Error(`Kunne ikke laste ordre: ${error.message}`);
-    }
-}
-
 async function loadTechnician() {
     try {
         const authData = await api.get('/auth/me');
@@ -3775,5 +3770,3 @@ window.addEventListener('beforeunload', function() {
         clearInterval(autoSaveInterval);
     }
 });
-// Initialize the page when the DOM is fully loaded
-document.addEventListener('DOMContentLoaded', initializePage);

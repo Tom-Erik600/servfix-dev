@@ -98,7 +98,7 @@ router.get('/:reportId/pdf', async (req, res) => {
   const { reportId } = req.params;
   
   try {
-    console.log(`Serving PDF for report: ${reportId}`);
+    console.log(`Redirecting to PDF for report: ${reportId}`);
     
     const pool = await db.getTenantConnection(req.adminTenantId);
     
@@ -118,30 +118,18 @@ router.get('/:reportId/pdf', async (req, res) => {
       return res.status(404).json({ error: 'PDF ikke generert for denne rapporten' });
     }
     
-    // Bygg full path til PDF-fil
-    const fullPdfPath = path.join(__dirname, '../../servfix-files/tenants', req.adminTenantId, report.pdf_path);
+    // Bygg public URL for GCS
+    const bucketName = process.env.GCS_BUCKET_NAME || 'servfix-files';
+    const gcsPath = `tenants/${req.adminTenantId}/${report.pdf_path}`;
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${gcsPath}`;
     
-    console.log(`Looking for PDF at: ${fullPdfPath}`);
+    console.log(`✅ Redirecting to GCS URL: ${publicUrl}`);
     
-    // Sjekk om filen eksisterer
-    try {
-      await fs.access(fullPdfPath);
-    } catch (fileError) {
-      console.error(`PDF file not found: ${fullPdfPath}`);
-      return res.status(404).json({ error: 'PDF-fil ikke funnet på server' });
-    }
-    
-    // Les og send PDF-fil
-    const pdfBuffer = await fs.readFile(fullPdfPath);
-    
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="servicerapport_${reportId}.pdf"`);
-    res.send(pdfBuffer);
-    
-    console.log(`✅ PDF served successfully for report ${reportId}`);
+    // Redirect til public URL
+    res.redirect(publicUrl);
     
   } catch (error) {
-    console.error('Error serving PDF:', error);
+    console.error('Error redirecting to PDF:', error);
     res.status(500).json({ 
       error: 'Kunne ikke hente PDF',
       details: error.message 

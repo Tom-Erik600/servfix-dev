@@ -57,24 +57,40 @@ async function initializePage() {
             order: data.order,
             customerId: data.order?.customer_id,
             customer: data.customer,
-            equipment: data.equipment
+            equipment: data.equipment,
+            equipmentCount: data.equipment?.length
         });
 
-        // Oppdater pageState med den nye, samlede dataen
-        pageState = {
-            order: data.order,
-            customer: data.customer,
-            equipment: data.equipment || [],
-            technician: data.technician,
-            quotes: data.quotes || [] // Sikrer at quotes alltid er et array
-        };
-
-        // Transformer equipment data for å sikre serviceStatus er tilgjengelig
-        pageState.equipment = pageState.equipment.map(eq => ({
+        // Oppdater pageState DIREKTE uten å nullstille først
+        pageState.order = data.order;
+        pageState.customer = data.customer;
+        pageState.technician = data.technician;
+        pageState.quotes = data.quotes || [];
+        
+        // VIKTIG: Overskriver equipment arrayet helt for å unngå duplikater
+        pageState.equipment = (data.equipment || []).map(eq => ({
             ...eq,
-            serviceStatus: eq.serviceStatus || 'not_started', // Fjern eq.data?.serviceStatus
+            serviceStatus: eq.serviceStatus || eq.serviceReportStatus || 'not_started',
             internalNotes: eq.internalNotes || eq.data?.internalNotes || ''
         }));
+
+        // Sjekk for duplikater og fjern dem (backup sjekk)
+        const uniqueEquipment = [];
+        const seenIds = new Set();
+        
+        for (const eq of pageState.equipment) {
+            if (!seenIds.has(eq.id)) {
+                seenIds.add(eq.id);
+                uniqueEquipment.push(eq);
+            }
+        }
+        
+        pageState.equipment = uniqueEquipment;
+        
+        console.log('Equipment after update:', {
+            count: pageState.equipment.length,
+            ids: pageState.equipment.map(eq => eq.id)
+        });
 
         // Verifiser at customerId faktisk er satt
         if (!pageState.order.customer_id) {
@@ -283,16 +299,18 @@ async function handleGlobalClick(e) {
     }
 }
 
-async function completeOrder() {
-    // Dobbeltsjekk at alle anlegg er ferdigstilt
-    const hasEquipment = pageState.equipment.length > 0;
-    const allCompleted = hasEquipment && pageState.equipment.every(eq => {
-        const status = eq.serviceStatus || eq.data?.serviceStatus || 'not_started';
-        return status === 'completed';
-    });
+// I public/app/assets/js/orders.js - Erstatt hele completeOrder funksjonen:
 
-    if (!allCompleted) {
-        showToast('Alle anlegg må være ferdigstilt før ordre kan fullføres.', 'error');
+async function completeOrder() {
+    console.log('=== COMPLETE ORDER START ===');
+    
+    // Sjekk at alle anlegg er ferdigstilt
+    const incompleteEquipment = pageState.equipment.filter(eq => 
+        eq.serviceStatus !== 'completed' && eq.serviceStatus !== 'omitted'
+    );
+    
+    if (incompleteEquipment.length > 0) {
+        showToast('Alle anlegg må være ferdigstilt før ordren kan fullføres!', 'error');
         return;
     }
 
@@ -323,16 +341,16 @@ async function completeOrder() {
         
         // Vis suksess-melding med info om genererte PDF-er
         let message = 'Ordre er fullført!';
+        
         if (result.generatedPDFs && result.generatedPDFs.length > 0) {
-            message += `\n\n${result.generatedPDFs.length} servicerapporter ble generert:`;
-            result.generatedPDFs.forEach((pdf, index) => {
-                message += `\n• ${pdf.equipmentType} (${pdf.reportId.slice(-6)})`;
-            });
+            message += ` ${result.generatedPDFs.length} PDF-rapporter generert.`;
+        } else if (result.warning) {
+            message += ` (${result.warning})`;
         }
         
-        showToast(message, 'success');
+        showToast(message, result.warning ? 'warning' : 'success');
         
-        // Oppdater knapp-tekst og deaktiver knappen
+        // Oppdater knapp-tekst og deaktiver knappen direkte
         const completeBtn = document.querySelector('[data-action="complete-order"]');
         if (completeBtn) {
             completeBtn.textContent = 'Ordre er fullført ✓';
@@ -341,16 +359,19 @@ async function completeOrder() {
             completeBtn.style.opacity = '0.7';
         }
         
-        // Vent litt før navigering slik at bruker ser suksess-meldingen
+        // Oppdater ordre status lokalt
+        pageState.order.status = 'completed';
+        
+        // Naviger til dashboard etter kort forsinkelse
         setTimeout(() => {
             window.location.href = 'index.html';
-        }, 3000);
+        }, 2000);
         
     } catch (error) {
-        console.error('Feil ved ferdigstillelse av ordre:', error);
-        showToast(`Kunne ikke ferdigstille ordre: ${error.message}`, 'error');
+        console.error('Feil ved ferdigstilling av ordre:', error);
+        showToast(error.message || 'Kunne ikke ferdigstille ordre. Prøv igjen.', 'error');
     } finally {
-        setLoading(false);  
+        setLoading(false);
     }
 }
 
@@ -418,7 +439,15 @@ async function deactivateEquipment(cardElement) {
 }
 
 function navigateToServicePage(equipmentId) {
-    window.location.href = `service.html?orderId=${pageState.order.id}&equipmentId=${equipmentId}`;
+    // Hent orderId fra URL hvis pageState.order ikke er satt
+    const orderId = pageState.order?.id || new URLSearchParams(window.location.search).get('id');
+    
+    if (!orderId) {
+        showToast('Mangler ordre-ID', 'error');
+        return;
+    }
+    
+    window.location.href = `service.html?orderId=${orderId}&equipmentId=${equipmentId}`;
 }
 
 async function handleCreateQuote() {
@@ -691,7 +720,9 @@ async function handleSaveEquipment(event) {
     event.preventDefault(); 
     setLoading(true);
     
-    const customerId = pageState.order.customer_id || pageState.order.customerId;
+    // Hent orderId fra URL hvis pageState.order ikke er satt
+    const orderId = pageState.order?.id || new URLSearchParams(window.location.search).get('id');
+    const customerId = pageState.order?.customer_id || pageState.order?.customerId || pageState.customer?.id;
     
     if (!customerId) {
         showToast('Feil: Mangler kunde-ID for denne ordren', 'error');
@@ -707,17 +738,17 @@ async function handleSaveEquipment(event) {
         status: 'active'
     };
     
-    console.log('Sender equipment data:', newEquipmentData); // Debug logging
+    console.log('Sender equipment data:', newEquipmentData);
+    console.log('Current orderId:', orderId); // Debug logging
     
     try {
         const response = await fetch('/api/equipment', { 
             method: 'POST', 
             headers: { 
-                'Content-Type': 'application/json',
-                'X-Tenant-Id': 'airtech' // Legg til hvis nødvendig
+                'Content-Type': 'application/json'
             }, 
             body: JSON.stringify(newEquipmentData),
-            credentials: 'include' // Sikrer at cookies sendes med
+            credentials: 'include'
         });
         
         if (!response.ok) {
@@ -727,7 +758,11 @@ async function handleSaveEquipment(event) {
         }
         
         const savedEquipment = await response.json();
-        console.log('Equipment saved:', savedEquipment); // Debug logging
+        console.log('Equipment saved:', savedEquipment);
+        
+        // Sørg for at savedEquipment har riktig format
+        savedEquipment.serviceStatus = savedEquipment.serviceStatus || 'not_started';
+        savedEquipment.internalNotes = savedEquipment.internalNotes || savedEquipment.data?.internalNotes || '';
         
         pageState.equipment.push(savedEquipment);
         renderEquipmentList();

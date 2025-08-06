@@ -274,26 +274,39 @@ document.addEventListener('DOMContentLoaded', async () => {
         modalSaveBtn.textContent = 'Oppretter...';
 
         try {
-            // Opprett nytt oppdrag
-            console.log('Sending data to backend:', {
-                customerId: targetCustomer.customerId,
-                customerName: targetCustomer.customerName, // Added for debugging
-                description: `Serviceoppdrag for ${targetCustomer.customerName}`,
-                serviceType: 'Generell service',
-                technicianId: targetCustomer.technicianId,
-                scheduledDate: scheduledDate,
-                status: 'scheduled',
-            });
-
+            // Finn komplett kundedata
+            const customer = allCustomers.find(c => c.id == targetCustomer.customerId);
+            
+            if (!customer) {
+                throw new Error('Kunne ikke finne kundedata');
+            }
+            
+            // Lag customer_data snapshot
+            const customerData = {
+                id: customer.id,
+                name: customer.name,
+                customerNumber: customer.customerNumber,
+                organizationNumber: customer.organizationNumber,
+                contact: customer.contact,
+                email: customer.email,
+                phone: customer.phone,
+                physicalAddress: customer.physicalAddress,
+                postalAddress: customer.postalAddress,
+                invoiceEmail: customer.invoiceEmail,
+                snapshot_date: new Date().toISOString()
+            };
+            
+            // Opprett nytt oppdrag med komplett kundedata
             const response = await fetch('/api/admin/orders', {
                 method: 'POST',
-                credentials: 'include',  // Legg til denne linjen
+                credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
                     customerId: targetCustomer.customerId,
-                    customerName: targetCustomer.customerName, // Ensure customerName is sent
+                    customerName: targetCustomer.customerName,
+                    customerData: customerData, // Send komplett kundedata
                     description: `Serviceoppdrag for ${targetCustomer.customerName}`,
                     serviceType: 'Generell service',
                     technicianId: targetCustomer.technicianId,
@@ -305,17 +318,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (response.ok) {
                 closeModal();
                 showToast('Serviceoppdrag opprettet og planlagt!', 'success');
-                await fetchData(); // Oppdater visning
+                await fetchData(); // Refresh data
             } else {
                 const error = await response.json();
                 throw new Error(error.error || 'Kunne ikke opprette oppdrag');
             }
         } catch (error) {
             console.error('Error creating order:', error);
-            showToast(error.message, 'error');
+            showToast(error.message || 'Feil ved opprettelse av oppdrag', 'error');
         } finally {
             modalSaveBtn.disabled = false;
-            modalSaveBtn.textContent = 'Lagre Oppdrag';
+            modalSaveBtn.textContent = 'Opprett oppdrag';
         }
     });
 
