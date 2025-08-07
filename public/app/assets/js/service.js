@@ -427,6 +427,17 @@ document.addEventListener('click', function(e) {
         if (photoWrapper) {
             // Sjekk om wrapper er inne i avvik-container
             const avvikContainer = photoWrapper.closest('.avvik-container');
+            const byttetContainer = photoWrapper.closest('.byttet-container');
+            if (byttetContainer) {
+                const byttetId = byttetContainer.id; // e.g., "byttet-item3"
+                photoContext = {
+                    type: 'byttet',
+                    container: byttetContainer,
+                    byttetId: byttetId,
+                    itemId: byttetId.replace('byttet-', '')
+                };
+                console.log('📷 Byttet photo context:', photoContext);
+            }
             if (avvikContainer) {
                 const avvikId = avvikContainer.id; // e.g., "avvik-item3"
                 photoContext = {
@@ -1340,8 +1351,8 @@ function createOkByttetAvvikItemHTML(item) {
         <div class="avvik-container" id="avvik-${item.id}">
             <textarea placeholder="Beskriv avvik..."></textarea>
             <div class="photo-dropdown-wrapper" style="position: relative; display: inline-block;">
-                <button type="button" class="photo-btn" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer;">
-                    <i data-lucide="camera"></i>Ta bilde<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
+                <button type="button" class="photo-btn" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer;">
+                    <i data-lucide="camera"></i>Ta bilde av avvik<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
                 </button>
                 <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
                     <button class="photo-option" data-action="camera" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
@@ -1351,7 +1362,17 @@ function createOkByttetAvvikItemHTML(item) {
             <div id="avvik-images-container-${item.id}" class="avvik-images-container"></div>
         </div>
         <div class="byttet-container" id="byttet-${item.id}">
-            <textarea placeholder="Kommentar (f.eks. dato for bytte, type filter, etc.)..."></textarea>
+            <textarea placeholder="Kommentar om filterbytte (f.eks. dato, filtertype, etc.)..."></textarea>
+            <div class="photo-dropdown-wrapper" style="position: relative; display: inline-block;">
+                <button type="button" class="photo-btn" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%); color: #212529; border: none; border-radius: 6px; font-size: 13px; cursor: pointer;">
+                    <i data-lucide="camera"></i>Ta bilde av bytte<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
+                </button>
+                <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
+                    <button class="photo-option" data-action="camera" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
+                    <button class="photo-option" data-action="upload" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
+                </div>
+            </div>
+            <div id="byttet-images-container-${item.id}" class="byttet-images-container"></div>
         </div>
     `;
 }
@@ -2098,23 +2119,32 @@ function handleStatusClick(e) {
         button.classList.add('active');
     }
     
-    // Handle avvik containers - VIKTIG DEL
+    // Handle both avvik and byttet containers
     const avvikContainer = document.getElementById(`avvik-${itemId}`);
+    const byttetContainer = document.getElementById(`byttet-${itemId}`);
     
+    // Hide both containers first
     if (avvikContainer) {
-        const shouldShow = button.dataset.status === 'avvik' && button.classList.contains('active');
-        avvikContainer.classList.toggle('show', shouldShow);
-        
-        // LEGG TIL EKSPLISITT DISPLAY STYLE
-        if (shouldShow) {
+        avvikContainer.classList.remove('show');
+        avvikContainer.style.display = 'none';
+    }
+    if (byttetContainer) {
+        byttetContainer.classList.remove('show');
+        byttetContainer.style.display = 'none';
+    }
+    
+    // Show correct container based on selected status
+    if (button.classList.contains('active')) {
+        if (button.dataset.status === 'avvik' && avvikContainer) {
+            avvikContainer.classList.add('show');
             avvikContainer.style.display = 'block';
-            console.log(`✅ Avvik container ${itemId} is now visible`);
-        } else {
-            avvikContainer.style.display = 'none';
+        } else if (button.dataset.status === 'byttet' && byttetContainer) {
+            byttetContainer.classList.add('show');
+            byttetContainer.style.display = 'block';
         }
     }
     
-  
+    console.log(`Status ${button.dataset.status} for item ${itemId} is now ${button.classList.contains('active') ? 'active' : 'inactive'}`);
 }
 
 // Debug: Sjekk status på alle avvik-containers
@@ -2527,20 +2557,17 @@ function collectChecklistData(items) {
         switch (item.inputType) {
             case 'ok_avvik':
             case 'ok_byttet_avvik':
-                const activeBtn = element.querySelector('.status-btn.active');
+                const activeBtn = element?.querySelector('.status-btn.active');
                 if (activeBtn) {
-                    value = { status: activeBtn.dataset.status };
+                    const status = activeBtn.dataset.status;
+                    value = { status };
                     
-                    if (activeBtn.dataset.status === 'avvik') {
-                        const avvikContainer = document.getElementById(`avvik-${item.id}`);
-                        const comment = avvikContainer?.querySelector('textarea')?.value;
-                        if (comment) value.comment = comment;
-                    }
-                    
-                    if (activeBtn.dataset.status === 'byttet') {
-                        const byttetContainer = document.getElementById(`byttet-${item.id}`);
-                        const comment = byttetContainer?.querySelector('textarea')?.value;
-                        if (comment) value.comment = comment;
+                    if (status === 'avvik') {
+                        const avvikTextarea = document.querySelector(`#avvik-${item.id} textarea`);
+                        value.comment = avvikTextarea?.value || '';
+                    } else if (status === 'byttet') {
+                        const byttetTextarea = document.querySelector(`#byttet-${item.id} textarea`);
+                        value.comment = byttetTextarea?.value || '';
                     }
                 }
                 break;
