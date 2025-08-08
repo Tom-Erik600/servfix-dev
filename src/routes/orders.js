@@ -269,10 +269,8 @@ router.put('/:id', async (req, res) => {
 // Load the new unified PDF generator
 const UnifiedPDFGenerator = require('../services/unifiedPdfGenerator');
 
-// Ferdigstill ordre med ny PDF-generering
-// Ferdigstill ordre med ny PDF-generering
-// I src/routes/orders.js - Erstatt hele POST /:orderId/complete endpointet:
 
+// Ferdigstill ordre med ny PDF-generering
 router.post('/:orderId/complete', async (req, res) => {
   const { orderId } = req.params;
   const tenantId = req.tenantId || req.session.tenantId;
@@ -314,15 +312,15 @@ router.post('/:orderId/complete', async (req, res) => {
     // Sjekk om det finnes rapporter å generere
     if (serviceReportsResult.rows.length > 0) {
       try {
-        // Initialiser PDF generator
+        // Opprett PDF generator (IKKE kall init() her!)
         pdfGenerator = new UnifiedPDFGenerator();
-        await pdfGenerator.init();
         
         // Generer PDF-er for alle rapporter
         for (const report of serviceReportsResult.rows) {
           try {
             console.log(`📄 Genererer PDF for rapport ${report.id} (${report.equipment_type})...`);
             
+            // generateReport() kaller init() internt, så vi trenger ikke gjøre det her
             const pdfPath = await pdfGenerator.generateReport(report.id, tenantId);
             
             generatedPDFs.push({
@@ -335,23 +333,14 @@ router.post('/:orderId/complete', async (req, res) => {
             console.log(`✅ PDF generert: ${pdfPath}`);
             
           } catch (pdfError) {
-            console.error(`❌ PDF-generering feilet for rapport ${report.id}:`, pdfError);
+            console.error(`❌ PDF-generering feilet for rapport ${report.id}:`, pdfError.message);
             // Fortsett med andre rapporter selv om én feiler
           }
         }
         
       } catch (pdfInitError) {
-        console.error('❌ Kunne ikke initialisere PDF-generator:', pdfInitError);
-        // Fortsett uten PDF-generering
-      } finally {
-        // Lukk PDF generator hvis den ble initialisert
-        if (pdfGenerator) {
-          try {
-            await pdfGenerator.close();
-          } catch (closeError) {
-            console.error('Feil ved lukking av PDF-generator:', closeError);
-          }
-        }
+        console.error('❌ Kunne ikke opprette PDF-generator:', pdfInitError.message);
+        // Fortsett uten PDF-generering - ordre skal fortsatt ferdigstilles
       }
     }
     
