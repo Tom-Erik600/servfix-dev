@@ -431,12 +431,12 @@ document.addEventListener('click', function(e) {
             if (byttetContainer) {
                 const byttetId = byttetContainer.id; // e.g., "byttet-item3"
                 photoContext = {
-                    type: 'byttet',
+                    type: 'avvik',  // ← ENDRET FRA 'byttet' TIL 'avvik'
                     container: byttetContainer,
                     byttetId: byttetId,
                     itemId: byttetId.replace('byttet-', '')
                 };
-                console.log('📷 Byttet photo context:', photoContext);
+                console.log('📷 Byttet photo context (using avvik type):', photoContext);
             }
             if (avvikContainer) {
                 const avvikId = avvikContainer.id; // e.g., "avvik-item3"
@@ -2141,6 +2141,7 @@ function handleStatusClick(e) {
         } else if (button.dataset.status === 'byttet' && byttetContainer) {
             byttetContainer.classList.add('show');
             byttetContainer.style.display = 'block';
+            syncByttetImages(itemId);
         }
     }
     
@@ -3165,11 +3166,24 @@ async function openPhotoOption(type) {
                 
                 if (result.success || result.url) {
                     if (imageType === 'avvik' && result.avvikNumber) {
-                        showToast(`✅ Avvik #${result.formattedAvvikNumber} bilde lastet opp!`, 'success');
-                        // Vent litt før rendering for å sikre at backend har lagret bildet
+                        // Sjekk om det egentlig er byttet basert på context
+                        const isByttet = currentPhotoContext?.byttetId ? true : false;
+                        const message = isByttet 
+                            ? `✅ Byttet filter #${result.formattedAvvikNumber} bilde lastet opp!`
+                            : `✅ Avvik #${result.formattedAvvikNumber} bilde lastet opp!`;
+                        
+                        showToast(message, 'success');
+                        
+                        // Vent litt før rendering
                         setTimeout(() => {
                             console.log('🔄 Rendering avvik images...');
                             renderAvvikImagesForChecklist();
+                            
+                            // Hvis det var byttet, synkroniser også byttet-bildene
+                            if (isByttet) {
+                                const itemId = currentPhotoContext.itemId;
+                                syncByttetImages(itemId);
+                            }
                         }, 500);
                     } else {
                         showToast(`✅ Rapport-bilde lastet opp!`, 'success');
@@ -3302,6 +3316,43 @@ async function renderAvvikImagesForChecklist() {
     } catch (error) {
         console.log('Error loading avvik images:', error.message);
     }
+
+    document.querySelectorAll('.status-btn.byttet.active').forEach(btn => {
+        const checklistItem = btn.closest('.checklist-item');
+        if (checklistItem) {
+            const itemId = checklistItem.dataset.itemId;
+            syncByttetImages(itemId);
+        }
+    });
+}
+
+// Synkroniser byttet-bilder med avvik-bilder
+function syncByttetImages(itemId) {
+    console.log('🔄 Syncing byttet images for item:', itemId);
+    
+    // Finn avvik-bilder for dette elementet
+    const avvikContainer = document.getElementById(`avvik-images-container-${itemId}`);
+    const byttetContainer = document.getElementById(`byttet-images-container-${itemId}`);
+    
+    if (!avvikContainer || !byttetContainer) return;
+    
+    // Kopier bildene fra avvik til byttet, men endre tekst
+    byttetContainer.innerHTML = '';
+    
+    const avvikImages = avvikContainer.querySelectorAll('.avvik-image-wrapper');
+    avvikImages.forEach((wrapper, index) => {
+        const img = wrapper.querySelector('img');
+        if (img) {
+            const byttetWrapper = document.createElement('div');
+            byttetWrapper.className = 'byttet-image-wrapper';
+            byttetWrapper.innerHTML = `
+                <img src="${img.src}" 
+                     alt="Byttet bilde" 
+                     onclick="openImageModal('${img.src}', 'Byttet filter bilde')">
+            `;
+            byttetContainer.appendChild(byttetWrapper);
+        }
+    });
 }
 
 // Render general images
@@ -3501,8 +3552,18 @@ function setupPhotoDropdownHandlers() {
             // Finn kontekst
             let photoContext = null;
             const avvikContainer = wrapper?.closest('.avvik-container');
-            
-            if (avvikContainer) {
+            const byttetContainer = wrapper?.closest('.byttet-container');
+
+            // Sjekk byttet først (siden byttet også skal bruke avvik-type)
+            if (byttetContainer) {
+                photoContext = {
+                    type: 'avvik',  // Bruk avvik-type også for byttet
+                    container: byttetContainer,
+                    byttetId: byttetContainer.id,
+                    itemId: byttetContainer.id.replace('byttet-', '')
+                };
+                console.log('📷 Byttet photo context (using avvik type):', photoContext);
+            } else if (avvikContainer) {
                 photoContext = {
                     type: 'avvik',
                     container: avvikContainer,

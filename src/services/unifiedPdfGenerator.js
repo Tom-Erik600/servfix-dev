@@ -136,10 +136,10 @@ class UnifiedPDFGenerator {
   async fetchReportData(serviceReportId, tenantId) {
     const pool = await db.getTenantConnection(tenantId);
     
-    // SQL med KUN kolonner fra din databasestruktur
+    // SQL med KUN kolonner som FAKTISK eksisterer (fra fungerende versjon)
     const query = `
       SELECT 
-        -- Fra service_reports (verifisert mot din struktur)
+        -- Fra service_reports
         sr.id,
         sr.order_id,
         sr.equipment_id,
@@ -154,25 +154,26 @@ class UnifiedPDFGenerator {
         sr.pdf_path,
         sr.pdf_generated,
         
-        -- Fra orders (verifisert mot din struktur)
+        -- Fra orders
         o.id as order_number,
         o.customer_name as company_name,
         o.description as order_description,
         o.scheduled_date as service_date,
         o.customer_data,
         
-        -- Ekstraher fra customer_data JSON (dette er trygt)
+        -- Fra customer_data JSON
         o.customer_data->>'email' as company_email,
         o.customer_data->>'phone' as company_phone,
         o.customer_data->>'address' as company_address,
         
-        -- Fra equipment (verifisert mot din struktur)
+        -- Fra equipment - KUN eksisterende kolonner!
         e.name as equipment_name,
         e.type as equipment_type,
         e.location as equipment_location,
         e.serial_number as equipment_serial,
+        e.data as equipment_data,
         
-        -- Fra technicians (verifisert mot din struktur)
+        -- Fra technicians - KUN eksisterende kolonner!
         t.name as technician_name,
         t.initials as technician_initials
         
@@ -187,43 +188,146 @@ class UnifiedPDFGenerator {
     const result = await pool.query(query, [serviceReportId]);
     
     if (result.rows.length === 0) {
-      throw new Error(`Service report ${serviceReportId} not found`);
+      throw new Error('Service report not found');
     }
     
     const data = result.rows[0];
-    console.log('📊 Report data found:', {
-      id: data.id,
-      order: data.order_number,
-      equipment: data.equipment_name,
-      technician: data.technician_name
-    });
     
     // Parse JSON fields
-    if (data.checklist_data && typeof data.checklist_data === 'string') {
-      data.checklist_data = JSON.parse(data.checklist_data);
-    }
-    if (data.products_used && typeof data.products_used === 'string') {
-      data.products_used = JSON.parse(data.products_used);
-    }
-    if (data.additional_work && typeof data.additional_work === 'string') {
-      data.additional_work = JSON.parse(data.additional_work);
-    }
-    if (data.customer_data && typeof data.customer_data === 'string') {
-      data.customer_data = JSON.parse(data.customer_data);
+    try {
+      data.checklist_data = typeof data.checklist_data === 'string' ? 
+        JSON.parse(data.checklist_data) : data.checklist_data;
+    } catch (e) {
+      data.checklist_data = {};
     }
     
-    // Håndter avvik basert på checklist_data
+    // Parse equipment data JSON
+    try {
+      data.equipment_data = typeof data.equipment_data === 'string' ? 
+        JSON.parse(data.equipment_data) : data.equipment_data || {};
+    } catch (e) {
+      data.equipment_data = {};
+    }
+    
+    // Parse customer_data for contact person
+    try {
+      const customerData = typeof data.customer_data === 'string' ? 
+        JSON.parse(data.customer_data) : data.customer_data;
+      data.contact_person = customerData?.contact_person || '';
+    } catch (e) {
+      data.contact_person = '';
+    }
+    
+    // Hent systemNumber fra equipment.data JSON
+    const systemNumber = data.equipment_data?.systemNumber || 
+                        data.equipment_data?.system_number || 
+                        data.equipment_serial || 
+                        '-';
+    
+    // Lag en enkel equipment liste med kun current equipment
+    data.all_equipment = [{
+      id: data.equipment_id,
+      type: data.equipment_type,
+      location: data.equipment_location,
+      name: data.equipment_name,
+      system_number: systemNumber,
+      report_id: data.id
+    }];
+    
+    // Hent checklist template for å få riktige labels
+    let checklistTemplate = null;
+    try {
+      const templateResult = await pool.query(
+        'SELECT * FROM checklist_templates WHERE equipment_type = $1',
+        [data.equipment_type]
+      );
+      if (templateResult.rows.length > 0) {
+        checklistTemplate = templateResult.rows[0].template_data;
+      }
+    } catch (e) {
+      console.error('Could not fetch checklist template:', e);
+    }
+    
+    // Berik komponentene med template info
+    if (data.checklist_data && data.checklist_data.components) {
+      data.checklist_data.components = data.checklist_data.components.map(component => {
+        // Hvis vi har template, berik med checkpoints
+        if (checklistTemplate && checklistTemplate.checklistItems && component.checklist) {
+          component.checkpoints = checklistTemplate.checklistItems.map(item => {
+            const value = component.checklist[item.id];
+            let status = 'na';
+            let comment = '';
+            
+            if (value) {
+              if (typeof value === 'object') {
+                status = value.status || 'na';
+                comment = value.comment || value.avvikComment || value.byttetComment || '';
+              } else {
+                // Håndter enkle verdier
+                status = value;
+              }
+            }
+            
+            return {
+              id: item.id,
+              name: item.label,
+              status: status,
+              comment: comment,
+              inputType: item.inputType
+            };
+          });
+        }
+        
+        // Sett component name fra details
+        if (!component.name && component.details) {
+          const detailValues = Object.values(component.details).filter(v => v);
+          component.name = detailValues.join(' - ') || 'Sjekkliste';
+        }
+        
+        return component;
+      });
+    }
+    
+    // Hent avvik bilder
+    try {
+      const avvikImagesResult = await pool.query(
+        `SELECT avvik_number, image_url, checklist_item_id 
+         FROM avvik_images 
+         WHERE service_report_id = $1 
+         ORDER BY avvik_number`,
+        [serviceReportId]
+      );
+      data.avvikImages = avvikImagesResult.rows;
+    } catch (e) {
+      console.error('Could not fetch avvik images:', e);
+      data.avvikImages = [];
+    }
+    
+    // Ekstraher avvik med bilder
     data.avvik = [];
+    let avvikCounter = 1;
+    
     if (data.checklist_data && data.checklist_data.components) {
       data.checklist_data.components.forEach(component => {
         if (component.checkpoints) {
           component.checkpoints.forEach(checkpoint => {
             if (checkpoint.status === 'avvik' && checkpoint.comment) {
+              const avvikId = String(avvikCounter).padStart(3, '0');
+              
+              // Finn bilder for dette avviket
+              const avvikBilder = data.avvikImages.filter(img => 
+                img.checklist_item_id === checkpoint.id
+              );
+              
               data.avvik.push({
+                id: avvikId,
+                systemnummer: systemNumber,
+                component: component.name,
+                checkpoint: checkpoint.name,
                 description: checkpoint.comment,
-                checkpointName: checkpoint.name,
-                componentName: component.name
+                images: avvikBilder.map(img => img.image_url)
               });
+              avvikCounter++;
             }
           });
         }
@@ -233,6 +337,9 @@ class UnifiedPDFGenerator {
     // Sett overall comment fra checklist_data
     data.overall_comment = data.checklist_data?.overallComment || '';
     
+    // Photos er allerede en ARRAY i databasen
+    data.photos = data.photos || [];
+    
     return data;
   }
 
@@ -240,9 +347,10 @@ class UnifiedPDFGenerator {
     const settings = {
       company: {
         name: 'Air-Tech AS',
-        address: 'Industrigata 1, 2000 Lillestrøm',
-        phone: '+47 123 45 678',
-        email: 'post@air-tech.no'
+        address: 'Stanseveien 18, 0975 Oslo',
+        phone: '+47 91 52 40 40',
+        email: 'post@air-tech.no',
+        orgNr: '889 558 652'
       },
       logoBase64: null
     };
@@ -260,13 +368,24 @@ class UnifiedPDFGenerator {
       if (exists) {
         const [content] = await settingsFile.download();
         const savedSettings = JSON.parse(content.toString());
-        Object.assign(settings, savedSettings);
+        
+        // Settings structure: settings.companyInfo and settings.logo
+        if (savedSettings.companyInfo) {
+          settings.company = {
+            name: savedSettings.companyInfo.name || settings.company.name,
+            address: savedSettings.companyInfo.address || settings.company.address,
+            phone: savedSettings.companyInfo.phone || settings.company.phone,
+            email: savedSettings.companyInfo.email || settings.company.email,
+            orgNr: savedSettings.companyInfo.cvr || settings.company.orgNr
+          };
+        }
+        
         console.log('✅ Company settings loaded from GCS');
-      }
-      
-      // Last ned logo hvis den finnes
-      if (settings.company?.logo) {
-        settings.logoBase64 = await this.downloadLogo(settings.company.logo);
+        
+        // Logo ligger direkte i settings.logo.url
+        if (savedSettings.logo?.url) {
+          settings.logoBase64 = await this.downloadLogoFromUrl(savedSettings.logo.url);
+        }
       }
       
     } catch (error) {
@@ -276,18 +395,30 @@ class UnifiedPDFGenerator {
     return settings;
   }
 
-  async downloadLogo(logoPath) {
-    if (!this.bucket || !logoPath) return null;
+  async downloadLogoFromUrl(logoUrl) {
+    if (!logoUrl) return null;
     
     try {
-      const file = this.bucket.file(logoPath);
-      const [exists] = await file.exists();
+      // Hvis det er en GCS URL, last ned via bucket
+      if (logoUrl.includes('storage.googleapis.com') && this.bucket) {
+        // Ekstraher file path fra URL
+        const matches = logoUrl.match(/\/([^\/]+)\/(.+)$/);
+        if (matches && matches[2]) {
+          const filePath = matches[2];
+          const file = this.bucket.file(filePath);
+          const [exists] = await file.exists();
+          
+          if (exists) {
+            const [buffer] = await file.download();
+            const mimeType = filePath.endsWith('.png') ? 'image/png' : 'image/jpeg';
+            return `data:${mimeType};base64,${buffer.toString('base64')}`;
+          }
+        }
+      }
       
-      if (!exists) return null;
-      
-      const [buffer] = await file.download();
-      const mimeType = logoPath.endsWith('.png') ? 'image/png' : 'image/jpeg';
-      return `data:${mimeType};base64,${buffer.toString('base64')}`;
+      // Fallback: prøv å laste ned direkte
+      console.log('Attempting direct logo download from:', logoUrl);
+      return logoUrl; // Returner URL direkte hvis vi ikke kan konvertere
       
     } catch (error) {
       console.error('Error downloading logo:', error);
@@ -296,6 +427,9 @@ class UnifiedPDFGenerator {
   }
 
   async generateHTML(data, settings) {
+    // Lagre data for avvik mapping
+    this.currentReportData = data;
+    
     const css = this.getCSS();
     const html = `
 <!DOCTYPE html>
@@ -309,10 +443,11 @@ class UnifiedPDFGenerator {
     <div class="page-container">
         ${this.generateHeader(data, settings)}
         ${this.generateOrderInfo(data)}
-        ${this.generateAnleggOversikt(data)}
-        ${this.generateAvvik(data)}
+        ${this.generateSystemOversikt(data)}
+        ${data.avvik.length > 0 ? this.generateAvvik(data) : ''}
         ${this.generateSjekklister(data)}
-        ${this.generateKommentarer(data)}
+        ${this.generateOppsummering(data)}
+        ${this.generatePhotos(data)}
         ${this.generateFooter(data, settings)}
     </div>
 </body>
@@ -327,74 +462,109 @@ class UnifiedPDFGenerator {
       ? `<img src="${settings.logoBase64}" alt="${company.name}" class="logo">`
       : '';
     
+    const reportDate = new Date(data.service_date || data.created_at).toLocaleDateString('no-NO');
+    const visitNumber = data.checklist_data?.visitNumber || '1';
+    const year = new Date().getFullYear();
+    
     return `
       <div class="header">
-        <div class="company-section">
+        <div class="company-box">
           ${logoHtml}
-          <div class="company-name">${company.name || 'ServFix'}</div>
-          <div class="company-details">
-            ${company.address || ''}<br>
-            Tlf: ${company.phone || ''}<br>
-            ${company.email || ''}
+          <div class="company-info">
+            <div class="company-name">${company.name}</div>
+            <div>${company.address || ''}</div>
+            <div>www.air-tech.no</div>
+            <div>Telefon: ${company.phone || ''}</div>
+            <div>Epost: ${company.email || ''}</div>
+            <div>Org.nr.: ${company.orgNr || ''}</div>
           </div>
         </div>
-        <div class="report-info">
-          <div class="report-title">SERVICERAPPORT</div>
-          <div class="report-number">Rapport: ${data.id}</div>
-          <div class="report-date">Dato: ${new Date(data.service_date || data.created_at).toLocaleDateString('no-NO')}</div>
+        <div class="report-header">
+          <h1>Servicerapport: ${data.company_name || '[Kundenavn]'}</h1>
+          <table class="header-table">
+            <tr>
+              <td><strong>Avtalenummer:</strong></td>
+              <td>[Avtalenr.]</td>
+              <td><strong>Besøk nr:</strong></td>
+              <td>${visitNumber}</td>
+              <td><strong>Årstall:</strong></td>
+              <td>${year}</td>
+            </tr>
+          </table>
         </div>
       </div>
     `;
   }
 
   generateOrderInfo(data) {
+    const reportDate = new Date(data.service_date || data.created_at).toLocaleDateString('no-NO');
+    
     return `
-      <div class="section order-info">
-        <h2>Ordreinformasjon</h2>
-        <div class="info-grid">
-          <div class="info-item">
-            <span class="label">Ordrenummer:</span>
-            <span class="value">${data.order_number || 'Ikke angitt'}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">Servicedato:</span>
-            <span class="value">${data.service_date ? new Date(data.service_date).toLocaleDateString('no-NO') : 'Ikke angitt'}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">Tekniker:</span>
-            <span class="value">${data.technician_name || data.technician_initials || 'Ikke angitt'}</span>
-          </div>
+      <div class="section info-section">
+        <table class="info-table">
+          <tr>
+            <td class="label">Kundenummer</td>
+            <td class="value">${data.order_number || '[Kundenummer]'}</td>
+            <td class="label">Kundenavn</td>
+            <td class="value">${data.company_name || '[Kundenavn]'}</td>
+            <td class="label">Mottaker av rapport</td>
+            <td class="value">${data.contact_person || '[Mottaker]'}</td>
+          </tr>
+          <tr>
+            <td class="label">Byggnavn</td>
+            <td class="value">${data.company_name || '[Byggnavn]'}</td>
+            <td class="label">Adresse</td>
+            <td class="value">${data.company_address || '[Adresse]'}</td>
+            <td class="label">Post nr.</td>
+            <td class="value">[Postnr]</td>
+            <td class="label">Poststed</td>
+            <td class="value">[Poststed]</td>
+          </tr>
+          <tr>
+            <td class="label">Rapport dato:</td>
+            <td class="value">${reportDate}</td>
+            <td class="label">Utført av:</td>
+            <td class="value">${data.technician_name || '[Vår tekn.]'}</td>
+            <td class="label">Vår kontaktperson</td>
+            <td class="value">[Vår ref.]</td>
+          </tr>
+        </table>
+        
+        <div class="info-text">
+          <p><em>Servicearbeidet som ble avtalt for de angitte anleggene er nå fullført i tråd med avtalen.</em></p>
+          <p><em>I henhold til vår serviceavtale oversender vi en servicerapport etter fullført servicebesøk.</em></p>
         </div>
       </div>
     `;
   }
 
-  generateAnleggOversikt(data) {
+  generateSystemOversikt(data) {
     return `
       <div class="section">
-        <h2>Anlegg og System</h2>
-        <div class="info-grid">
-          <div class="info-item">
-            <span class="label">Kunde:</span>
-            <span class="value">${data.company_name || 'Ikke angitt'}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">Adresse:</span>
-            <span class="value">${data.company_address || 'Ikke angitt'}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">Anlegg:</span>
-            <span class="value">${data.equipment_name || 'Ikke angitt'}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">Type:</span>
-            <span class="value">${data.equipment_type || 'Ikke angitt'}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">Plassering:</span>
-            <span class="value">${data.equipment_location || 'Ikke angitt'}</span>
-          </div>
-        </div>
+        <h2 class="section-header">Anlegg- og systemoversikt</h2>
+        <table class="system-table">
+          <thead>
+            <tr>
+              <th>Systemtype</th>
+              <th>Systemnummer</th>
+              <th>Plassering</th>
+              <th>Betjener</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.all_equipment.map(eq => {
+              return `
+                <tr class="${eq.report_id ? 'has-report' : 'no-report'}">
+                  <td>${eq.type || '-'}</td>
+                  <td>${eq.system_number || '-'}</td>
+                  <td>${eq.location || '-'}</td>
+                  <td>-</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+        <p class="footnote">Anlegg som ikke har blitt rapportert med avvik, er vurdert som funksjonelt og teknisk i orden</p>
       </div>
     `;
   }
@@ -406,15 +576,39 @@ class UnifiedPDFGenerator {
     
     return `
       <div class="section avvik-section">
-        <h2 class="avvik-header">⚠️ Avvik (${data.avvik.length} stk)</h2>
-        ${data.avvik.map((avvik, index) => `
-          <div class="avvik-item">
-            <div class="avvik-number">${String(index + 1).padStart(3, '0')}</div>
-            <div class="avvik-content">
-              <div class="avvik-description">${avvik.description || 'Ingen beskrivelse'}</div>
-              ${avvik.checkpointName ? `<div class="avvik-checkpoint">Sjekkpunkt: ${avvik.checkpointName}</div>` : ''}
-              ${avvik.componentName ? `<div class="avvik-checkpoint">Komponent: ${avvik.componentName}</div>` : ''}
-            </div>
+        <h2 class="section-header avvik-header">Registrerte avvik - Tekst</h2>
+        ${data.avvik.map(avvik => `
+          <div class="avvik-item-container">
+            <table class="avvik-table">
+              <thead>
+                <tr>
+                  <th style="width: 10%">Avvik ID</th>
+                  <th style="width: 15%">Systemnummer</th>
+                  <th style="width: 20%">Komponent</th>
+                  <th style="width: 55%">Kommentar</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="avvik-id">${avvik.id}</td>
+                  <td>${avvik.systemnummer || '-'}</td>
+                  <td>${avvik.component || '-'}</td>
+                  <td>${avvik.description || '-'}</td>
+                </tr>
+              </tbody>
+            </table>
+            ${avvik.images && avvik.images.length > 0 ? `
+              <div class="avvik-images">
+                <p class="avvik-images-label">Bilder for avvik ${avvik.id}:</p>
+                <div class="avvik-images-grid">
+                  ${avvik.images.map((img, index) => `
+                    <div class="avvik-image-container">
+                      <img src="${img}" alt="Avvik ${avvik.id} - Bilde ${index + 1}" class="avvik-image">
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
           </div>
         `).join('')}
       </div>
@@ -426,58 +620,176 @@ class UnifiedPDFGenerator {
       return '';
     }
     
+    // Identifiser type basert på equipment_type
+    const equipmentType = data.equipment_type?.toLowerCase() || '';
+    let checklistTitle = 'Sjekkliste';
+    
+    if (equipmentType.includes('boligventilasjon')) {
+      checklistTitle = 'Sjekkliste Boligventilasjon';
+    } else if (equipmentType.includes('vifte')) {
+      checklistTitle = 'Sjekkliste Ventilasjonsvifter';
+    } else if (equipmentType.includes('ventilasjon')) {
+      checklistTitle = 'Sjekkliste Ventilasjon';
+    }
+    
     return `
-      <div class="section">
-        <h2>Sjekklister</h2>
-        ${data.checklist_data.components.map(component => `
-          <div class="checklist-component">
-            <h3>${component.name || 'Ukjent komponent'}</h3>
-            <table class="checklist-table">
-              <thead>
-                <tr>
-                  <th>Sjekkpunkt</th>
-                  <th>Status</th>
-                  <th>Kommentar</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${(component.checkpoints || []).map(cp => `
-                  <tr>
-                    <td>${cp.name || 'Ukjent sjekkpunkt'}</td>
-                    <td>
-                      ${this.getStatusBadge(cp.status)}
-                    </td>
-                    <td>${cp.comment || '-'}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        `).join('')}
+      <div class="section checklist-section page-break-before">
+        <h2 class="section-header">${checklistTitle}</h2>
+        ${data.checklist_data.components.map(component => this.generateComponentChecklist(component)).join('')}
       </div>
     `;
   }
 
-  getStatusBadge(status) {
-    const statusMap = {
-      'ok': '<span class="status-ok">OK</span>',
-      'avvik': '<span class="status-avvik">Avvik</span>',
-      'byttet': '<span class="status-byttet">Byttet</span>',
-      'na': '<span class="status-na">N/A</span>'
-    };
-    return statusMap[status] || '<span class="status-na">-</span>';
+  generateComponentChecklist(component) {
+    // Håndter både checkpoints array og checklist objekt
+    let checklistItems = [];
+    
+    if (component.checkpoints && Array.isArray(component.checkpoints)) {
+      // Hvis vi har checkpoints array (beriket med template data)
+      checklistItems = component.checkpoints;
+    } else if (component.checklist) {
+      // Fallback: konverter checklist objekt til array
+      checklistItems = Object.entries(component.checklist).map(([key, value]) => ({
+        id: key,
+        name: value.label || key,
+        status: value.status || 'na',
+        comment: value.comment || value.avvikComment || '',
+        inputType: value.inputType || 'ok_avvik'
+      }));
+    }
+    
+    if (checklistItems.length === 0) {
+      return `
+        <div class="component-checklist">
+          <h3 class="component-name">${component.name || 'Sjekkliste'}</h3>
+          <p style="font-style: italic; color: #666;">Ingen sjekkpunkter registrert</p>
+        </div>
+      `;
+    }
+    
+    return `
+      <div class="component-checklist">
+        <h3 class="component-name">${component.name || 'Sjekkliste'}</h3>
+        <table class="checklist-table">
+          <thead>
+            <tr>
+              <th style="width: 60%">Beskrivelse</th>
+              <th style="width: 15%">OK</th>
+              <th style="width: 15%">Avvik</th>
+              <th style="width: 10%">Avvik ID</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${checklistItems.map(item => {
+              const isOk = item.status === 'ok';
+              const isAvvik = item.status === 'avvik';
+              const isByttet = item.status === 'byttet';
+              
+              // For byttet status, vis som OK med kommentar
+              const showAsOk = isOk || isByttet;
+              
+              return `
+                <tr>
+                  <td>${item.name || 'Ukjent sjekkpunkt'}</td>
+                  <td class="center">${showAsOk ? '☑' : '☐'}</td>
+                  <td class="center">${isAvvik ? '☑' : '☐'}</td>
+                  <td class="center">${isAvvik ? this.getAvvikId(item) : '-'}</td>
+                </tr>
+                ${item.comment && item.status !== 'avvik' ? `
+                  <tr class="comment-row">
+                    <td colspan="4" style="font-size: 8pt; font-style: italic; padding-left: 20px;">
+                      ${isByttet ? 'Byttet: ' : ''}${item.comment}
+                    </td>
+                  </tr>
+                ` : ''}
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+  
+  getAvvikId(item) {
+    // Finn avvik ID basert på item
+    if (!this.avvikMap) {
+      this.avvikMap = {};
+      let counter = 1;
+      this.currentReportData?.avvik?.forEach(avvik => {
+        this.avvikMap[`${avvik.component}_${avvik.checkpoint}`] = String(counter).padStart(3, '0');
+        counter++;
+      });
+    }
+    
+    const key = `${item.componentName || ''}_${item.name}`;
+    return this.avvikMap[key] || '-';
   }
 
-  generateKommentarer(data) {
-    if (!data.overall_comment) {
+  async generateHTML(data, settings) {
+    // Lagre data for avvik mapping
+    this.currentReportData = data;
+    
+    const css = this.getCSS();
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Servicerapport ${data.order_number || data.id}</title>
+    <style>${css}</style>
+</head>
+<body>
+    <div class="page-container">
+        ${this.generateHeader(data, settings)}
+        ${this.generateOrderInfo(data)}
+        ${this.generateSystemOversikt(data)}
+        ${data.avvik.length > 0 ? this.generateAvvik(data) : ''}
+        ${this.generateSjekklister(data)}
+        ${this.generateOppsummeringOgBilder(data)}
+        ${this.generateFooter(data, settings)}
+    </div>
+</body>
+</html>`;
+    
+    return html;
+  }
+
+  generateOppsummeringOgBilder(data) {
+    const overallComment = data.overall_comment || data.checklist_data?.overallComment || '';
+    const hasComment = overallComment && overallComment.trim() !== '';
+    const hasPhotos = data.photos && data.photos.length > 0;
+    
+    if (!hasComment && !hasPhotos) {
       return '';
     }
     
     return `
-      <div class="section">
-        <h2>Generelle kommentarer</h2>
-        <div class="comment-box">
-          <div class="comment-text">${data.overall_comment}</div>
+      <div class="section oppsummering-bilder-section">
+        <h2 class="section-header">Oppsummering og kommentarer</h2>
+        <div class="oppsummering-content">
+          ${hasComment ? `
+            <div class="comment-box">
+              <p class="footnote">Eventuelle avvik er kommentert i ovennevnte tabell. Eventuelle bilder vises nedenfor.</p>
+              <p class="comment-label">Øvrige kommentarer:</p>
+              <div class="comment-content">
+                ${overallComment}
+              </div>
+            </div>
+          ` : ''}
+          
+          ${hasPhotos ? `
+            <div class="dokumentasjon-section">
+              <h3 class="subsection-header">Dokumentasjon</h3>
+              <div class="photos-grid">
+                ${data.photos.map((photo, index) => `
+                  <div class="photo-container">
+                    <img src="${photo}" alt="Bilde ${index + 1}" class="photo">
+                    <p class="photo-caption">Bilde ${index + 1}</p>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
         </div>
       </div>
     `;
@@ -485,97 +797,568 @@ class UnifiedPDFGenerator {
 
   generateFooter(data, settings) {
     const company = settings.company || {};
-    const generatedDate = new Date().toLocaleDateString('no-NO', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+    const technician = data.technician_name || '[Navn ansatt]';
+    const generatedDate = new Date().toLocaleDateString('no-NO');
+    const location = '[Sted]';
     
     return `
-      <div class="footer">
-        <div class="signature-grid">
-          <div class="signature-box">
-            <span class="signature-label">Tekniker</span>
-            <div class="signature-line"></div>
-            <div class="signature-name">${data.technician_name || 'Ikke angitt'}</div>
-          </div>
-          <div class="signature-box">
-            <span class="signature-label">Kunde</span>
-            <div class="signature-line"></div>
-            <div class="signature-name">${data.company_name || 'Ikke angitt'}</div>
+      <div class="footer-section">
+        <div class="signature-section">
+          <p>Med vennlig hilsen</p>
+          <p class="company-name">${company.name}</p>
+          
+          <div class="signature-grid">
+            <div class="signature-box">
+              <div class="signature-line"></div>
+              <p>${technician}</p>
+              <p>[Stilling ansatt]</p>
+            </div>
+            <div class="signature-box">
+              <div class="signature-line"></div>
+              <p>${location}</p>
+              <p></p>
+            </div>
+            <div class="signature-box">
+              <div class="signature-line"></div>
+              <p>${generatedDate}</p>
+              <p></p>
+            </div>
           </div>
         </div>
+        
         <div class="footer-info">
-          <div>${company.name || 'Air-Tech AS'}</div>
-          <div>Side 1 av 1</div>
-          <div>${generatedDate}</div>
+          <div class="footer-company">
+            <p><strong>${company.name}</strong></p>
+            <p>${company.address || ''}</p>
+            <p>www.air-tech.no</p>
+          </div>
+          <div class="footer-contact">
+            <p>Telefon: ${company.phone || ''}</p>
+            <p>Epost: ${company.email || ''}</p>
+            <p>Org.nr.: ${company.orgNr || ''}</p>
+          </div>
+          <div class="footer-page">
+            <p>Side <span class="page"></span> av <span class="pages"></span></p>
+          </div>
         </div>
       </div>
     `;
   }
 
+  getCSS() {
+    return `
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+      
+      :root {
+        --air-tech-blue: #0066cc;
+        --air-tech-dark-blue: #004499;
+        --air-tech-light-blue: #e6f2ff;
+        --avvik-red: #dc3545;
+        --success-green: #28a745;
+        --border-gray: #dee2e6;
+        --text-gray: #495057;
+        --light-gray: #f8f9fa;
+      }
+      
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: 'Inter', Arial, sans-serif;
+        font-size: 9pt;
+        line-height: 1.4;
+        color: #000;
+        background: #ffffff;
+      }
+      
+      .page-container {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0 auto;
+        padding: 15mm 15mm;
+      }
+      
+      /* Header */
+      .header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        gap: 20px;
+      }
+      
+      .company-box {
+        flex: 0 0 40%;
+        border: 1px solid var(--border-gray);
+        border-radius: 8px;
+        padding: 15px;
+        background: var(--light-gray);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      }
+      
+      .logo {
+        max-width: 140px;
+        max-height: 60px;
+        margin-bottom: 10px;
+        display: block;
+      }
+      
+      .company-info {
+        font-size: 8pt;
+        line-height: 1.4;
+        color: #333;
+      }
+      
+      .company-name {
+        font-weight: 600;
+        font-size: 10pt;
+        margin-bottom: 5px;
+        color: var(--air-tech-dark-blue);
+      }
+      
+      .report-header {
+        flex: 1;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      
+      .report-header h1 {
+        font-size: 16pt;
+        color: var(--air-tech-blue);
+        margin-bottom: 10px;
+        font-weight: 700;
+      }
+      
+      .header-table {
+        width: 100%;
+        font-size: 8pt;
+        margin-top: 10px;
+        border-collapse: collapse;
+      }
+      
+      .header-table td {
+        padding: 3px 8px;
+        text-align: left;
+        border: 1px solid var(--border-gray);
+      }
+      
+      .header-table td:nth-child(odd) {
+        font-weight: 600;
+        background: var(--light-gray);
+        width: 30%;
+      }
+      
+      /* Info Section */
+      .info-section {
+        margin-bottom: 20px;
+      }
+      
+      .info-table {
+        width: 100%;
+        font-size: 8pt;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      
+      .info-table td {
+        padding: 5px 8px;
+        border: 1px solid var(--border-gray);
+      }
+      
+      .info-table .label {
+        font-weight: 600;
+        background: var(--light-gray);
+        width: 12%;
+      }
+      
+      .info-table .value {
+        width: 21%;
+      }
+      
+      .info-text {
+        margin-top: 10px;
+        font-style: italic;
+        font-size: 8pt;
+        color: var(--text-gray);
+        text-align: center;
+        padding: 10px;
+        background: var(--air-tech-light-blue);
+        border-radius: 5px;
+      }
+      
+      /* Sections */
+      .section {
+        margin-bottom: 25px;
+      }
+      
+      .section-header {
+        font-size: 11pt;
+        font-weight: 600;
+        color: var(--air-tech-blue);
+        background: var(--air-tech-light-blue);
+        padding: 8px 12px;
+        margin-bottom: 10px;
+        border-radius: 5px;
+        border-left: 4px solid var(--air-tech-blue);
+      }
+      
+      .avvik-header {
+        background: #fee;
+        color: var(--avvik-red);
+        border-left-color: var(--avvik-red);
+      }
+      
+      /* Tables */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 8pt;
+      }
+      
+      th {
+        background: var(--light-gray);
+        font-weight: 600;
+        text-align: left;
+        padding: 6px 8px;
+        border: 1px solid var(--border-gray);
+        font-size: 8pt;
+      }
+      
+      td {
+        padding: 5px 8px;
+        border: 1px solid var(--border-gray);
+        vertical-align: top;
+      }
+      
+      .center {
+        text-align: center;
+      }
+      
+      /* System table */
+      .system-table {
+        font-size: 8pt;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      
+      .footnote {
+        font-size: 7pt;
+        font-style: italic;
+        color: var(--text-gray);
+        margin-top: 5px;
+      }
+      
+      /* Avvik */
+      .avvik-section {
+        page-break-inside: avoid;
+        margin-bottom: 25px;
+      }
+      
+      .avvik-item-container {
+        margin-bottom: 20px;
+        border: 1px solid var(--border-gray);
+        border-radius: 5px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      }
+      
+      .avvik-table {
+        margin-bottom: 0;
+        box-shadow: none;
+      }
+      
+      .avvik-table td {
+        font-size: 8pt;
+      }
+      
+      .avvik-id {
+        font-weight: 700;
+        color: var(--avvik-red);
+        text-align: center;
+        font-size: 10pt;
+      }
+      
+      .avvik-images {
+        background: #fafafa;
+        padding: 10px;
+        border-top: 1px solid var(--border-gray);
+      }
+      
+      .avvik-images-label {
+        font-weight: 600;
+        font-size: 8pt;
+        margin-bottom: 8px;
+        color: var(--text-gray);
+      }
+      
+      .avvik-images-grid {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      
+      .avvik-image-container {
+        width: 80px;
+        height: 80px;
+      }
+      
+      .avvik-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border: 1px solid var(--border-gray);
+        border-radius: 4px;
+      }
+      
+      /* Checklist */
+      .checklist-section {
+        page-break-inside: avoid;
+      }
+      
+      .component-checklist {
+        margin-bottom: 20px;
+        page-break-inside: avoid;
+      }
+      
+      .component-name {
+        font-size: 9pt;
+        font-weight: 600;
+        color: var(--air-tech-dark-blue);
+        margin-bottom: 8px;
+        padding: 6px 10px;
+        background: var(--light-gray);
+        border-left: 3px solid var(--air-tech-blue);
+        border-radius: 0 5px 5px 0;
+      }
+      
+      .checklist-table {
+        margin-bottom: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      
+      .checklist-table td {
+        font-size: 8pt;
+      }
+      
+      .comment-row td {
+        background: #fafafa;
+        border-top: none;
+        font-size: 7pt;
+        color: var(--text-gray);
+      }
+      
+      /* Oppsummering og bilder */
+      .oppsummering-bilder-section {
+        background: var(--light-gray);
+        padding: 20px;
+        border-radius: 8px;
+        page-break-inside: avoid;
+        margin-top: 30px;
+      }
+      
+      .oppsummering-content {
+        background: white;
+        padding: 15px;
+        border-radius: 5px;
+      }
+      
+      .comment-box {
+        margin-bottom: 20px;
+      }
+      
+      .comment-label {
+        font-weight: 600;
+        margin-bottom: 8px;
+        font-size: 9pt;
+        color: var(--air-tech-dark-blue);
+      }
+      
+      .comment-content {
+        min-height: 40px;
+        white-space: pre-wrap;
+        font-size: 8pt;
+        padding: 10px;
+        background: var(--light-gray);
+        border-radius: 5px;
+      }
+      
+      .subsection-header {
+        font-size: 10pt;
+        font-weight: 600;
+        color: var(--air-tech-dark-blue);
+        margin: 20px 0 10px 0;
+        padding-bottom: 5px;
+        border-bottom: 1px solid var(--border-gray);
+      }
+      
+      /* Photos */
+      .dokumentasjon-section {
+        margin-top: 20px;
+      }
+      
+      .photos-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-top: 10px;
+      }
+      
+      .photo-container {
+        text-align: center;
+        page-break-inside: avoid;
+      }
+      
+      .photo {
+        width: 100%;
+        height: 100px;
+        object-fit: cover;
+        border: 1px solid var(--border-gray);
+        border-radius: 5px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      
+      .photo-caption {
+        font-size: 7pt;
+        color: var(--text-gray);
+        margin-top: 3px;
+      }
+      
+      /* Footer */
+      .footer-section {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 2px solid var(--air-tech-blue);
+      }
+      
+      .signature-section {
+        margin-bottom: 20px;
+      }
+      
+      .company-name {
+        font-weight: 600;
+        margin: 8px 0;
+      }
+      
+      .signature-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        margin-top: 30px;
+      }
+      
+      .signature-box {
+        text-align: center;
+      }
+      
+      .signature-line {
+        border-bottom: 1px solid #333;
+        margin-bottom: 5px;
+        height: 30px;
+      }
+      
+      .footer-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-top: 20px;
+        padding: 15px;
+        background: var(--light-gray);
+        border-radius: 5px;
+        font-size: 7pt;
+      }
+      
+      .footer-company p,
+      .footer-contact p {
+        margin: 1px 0;
+        font-size: 7pt;
+      }
+      
+      /* Page breaks */
+      .page-break-before {
+        page-break-before: always;
+      }
+      
+      .page-break-avoid {
+        page-break-inside: avoid;
+      }
+      
+      /* Print styles */
+      @media print {
+        body {
+          margin: 0;
+          padding: 0;
+        }
+        
+        .page-container {
+          width: 100%;
+          margin: 0;
+          padding: 15mm;
+        }
+      }
+    `;
+  }
+
   async generatePDF(html) {
-    if (!this.browser) {
-      throw new Error('Browser not initialized');
-    }
-    
     const page = await this.browser.newPage();
     
-    try {
-      await page.setContent(html, {
-        waitUntil: 'networkidle0'
-      });
-      
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        margin: {
-          top: '10mm',
-          right: '10mm',
-          bottom: '10mm',
-          left: '10mm'
-        },
-        printBackground: true,
-        preferCSSPageSize: true
-      });
-      
-      return pdfBuffer;
-    } finally {
-      await page.close();
-    }
+    await page.setContent(html, {
+      waitUntil: 'networkidle0'
+    });
+    
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      margin: {
+        top: '15mm',
+        right: '10mm',
+        bottom: '15mm',
+        left: '10mm'
+      },
+      printBackground: true,
+      displayHeaderFooter: false
+    });
+    
+    await page.close();
+    return pdfBuffer;
   }
 
   async savePDF(pdfBuffer, data, tenantId) {
-    const year = new Date().getFullYear();
-    const month = String(new Date().getMonth() + 1).padStart(2, '0');
-    const timestamp = new Date().toISOString().slice(0, 16).replace(/[:-]/g, '');
-    const filename = `${data.order_number || data.id}_${data.equipment_id}_${timestamp}.pdf`;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const timestamp = Date.now();
     
+    const filename = `${data.order_number}_${data.equipment_id}_${timestamp}.pdf`;
+    const relativePath = `reports/${year}/${month}/${filename}`;
+    
+    // Cloud Storage
     if (this.bucket) {
-      // Save to Google Cloud Storage
-      const filePath = `tenants/${tenantId}/reports/${year}/${month}/${filename}`;
-      const file = this.bucket.file(filePath);
-      
-      console.log('📤 Uploading PDF to GCS:', filePath);
-      await file.save(pdfBuffer, {
-        metadata: {
-          contentType: 'application/pdf'
-        }
-      });
-      
-      console.log('✅ PDF uploaded to GCS');
-      return `reports/${year}/${month}/${filename}`;
-      
-    } else {
-      // Save locally (fallback for local development)
-      const dir = path.join(__dirname, '../../servfix-files/tenants', tenantId, 'reports', String(year), month);
-      await fs.mkdir(dir, { recursive: true });
-      
-      const filePath = path.join(dir, filename);
-      await fs.writeFile(filePath, pdfBuffer);
-      
-      console.log('💾 PDF saved locally:', filePath);
-      return `reports/${year}/${month}/${filename}`;
+      try {
+        const file = this.bucket.file(`tenants/${tenantId}/${relativePath}`);
+        await file.save(pdfBuffer, {
+          metadata: {
+            contentType: 'application/pdf'
+          }
+        });
+        console.log('✅ PDF uploaded to GCS');
+        return relativePath;
+      } catch (error) {
+        console.error('Failed to upload to GCS:', error);
+      }
     }
+    
+    // Local fallback
+    const localDir = path.join(__dirname, '../../servfix-files/tenants', tenantId, 'reports', year, month);
+    await fs.mkdir(localDir, { recursive: true });
+    
+    const localPath = path.join(localDir, filename);
+    await fs.writeFile(localPath, pdfBuffer);
+    
+    console.log('✅ PDF saved locally');
+    return relativePath;
   }
 
   async updateReportPDFPath(serviceReportId, pdfPath, tenantId) {
@@ -595,317 +1378,6 @@ class UnifiedPDFGenerator {
       await this.browser.close();
       this.browser = null;
     }
-  }
-
-  getCSS() {
-    return `
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-      
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      
-      body {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 11pt;
-        line-height: 1.6;
-        color: #1f2937;
-        background: #ffffff;
-      }
-      
-      .page-container {
-        max-width: 210mm;
-        margin: 0 auto;
-        padding: 10mm;
-      }
-      
-      /* Header med gradient */
-      .header {
-        background: linear-gradient(135deg, #0066cc 0%, #004499 100%);
-        color: white;
-        padding: 20px 30px;
-        border-radius: 10px;
-        margin-bottom: 30px;
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      }
-      
-      .company-section {
-        flex: 1;
-      }
-      
-      .logo {
-        max-width: 180px;
-        max-height: 70px;
-        margin-bottom: 10px;
-        display: block;
-      }
-      
-      .company-name {
-        font-size: 24pt;
-        font-weight: 700;
-        margin-bottom: 5px;
-      }
-      
-      .company-details {
-        font-size: 10pt;
-        opacity: 0.9;
-        line-height: 1.4;
-      }
-      
-      .report-info {
-        text-align: right;
-        min-width: 200px;
-      }
-      
-      .report-title {
-        font-size: 18pt;
-        font-weight: 700;
-        margin-bottom: 10px;
-      }
-      
-      .report-number {
-        font-size: 12pt;
-        margin-bottom: 5px;
-      }
-      
-      .report-date {
-        font-size: 11pt;
-        opacity: 0.9;
-      }
-      
-      /* Sections */
-      .section {
-        margin-bottom: 30px;
-        background: #f9fafb;
-        padding: 20px;
-        border-radius: 8px;
-        border: 1px solid #e5e7eb;
-      }
-      
-      .section h2 {
-        font-size: 16pt;
-        font-weight: 700;
-        color: #1f2937;
-        margin-bottom: 15px;
-        padding-bottom: 10px;
-        border-bottom: 2px solid #3b82f6;
-      }
-      
-      .section h3 {
-        font-size: 14pt;
-        font-weight: 600;
-        color: #374151;
-        margin-top: 20px;
-        margin-bottom: 10px;
-      }
-      
-      /* Info grid */
-      .info-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 15px;
-      }
-      
-      .info-item {
-        display: flex;
-        gap: 10px;
-      }
-      
-      .label {
-        font-weight: 600;
-        color: #6b7280;
-        min-width: 120px;
-      }
-      
-      .value {
-        color: #111827;
-      }
-      
-      /* Avvik section */
-      .avvik-section {
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-      }
-      
-      .avvik-header {
-        color: #dc2626;
-        border-bottom-color: #dc2626;
-      }
-      
-      .avvik-item {
-        display: flex;
-        gap: 15px;
-        margin-bottom: 15px;
-        padding: 15px;
-        background: white;
-        border-radius: 6px;
-        border: 1px solid #fecaca;
-      }
-      
-      .avvik-number {
-        font-size: 18pt;
-        font-weight: 700;
-        color: #dc2626;
-      }
-      
-      .avvik-content {
-        flex: 1;
-      }
-      
-      .avvik-description {
-        font-weight: 500;
-        margin-bottom: 5px;
-      }
-      
-      .avvik-checkpoint {
-        font-size: 10pt;
-        color: #6b7280;
-      }
-      
-      /* Checklist table */
-      .checklist-component {
-        margin-bottom: 25px;
-      }
-      
-      .checklist-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 10px;
-      }
-      
-      .checklist-table th {
-        background: #e5e7eb;
-        padding: 10px;
-        text-align: left;
-        font-weight: 600;
-        font-size: 10pt;
-        color: #374151;
-      }
-      
-      .checklist-table td {
-        padding: 10px;
-        border-bottom: 1px solid #e5e7eb;
-        font-size: 10pt;
-      }
-      
-      .checklist-table tr:last-child td {
-        border-bottom: none;
-      }
-      
-      /* Status badges */
-      .status-ok {
-        background: #d1fae5;
-        color: #065f46;
-        padding: 4px 12px;
-        border-radius: 4px;
-        font-weight: 600;
-        display: inline-block;
-      }
-      
-      .status-avvik {
-        background: #fee2e2;
-        color: #991b1b;
-        padding: 4px 12px;
-        border-radius: 4px;
-        font-weight: 600;
-        display: inline-block;
-      }
-      
-      .status-byttet {
-        background: #dbeafe;
-        color: #1e40af;
-        padding: 4px 12px;
-        border-radius: 4px;
-        font-weight: 600;
-        display: inline-block;
-      }
-      
-      .status-na {
-        background: #f3f4f6;
-        color: #6b7280;
-        padding: 4px 12px;
-        border-radius: 4px;
-        font-weight: 600;
-        display: inline-block;
-      }
-      
-      /* Kommentar boks */
-      .comment-box {
-        background: #f0f9ff;
-        border: 1px solid #bae6fd;
-        border-radius: 8px;
-        padding: 20px;
-        margin-top: 20px;
-      }
-      
-      .comment-text {
-        white-space: pre-wrap;
-        color: #0c4a6e;
-      }
-      
-      /* Footer/Signatur */
-      .footer {
-        margin-top: 50px;
-        padding-top: 30px;
-        border-top: 2px solid #e5e7eb;
-      }
-      
-      .signature-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 50px;
-        margin-bottom: 30px;
-      }
-      
-      .signature-box {
-        text-align: center;
-      }
-      
-      .signature-label {
-        font-weight: 600;
-        color: #4b5563;
-        margin-bottom: 50px;
-        display: block;
-      }
-      
-      .signature-line {
-        border-bottom: 2px solid #4b5563;
-        margin-bottom: 10px;
-        height: 40px;
-      }
-      
-      .signature-name {
-        font-size: 10pt;
-        color: #6b7280;
-      }
-      
-      .footer-info {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 10pt;
-        color: #6b7280;
-        margin-top: 30px;
-      }
-      
-      /* Utility classes */
-      .text-center { text-align: center; }
-      .text-right { text-align: right; }
-      .font-bold { font-weight: 600; }
-      
-      @media print {
-        body { margin: 0; }
-        .page-container { padding: 5mm; }
-        .header { break-inside: avoid; }
-        .section { break-inside: avoid; }
-        .table { break-inside: avoid; }
-      }
-    `;
   }
 }
 
