@@ -1881,3 +1881,47 @@ button[type="submit"].action-btn.primary:hover {
     transform: scale(1.05);
     transition: all 0.2s ease;
 }
+
+.virkningsgrad-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+}
+
+.virkningsgrad-inputs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+.virkningsgrad-inputs .input-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.virkningsgrad-inputs .input-group label {
+    font-size: 13px;
+    color: #666;
+    min-width: 60px;
+}
+
+.virkningsgrad-inputs .input-group input {
+    width: 70px;
+    padding: 6px 8px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.virkningsgrad-inputs .result {
+    margin-left: auto;
+    font-weight: 500;
+    color: #28a745;
+}
+
+.checklist-item-fullwidth[data-item-type="virkningsgrad"] .item-actions {
+    align-self: flex-end;
+}

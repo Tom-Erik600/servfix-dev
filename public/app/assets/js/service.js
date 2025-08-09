@@ -1568,23 +1568,42 @@ function createVirkningsgradItemHTML(item) {
     return `
         <div class="checklist-item-fullwidth" data-item-id="${item.id}" data-item-type="virkningsgrad">
             <span class="item-label">${item.label}</span>
-            <div class="virkningsgrad-inputs">
-                <div class="input-group">
-                    <label>T2 (ute):</label>
-                    <input type="number" id="t2-${item.id}" step="0.1" />
+            <div class="virkningsgrad-wrapper">
+                <div class="virkningsgrad-inputs">
+                    <div class="input-group">
+                        <label>T2 (ute):</label>
+                        <input type="number" id="t2-${item.id}" step="0.1" placeholder="°C" />
+                    </div>
+                    <div class="input-group">
+                        <label>T3 (tilluft):</label>
+                        <input type="number" id="t3-${item.id}" step="0.1" placeholder="°C" />
+                    </div>
+                    <div class="input-group">
+                        <label>T7 (avtrekk):</label>
+                        <input type="number" id="t7-${item.id}" step="0.1" placeholder="°C" />
+                    </div>
+                    <div class="result">
+                        <span>Virkningsgrad: <strong id="result-${item.id}">--%</strong></span>
+                    </div>
                 </div>
-                <div class="input-group">
-                    <label>T3 (tilluft):</label>
-                    <input type="number" id="t3-${item.id}" step="0.1" />
-                </div>
-                <div class="input-group">
-                    <label>T7 (avtrekk):</label>
-                    <input type="number" id="t7-${item.id}" step="0.1" />
-                </div>
-                <div class="result">
-                    <span>Virkningsgrad: <strong id="result-${item.id}">--%</strong></span>
+                <div class="item-actions">
+                    <button type="button" class="status-btn ok" data-status="ok">OK</button>
+                    <button type="button" class="status-btn avvik" data-status="avvik">Avvik</button>
                 </div>
             </div>
+        </div>
+        <div class="avvik-container" id="avvik-${item.id}">
+            <textarea placeholder="Beskriv avvik..."></textarea>
+            <div class="photo-dropdown-wrapper" style="position: relative; display: inline-block;">
+                <button type="button" class="photo-btn" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer;">
+                    <i data-lucide="camera"></i>Ta bilde av avvik<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
+                </button>
+                <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
+                    <button class="photo-option" data-action="camera" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
+                    <button class="photo-option" data-action="upload" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
+                </div>
+            </div>
+            <div id="avvik-images-container-${item.id}" class="avvik-images-container"></div>
         </div>
     `;
 }
@@ -1597,7 +1616,7 @@ function createTilstandsgradDropdownItemHTML(item) {
         <div class="checklist-item" data-item-id="${item.id}" data-item-type="tilstandsgrad_dropdown">
             <span class="item-label">${item.label}</span>
             <div class="item-controls">
-                <select class="checklist-dropdown">
+                <select id="select-${item.id}" class="checklist-dropdown">
                     <option value="">Velg TG...</option>
                     ${optionsHTML}
                 </select>
@@ -1614,7 +1633,7 @@ function createKonsekvenssgradDropdownItemHTML(item) {
         <div class="checklist-item" data-item-id="${item.id}" data-item-type="konsekvensgrad_dropdown">
             <span class="item-label">${item.label}</span>
             <div class="item-controls">
-                <select class="checklist-dropdown">
+                <select id="select-${item.id}" class="checklist-dropdown">
                     <option value="">Velg KG...</option>
                     ${optionsHTML}
                 </select>
@@ -1883,30 +1902,36 @@ function loadChecklistForEditing(index) {
     const component = state.serviceReport.reportData.components[index];
     if (!component) return;
     
-    // Load system fields
-    if (component.details) {
+    // Load system fields - sjekk først ny struktur, deretter gammel
+    if (component.detailsWithLabels) {
+        // Ny struktur med labels
+        Object.entries(component.detailsWithLabels).forEach(([fieldName, fieldData]) => {
+            const input = document.getElementById(`comp-${fieldName}`);
+            if (input) {
+                input.value = fieldData.value || '';
+            }
+        });
+    } else if (component.details) {
+        // Gammel struktur (bakoverkompatibilitet for eksisterende data)
         Object.entries(component.details).forEach(([key, value]) => {
             const input = document.getElementById(`comp-${key}`);
             if (input) input.value = value;
         });
     }
     
-    // Load checklist items
+    // Resten forblir uendret
     if (component.checklist && state.checklistTemplate?.checklistItems) {
         populateChecklistItems(state.checklistTemplate.checklistItems, component.checklist);
     }
     
-    // Load products
     if (component.products?.length > 0) {
         component.products.forEach(product => addProductLine(product));
     }
     
-    // Load additional work
     if (component.additionalWork?.length > 0) {
         component.additionalWork.forEach(work => addAdditionalWorkLine(work));
     }
     
-    // Load drift schedule
     if (component.driftSchedule) {
         Object.entries(component.driftSchedule).forEach(([day, times]) => {
             Object.entries(times).forEach(([field, value]) => {
@@ -1975,41 +2000,89 @@ function populateChecklistItems(items, checklistData) {
                 break;
 
             case 'dropdown_ok_avvik':
-                if (result.selectedOption) {
+                // Håndter forskjellige datastrukturer
+                let dropdownValue = '';
+                
+                if (typeof result === 'string') {
+                    // Direkte streng-verdi (f.eks. "Trykk")
+                    dropdownValue = result;
+                } else if (result && typeof result === 'object') {
+                    // Objekt med selectedOption eller andre property-navn
+                    dropdownValue = result.selectedOption || 
+                                result.dropdownValue || 
+                                result.value ||
+                                '';
+                }
+                
+                if (dropdownValue) {
                     const dropdown = element.querySelector('.checklist-dropdown');
-                    if (dropdown) dropdown.value = result.selectedOption;
+                    if (dropdown) {
+                        dropdown.value = dropdownValue;
+                    }
                 }
-                if (result.status) {
-                    const button = element.querySelector(`[data-status="${result.status}"]`);
-                    if (button) button.classList.add('active');
-                }
-                if (result.avvikComment) {
-                    const avvikContainer = element.nextElementSibling;
-                    if (avvikContainer) {
-                        avvikContainer.classList.add('show');
-                        avvikContainer.querySelector('textarea').value = result.avvikComment;
+                
+                // Håndter status og avvik som før
+                if (result && typeof result === 'object') {
+                    if (result.status) {
+                        const button = element.querySelector(`[data-status="${result.status}"]`);
+                        if (button) button.classList.add('active');
+                    }
+                    
+                    if (result.avvikComment) {
+                        const avvikContainer = element.nextElementSibling;
+                        if (avvikContainer && avvikContainer.classList.contains('avvik-container')) {
+                            avvikContainer.classList.add('show');
+                            const textarea = avvikContainer.querySelector('textarea');
+                            if (textarea) textarea.value = result.avvikComment;
+                        }
                     }
                 }
                 break;
                 
             case 'dropdown_ok_avvik_comment':
-                if (result.selectedOption) {
+                // Håndter forskjellige datastrukturer
+                let dropdownValueComment = '';
+                
+                if (typeof result === 'string') {
+                    dropdownValueComment = result;
+                } else if (result && typeof result === 'object') {
+                    dropdownValueComment = result.selectedOption || 
+                                        result.dropdownValue || 
+                                        result.value ||
+                                        '';
+                }
+                
+                if (dropdownValueComment) {
                     const dropdown = element.querySelector('.checklist-dropdown');
-                    if (dropdown) dropdown.value = result.selectedOption;
+                    if (dropdown) {
+                        dropdown.value = dropdownValueComment;
+                    }
                 }
-                if (result.status) {
-                    const button = element.querySelector(`[data-status="${result.status}"]`);
-                    if (button) button.classList.add('active');
-                }
-                if (result.comment) {
-                    const commentElement = element.querySelector(`#comment-${item.id}`);
-                    if (commentElement) commentElement.value = result.comment;
-                }
-                if (result.avvikComment) {
-                    const avvikContainer = element.nextElementSibling;
-                    if (avvikContainer) {
-                        avvikContainer.classList.add('show');
-                        avvikContainer.querySelector('textarea').value = result.avvikComment;
+                
+                // Håndter resten som før
+                if (result && typeof result === 'object') {
+                    if (result.status) {
+                        const button = element.querySelector(`[data-status="${result.status}"]`);
+                        if (button) button.classList.add('active');
+                    }
+                    
+                    if (result.comment) {
+                        const commentElement = element.querySelector(`#comment-${item.id}`);
+                        if (commentElement) commentElement.value = result.comment;
+                    }
+                    
+                    if (result.avvikComment) {
+                        // Finn riktig avvik-container (kan være nest flere elementer ned)
+                        let avvikContainer = element.nextElementSibling;
+                        while (avvikContainer && !avvikContainer.classList.contains('avvik-container')) {
+                            avvikContainer = avvikContainer.nextElementSibling;
+                        }
+                        
+                        if (avvikContainer) {
+                            avvikContainer.classList.add('show');
+                            const textarea = avvikContainer.querySelector('textarea');
+                            if (textarea) textarea.value = result.avvikComment;
+                        }
                     }
                 }
                 break;
@@ -2033,38 +2106,50 @@ function populateChecklistItems(items, checklistData) {
                 break;
                 
             case 'virkningsgrad':
-                if (result.t2 !== null) {
+                if (result.t2 !== undefined && result.t2 !== null) {
                     const t2Input = element.querySelector(`#t2-${item.id}`);
                     if (t2Input) t2Input.value = result.t2;
                 }
-                if (result.t3 !== null) {
+                if (result.t3 !== undefined && result.t3 !== null) {
                     const t3Input = element.querySelector(`#t3-${item.id}`);
                     if (t3Input) t3Input.value = result.t3;
                 }
-                if (result.t7 !== null) {
+                if (result.t7 !== undefined && result.t7 !== null) {
                     const t7Input = element.querySelector(`#t7-${item.id}`);
                     if (t7Input) t7Input.value = result.t7;
                 }
-                if (result.virkningsgrad !== null) {
+                
+                // VIKTIG: Beregn virkningsgrad etter at verdiene er satt
+                if (result.t2 !== null && result.t3 !== null && result.t7 !== null) {
+                    const virkningsgrad = calculateVirkningsgrad(result.t2, result.t3, result.t7);
                     const resultSpan = element.querySelector(`#result-${item.id}`);
-                    if (resultSpan) resultSpan.textContent = result.virkningsgrad.toFixed(1);
+                    if (resultSpan && virkningsgrad !== null) {
+                        resultSpan.textContent = `${virkningsgrad.toFixed(1)}%`;
+                    }
                 }
+                
+                // Sett status hvis den finnes
                 if (result.status) {
                     const button = element.querySelector(`[data-status="${result.status}"]`);
                     if (button) button.classList.add('active');
                 }
+                
+                // Sett avvik kommentar hvis den finnes
                 if (result.avvikComment) {
                     const avvikContainer = element.nextElementSibling;
-                    if (avvikContainer) {
+                    if (avvikContainer && avvikContainer.classList.contains('avvik-container')) {
                         avvikContainer.classList.add('show');
-                        avvikContainer.querySelector('textarea').value = result.avvikComment;
+                        const textarea = avvikContainer.querySelector('textarea');
+                        if (textarea) textarea.value = result.avvikComment;
                     }
                 }
                 break;
                 
             case 'tilstandsgrad_dropdown':
             case 'konsekvensgrad_dropdown':
-                const selectElement = element.querySelector(`#select-${item.id}`);
+                // Prøv først med ID, deretter med class
+                const selectElement = element.querySelector(`#select-${item.id}`) || 
+                                    element.querySelector('.checklist-dropdown');
                 if (selectElement && result) {
                     selectElement.value = result;
                 }
@@ -2101,6 +2186,8 @@ function setupEventListeners() {
 
     // Legg til virkningsgrad-beregning
     setupVirkningsgradCalculation();
+
+    setupAutoOkFunctionality();
 }
 
 function handleStatusClick(e) {
@@ -2209,6 +2296,99 @@ function handleDynamicLineClick(e) {
     }
 }
 
+
+function setupAutoOkFunctionality() {
+    console.log('Setting up auto-OK functionality...');
+    
+    const checklistContainer = document.getElementById('checklist-items-container');
+    if (!checklistContainer) return;
+    
+    // For dropdown endringer
+    checklistContainer.addEventListener('change', (e) => {
+        const target = e.target;
+        const checklistItem = target.closest('.checklist-item, .checklist-item-fullwidth');
+        if (!checklistItem) return;
+        
+        const itemType = checklistItem.dataset.itemType;
+        
+        // For dropdown_ok_avvik og dropdown_ok_avvik_comment
+        if ((itemType === 'dropdown_ok_avvik' || itemType === 'dropdown_ok_avvik_comment') && 
+            target.classList.contains('checklist-dropdown')) {
+            
+            if (target.value && target.value !== '') {
+                autoSetOkStatus(checklistItem);
+            }
+        }
+    });
+    
+    // For numeriske inputs (temperatur og virkningsgrad)
+    checklistContainer.addEventListener('input', (e) => {
+        const target = e.target;
+        if (target.type !== 'number') return;
+        
+        const checklistItem = target.closest('.checklist-item, .checklist-item-fullwidth');
+        if (!checklistItem) return;
+        
+        const itemType = checklistItem.dataset.itemType;
+        const itemId = checklistItem.dataset.itemId;
+        
+        // For temperature type
+        if (itemType === 'temperature' && target.id === `temp-${itemId}`) {
+            if (target.value && target.value !== '') {
+                autoSetOkStatus(checklistItem);
+            }
+        }
+        
+        // For virkningsgrad type
+        if (itemType === 'virkningsgrad' && 
+            (target.id === `t2-${itemId}` || target.id === `t3-${itemId}` || target.id === `t7-${itemId}`)) {
+            
+            const t2Input = document.getElementById(`t2-${itemId}`);
+            const t3Input = document.getElementById(`t3-${itemId}`);
+            const t7Input = document.getElementById(`t7-${itemId}`);
+            
+            // Hvis minst én temperatur er fylt ut, sett OK
+            if ((t2Input?.value && t2Input.value !== '') ||
+                (t3Input?.value && t3Input.value !== '') ||
+                (t7Input?.value && t7Input.value !== '')) {
+                autoSetOkStatus(checklistItem);
+            }
+        }
+    });
+}
+
+// Hjelpefunksjon for å sette OK-status
+function autoSetOkStatus(checklistItem) {
+    const okButton = checklistItem.querySelector('.status-btn.ok');
+    const hasActiveStatus = checklistItem.querySelector('.status-btn.active');
+    
+    // Sett kun OK hvis ingen status allerede er valgt
+    if (okButton && !hasActiveStatus) {
+        okButton.classList.add('active');
+        console.log(`Auto-set OK for item ${checklistItem.dataset.itemId} (type: ${checklistItem.dataset.itemType})`);
+        
+        // Skjul avvik-container hvis den er åpen
+        const itemId = checklistItem.dataset.itemId;
+        const avvikContainer = document.getElementById(`avvik-${itemId}`);
+        if (avvikContainer) {
+            avvikContainer.classList.remove('show');
+            avvikContainer.style.display = 'none';
+        }
+    }
+}
+
+// Bonus: Legg til visuell indikator når auto-OK aktiveres
+function addAutoOkVisualFeedback(checklistItem) {
+    // Legg til en subtil animasjon når OK settes automatisk
+    const okButton = checklistItem.querySelector('.status-btn.ok.active');
+    if (okButton) {
+        okButton.style.transition = 'all 0.3s ease';
+        okButton.style.transform = 'scale(1.1)';
+        setTimeout(() => {
+            okButton.style.transform = 'scale(1)';
+        }, 300);
+    }
+}
 async function saveChecklist(e) {
     e.preventDefault();
     console.log('Saving checklist...');
@@ -2283,26 +2463,37 @@ function resetForm() {
 function collectComponentData() {
     console.log('Collecting component data...');
     
-    // Collect system field details
+    // Collect system field details med labels
     const details = {};
+    const detailsWithLabels = {}; // Ny struktur som inkluderer labels
     
     if (state.checklistTemplate?.systemFields) {
         state.checklistTemplate.systemFields.forEach(field => {
             const input = document.getElementById(`comp-${field.name}`);
             if (input) {
+                // Lagre både verdi og metadata
                 details[field.name] = input.value;
-                console.log(`Collected field ${field.name}:`, input.value);
+                
+                // For dropdown/select, lagre også den valgte tekstens label
+                if (input.tagName === 'SELECT' && input.selectedIndex >= 0) {
+                    detailsWithLabels[field.name] = {
+                        value: input.value,
+                        label: input.options[input.selectedIndex].text,
+                        fieldLabel: field.label,
+                        fieldType: 'select'
+                    };
+                } else {
+                    detailsWithLabels[field.name] = {
+                        value: input.value,
+                        fieldLabel: field.label,
+                        fieldType: input.tagName.toLowerCase()
+                    };
+                }
             }
         });
-    } else {
-        // Fallback for beskrivelse
-        const beskrivelse = document.getElementById('comp-beskrivelse');
-        if (beskrivelse) {
-            details.beskrivelse = beskrivelse.value;
-        }
     }
     
-    // Collect checklist responses
+    // Collect checklist responses med labels (allerede implementert)
     const checklist = {};
     const checklistContainer = document.getElementById('checklist-items-container');
     if (checklistContainer && state.checklistTemplate?.checklistItems) {
@@ -2318,13 +2509,19 @@ function collectComponentData() {
     const products = [];
     const productContainer = document.getElementById('product-lines-container');
     if (productContainer) {
-        productContainer.querySelectorAll('.product-item').forEach(item => {
+        productContainer.querySelectorAll('.product-item').forEach((item, index) => {
             const name = item.querySelector('.product-name')?.value || '';
             const quantity = parseFloat(item.querySelector('.product-quantity')?.value) || 0;
             const price = parseFloat(item.querySelector('.product-price')?.value) || 0;
             
             if (name || quantity > 0 || price > 0) {
-                products.push({ name, quantity, price });
+                products.push({ 
+                    id: `product_${Date.now()}_${index}`,
+                    name, 
+                    quantity, 
+                    price,
+                    total: quantity * price
+                });
             }
         });
     }
@@ -2333,22 +2530,54 @@ function collectComponentData() {
     const additionalWork = [];
     const workContainer = document.getElementById('additional-work-lines-container');
     if (workContainer) {
-        workContainer.querySelectorAll('.work-item').forEach(item => {
+        workContainer.querySelectorAll('.work-item').forEach((item, index) => {
             const description = item.querySelector('.work-description')?.value || '';
             const hours = parseFloat(item.querySelector('.work-hours')?.value) || 0;
             const price = parseFloat(item.querySelector('.work-price')?.value) || 0;
             
             if (description || hours > 0 || price > 0) {
-                additionalWork.push({ description, hours, price });
+                additionalWork.push({ 
+                    id: `work_${Date.now()}_${index}`,
+                    description, 
+                    hours, 
+                    price,
+                    total: hours * price
+                });
             }
         });
     }
     
+    // Collect drift schedule hvis aktuelt
+    const driftSchedule = {};
+    if (state.checklistTemplate?.hasDriftSchedule) {
+        document.querySelectorAll('.drift-time-input').forEach(input => {
+            const day = input.dataset.day;
+            const field = input.dataset.field;
+            
+            if (!driftSchedule[day]) {
+                driftSchedule[day] = {};
+            }
+            driftSchedule[day][field] = input.value;
+        });
+    }
+    
+    // Returner strukturert data med all metadata
     const componentData = {
-        details,
-        checklist,
-        products,
-        additionalWork
+        id: state.editingComponentIndex !== null ? 
+            state.serviceReport.reportData.components[state.editingComponentIndex].id : 
+            `comp_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        templateInfo: {
+            id: state.checklistTemplate.id,
+            name: state.checklistTemplate.name,
+            version: state.checklistTemplate.version || '1.0'
+        },
+        details: details, // Bakoverkompatibilitet
+        detailsWithLabels: detailsWithLabels, // Ny struktur
+        checklist: checklist,
+        products: products,
+        additionalWork: additionalWork,
+        driftSchedule: driftSchedule
     };
     
     console.log('Collected component data:', componentData);
@@ -2455,7 +2684,7 @@ function getChecklistItemValue(itemId) {
                 comment: commentTextarea ? commentTextarea.value : ''
             };
             
-            // Hvis avvik, hent avvik-kommentar
+            // Hvis avvik, hent avvik-kommentar også
             if (status === 'avvik') {
                 const avvikContainer = document.getElementById(`avvik-${itemId}`);
                 if (avvikContainer && avvikContainer.classList.contains('show')) {
@@ -2490,27 +2719,21 @@ function getChecklistItemValue(itemId) {
         
         case 'virkningsgrad': {
             const t2Input = element.querySelector(`#t2-${itemId}`);
-            const t3Input = element.querySelector(`#t3-${itemId}`);
+            const t3Input = element.querySelector(`#t3-${itemId}`);  
             const t7Input = element.querySelector(`#t7-${itemId}`);
-            const t8Input = element.querySelector(`#t8-${itemId}`);
             const activeButton = element.querySelector('.status-btn.active');
             
-            const t2 = t2Input ? parseFloat(t2Input.value) : 0;
-            const t3 = t3Input ? parseFloat(t3Input.value) : 0;
-            const t7 = t7Input ? parseFloat(t7Input.value) : 0;
-            const t8 = t8Input ? parseFloat(t8Input.value) : 0;
-            
-            // Beregn virkningsgrad: ((T3-T2)/(T7-T8)) * 100
-            let virkningsgrad = 0;
-            if (t7 !== t8) {
-                virkningsgrad = ((t3 - t2) / (t7 - t8)) * 100;
-            }
-            
             const result = {
-                t2, t3, t7, t8,
-                virkningsgrad,
+                t2: t2Input ? parseFloat(t2Input.value) : null,
+                t3: t3Input ? parseFloat(t3Input.value) : null,
+                t7: t7Input ? parseFloat(t7Input.value) : null,
                 status: activeButton ? activeButton.dataset.status : null
             };
+            
+            // Beregn virkningsgrad hvis alle verdier finnes
+            if (result.t2 !== null && result.t3 !== null && result.t7 !== null) {
+                result.virkningsgrad = calculateVirkningsgrad(result.t2, result.t3, result.t7);
+            }
             
             // Hvis avvik, hent kommentar
             if (result.status === 'avvik') {
@@ -2526,18 +2749,47 @@ function getChecklistItemValue(itemId) {
         
         case 'tilstandsgrad_dropdown':
         case 'konsekvensgrad_dropdown': {
-            const select = element.querySelector(`#select-${itemId}`);
+            // Prøv først med ID, deretter med class
+            const select = element.querySelector(`#select-${itemId}`) || 
+                          element.querySelector('.checklist-dropdown');
             return select ? select.value : null;
         }
         
         case 'group_selection': {
-            const checkedInputs = element.querySelectorAll('input[type="checkbox"]:checked');
+            const checkedInputs = element.querySelectorAll('input[type="radio"]:checked');
             return Array.from(checkedInputs).map(input => input.value);
         }
         
         case 'switch_select': {
             const select = element.querySelector(`#select-${itemId}`);
             return select ? select.value : null;
+        }
+        
+        case 'dropdown': {
+            const select = element.querySelector(`#dropdown-${itemId}`) || 
+                          element.querySelector('.checklist-dropdown');
+            return select ? select.value : null;
+        }
+        
+        case 'multi_checkbox': {
+            const checkedBoxes = element.querySelectorAll('input[type="checkbox"]:checked');
+            return Array.from(checkedBoxes).map(box => box.value);
+        }
+        
+        case 'timer': {
+            const display = element.querySelector('.timer-display');
+            return display ? display.textContent : '00:00:00';
+        }
+        
+        case 'rengjort_ikke_rengjort': {
+            const activeButton = element.querySelector('.status-btn.active');
+            return activeButton ? activeButton.dataset.status : null;
+        }
+        
+        case 'image_only': {
+            // Dette returnerer bare om det finnes bilder
+            const images = element.querySelectorAll('.uploaded-image');
+            return images.length > 0;
         }
         
         default:
