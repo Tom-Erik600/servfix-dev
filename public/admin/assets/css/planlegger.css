@@ -1,48 +1,84 @@
-/* air-tech-adminweb/assets/css/planlegger.css - Enkel versjon */
+/* ===== PLANLEGGER.CSS - KOMPLETT VERSJON MED BOKSER ===== */
 
-/* Layout (som opprinnelig) */
-.planner-layout {
-    display: grid;
-    grid-template-columns: 280px 1fr;
-    gap: 24px;
-    height: calc(100vh - 64px - 48px);
+/* ===== CSS VARIABLER ===== */
+:root {
+    --primary-color: #3b82f6;
+    --primary-hover: #2563eb;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --text-color: #1f2937;
+    --text-light: #6b7280;
+    --text-lighter: #9ca3af;
+    --border-color: #e5e7eb;
+    --bg-light: #f9fafb;
+    --bg-white: #ffffff;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
-.planner-column {
-    background-color: var(--card-background-color);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 16px;
-    overflow-y: auto;
+/* ===== GENERELLE STILER ===== */
+* {
+    box-sizing: border-box;
 }
 
-.planner-column h2 {
-    margin-top: 0;
-    margin-bottom: 16px;
-    font-size: 16px;
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--text-color);
+    background-color: var(--bg-light);
+    margin: 0;
+    padding: 0;
+}
+
+/* ===== PLANNER CONTAINER ===== */
+.planner-container {
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.planner-header {
+    margin-bottom: 30px;
+}
+
+.planner-header h1 {
+    font-size: 28px;
     font-weight: 600;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--border-color);
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    margin: 0 0 8px 0;
+    color: var(--text-color);
 }
 
-/* Enkel filter */
-.simple-filter {
-    background: var(--card-background-color);
-    border: 1px solid var(--border-color);
+.planner-instructions {
+    background-color: #eff6ff;
+    border: 1px solid #bfdbfe;
     border-radius: 8px;
-    padding: 16px;
+    padding: 16px 20px;
+    color: #1e40af;
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 20px;
+}
+
+.planner-instructions p {
+    margin: 0;
+}
+
+/* ===== FILTER CHECKBOX ===== */
+.simple-filter {
     margin-bottom: 24px;
+    background-color: var(--bg-white);
+    padding: 16px 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
 }
 
 .filter-checkbox {
     display: flex;
     align-items: center;
-    gap: 12px;
     cursor: pointer;
-    font-weight: 500;
+    user-select: none;
 }
 
 .filter-checkbox input[type="checkbox"] {
@@ -50,10 +86,11 @@
 }
 
 .checkbox-custom {
-    width: 18px;
-    height: 18px;
-    border: 2px solid var(--border-color);
+    width: 20px;
+    height: 20px;
+    border: 2px solid #d1d5db;
     border-radius: 4px;
+    margin-right: 12px;
     position: relative;
     transition: all 0.2s ease;
     flex-shrink: 0;
@@ -71,164 +108,242 @@
     left: 50%;
     transform: translate(-50%, -50%);
     color: white;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: bold;
 }
 
 .checkbox-label {
+    font-size: 14px;
     color: var(--text-color);
 }
 
-/* Count badge */
-.order-count-badge {
-    background: var(--primary-color);
-    color: white;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    margin-left: 8px;
+/* ===== PLANNER LAYOUT ===== */
+.planner-layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 24px;
+    height: calc(100vh - 300px);
+    min-height: 500px;
 }
 
-/* Tekniker-kort (uendret) */
-.technician-card {
-    background-color: #f9fafb;
-    padding: 14px 16px;
+/* ===== PLANNER KOLONNER ===== */
+.planner-column {
+    background-color: var(--bg-white);
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
-    margin-bottom: 8px;
-    cursor: grab;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.planner-column h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--bg-light);
     display: flex;
     align-items: center;
     gap: 12px;
-    transition: all 0.2s ease;
 }
 
-.technician-card:hover {
-    background-color: #f3f4f6;
-    transform: translateY(-1px);
+/* ===== ORDER COUNT BADGE ===== */
+.order-count-badge {
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 12px;
+    min-width: 24px;
+    text-align: center;
+}
+
+/* ===== TECHNICIAN OG PROJECT LISTER ===== */
+#technician-list,
+#project-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+/* ===== TECHNICIAN ITEM - DRAGGBAR BOKS ===== */
+.technician-item {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 2px solid #bae6fd;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    cursor: grab;
+    transition: all 0.2s ease;
+    position: relative;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.technician-card.dragging {
-    opacity: 0.5;
-    background-color: #dbeafe;
-    cursor: grabbing;
-}
-
-.technician-avatar {
-    width: 36px;
-    height: 36px;
-    background-color: var(--primary-color);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 600;
-    font-size: 14px;
-}
-
-/* Kunde-kort (gjenbruker prosjekt-kort styling) */
-.project-card {
-    background-color: #f9fafb;
-    padding: 20px;
-    border: 2px dashed var(--border-color);
-    border-radius: 8px;
-    margin-bottom: 12px;
-    transition: all 0.2s ease;
-    cursor: pointer;
-}
-
-.project-card:hover {
-    background-color: #f3f4f6;
-}
-
-.project-card.drag-over {
+.technician-item:hover {
     border-color: var(--primary-color);
-    background-color: #eff6ff;
-    border-style: solid;
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+    background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
 }
 
-.project-customer {
+.technician-item.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+    transform: rotate(5deg);
+}
+
+.technician-item strong {
+    font-size: 16px;
     font-weight: 600;
-    font-size: 15px;
     color: var(--text-color);
+    display: block;
     margin-bottom: 4px;
 }
 
-.project-name {
+.technician-info {
     font-size: 13px;
     color: var(--text-light);
-    margin-bottom: 8px;
 }
 
-.project-meta {
+/* Drag ghost image */
+.technician-item.dragging::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(59, 130, 246, 0.1);
+    border-radius: 8px;
+}
+
+/* ===== PROJECT ITEM - MOTTAKER BOKS ===== */
+.project-item {
+    background-color: var(--bg-white);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+    position: relative;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.project-item:hover {
+    box-shadow: var(--shadow-md);
+    border-color: #d1d5db;
+    background-color: #fafafa;
+}
+
+.project-item.drag-over {
+    background-color: #dbeafe;
+    border-color: var(--primary-color);
+    border-style: dashed;
+    border-width: 2px;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+    transform: scale(1.02);
+}
+
+.project-item h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 8px 0;
+    color: var(--text-color);
+}
+
+.project-details {
+    font-size: 13px;
+    color: var(--text-light);
+    line-height: 1.5;
+}
+
+.project-details div {
+    margin-bottom: 4px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    font-size: 11px;
+}
+
+.project-details div:before {
+    content: '•';
+    margin-right: 8px;
+    color: var(--text-lighter);
+}
+
+/* ===== EMPTY STATE ===== */
+.empty-state {
+    text-align: center;
+    padding: 40px;
     color: var(--text-light);
 }
 
-/* Modal (uendret fra opprinnelig) */
+.empty-state p {
+    margin: 0;
+    font-size: 14px;
+}
+
+/* ===== MODAL OVERLAY ===== */
 .modal-overlay {
+    display: none;
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    /* display: none; */ /* Fjernet denne linjen */
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
-    backdrop-filter: blur(4px);
+    padding: 20px;
 }
 
+.modal-overlay.show {
+    display: flex;
+}
+
+/* ===== MODAL CONTENT ===== */
 .modal-content {
-    background: white;
+    background-color: var(--bg-white);
     border-radius: 12px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
-    width: 90%;
-    max-width: 420px;
-    animation: modalSlideIn 0.3s ease-out;
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
-@keyframes modalSlideIn {
-    from {
-        transform: translateY(-20px);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
-}
-
+/* ===== MODAL HEADER ===== */
 .modal-header {
     padding: 24px 24px 20px;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .modal-header h3 {
     margin: 0;
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 600;
     color: var(--text-color);
 }
 
+/* ===== MODAL BODY ===== */
 .modal-body {
     padding: 24px;
+    overflow-y: auto;
+    flex: 1;
 }
 
 .modal-info-text {
-    font-size: 14px;
-    color: var(--text-light);
+    font-size: 15px;
+    color: var(--text-color);
     margin-bottom: 20px;
     line-height: 1.5;
 }
 
+/* ===== FORM ELEMENTS ===== */
 .form-group {
     margin-bottom: 20px;
 }
@@ -258,15 +373,153 @@
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
+/* ===== EQUIPMENT SELECTION SECTION ===== */
+.equipment-selection-section {
+    margin-top: 24px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 20px;
+}
+
+.equipment-selection-section h4 {
+    margin-bottom: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.equipment-selection-help {
+    background-color: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: #0369a1;
+}
+
+.equipment-selection-help small {
+    display: block;
+    line-height: 1.5;
+}
+
+/* ===== EQUIPMENT SELECTION LIST ===== */
+.equipment-selection-list {
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--bg-light);
+    padding: 4px;
+}
+
+.equipment-selection-item {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    margin-bottom: 4px;
+    background-color: var(--bg-white);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    position: relative;
+}
+
+.equipment-selection-item:hover {
+    background-color: #f0f9ff;
+    border-color: var(--primary-color);
+    box-shadow: var(--shadow-sm);
+}
+
+.equipment-selection-item:last-child {
+    margin-bottom: 0;
+}
+
+/* Custom checkbox for equipment */
+.equipment-selection-item input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.equipment-selection-item::before {
+    content: '';
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #d1d5db;
+    border-radius: 4px;
+    margin-right: 12px;
+    background-color: white;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.equipment-selection-item:has(input:checked)::before {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.equipment-selection-item:has(input:checked)::after {
+    content: '✓';
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+/* ===== EQUIPMENT INFO ===== */
+.equipment-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    margin-left: 32px;
+}
+
+.equipment-name {
+    font-weight: 500;
+    color: var(--text-color);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.equipment-type {
+    font-size: 13px;
+    color: var(--text-light);
+    text-transform: capitalize;
+}
+
+.equipment-location {
+    font-size: 12px;
+    color: var(--text-lighter);
+    font-style: italic;
+}
+
+.no-equipment-message {
+    text-align: center;
+    color: var(--text-light);
+    padding: 32px 20px;
+    font-style: italic;
+    background-color: var(--bg-light);
+    border-radius: 8px;
+    margin-top: 10px;
+    border: 1px dashed var(--border-color);
+}
+
+/* ===== MODAL FOOTER ===== */
 .modal-footer {
     padding: 20px 24px;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid var(--border-color);
     display: flex;
     gap: 12px;
     justify-content: flex-end;
 }
 
-/* Buttons */
+/* ===== BUTTONS ===== */
 .btn {
     padding: 10px 20px;
     border: none;
@@ -299,25 +552,37 @@
 }
 
 .btn-primary:hover:not(:disabled) {
-    background-color: #2563eb;
+    background-color: var(--primary-hover);
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(59, 130, 246, 0.2);
 }
 
-/* Toast Notifications */
-.toast {
+/* ===== TOAST NOTIFICATIONS ===== */
+#toast-container {
     position: fixed;
     top: 20px;
     right: 20px;
-    background-color: #10b981;
+    z-index: 1001;
+}
+
+.toast {
+    background-color: var(--success-color);
     color: white;
     padding: 12px 20px;
     border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-lg);
     font-size: 14px;
     font-weight: 500;
     animation: toastSlideIn 0.3s ease-out;
-    z-index: 1001;
+    margin-bottom: 10px;
+}
+
+.toast.error {
+    background-color: var(--danger-color);
+}
+
+.toast.success {
+    background-color: var(--success-color);
 }
 
 @keyframes toastSlideIn {
@@ -331,11 +596,34 @@
     }
 }
 
-.toast.error {
-    background-color: #ef4444;
+/* ===== SCROLLBAR STYLING ===== */
+.planner-column::-webkit-scrollbar,
+.modal-content::-webkit-scrollbar,
+.equipment-selection-list::-webkit-scrollbar {
+    width: 8px;
 }
 
-/* Responsive Design */
+.planner-column::-webkit-scrollbar-track,
+.modal-content::-webkit-scrollbar-track,
+.equipment-selection-list::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+.planner-column::-webkit-scrollbar-thumb,
+.modal-content::-webkit-scrollbar-thumb,
+.equipment-selection-list::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.planner-column::-webkit-scrollbar-thumb:hover,
+.modal-content::-webkit-scrollbar-thumb:hover,
+.equipment-selection-list::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
 @media (max-width: 768px) {
     .planner-layout {
         grid-template-columns: 1fr;
@@ -344,41 +632,108 @@
     
     .planner-column {
         max-height: 300px;
+        margin-bottom: 20px;
     }
     
     .modal-content {
         margin: 20px;
         width: calc(100% - 40px);
+        max-width: none;
+    }
+    
+    .equipment-selection-list {
+        max-height: 200px;
     }
 }
 
-/* Empty State */
-.empty-state {
-    text-align: center;
-    padding: 40px;
-    color: var(--text-light);
+@media (max-width: 640px) {
+    .planner-container {
+        padding: 12px;
+    }
+    
+    .planner-header h1 {
+        font-size: 24px;
+    }
+    
+    .planner-instructions {
+        padding: 12px 16px;
+        font-size: 13px;
+    }
+    
+    .equipment-selection-item {
+        padding: 10px;
+    }
+    
+    .equipment-name {
+        font-size: 13px;
+    }
+    
+    .equipment-type {
+        font-size: 12px;
+    }
+    
+    .modal-header {
+        padding: 20px;
+    }
+    
+    .modal-body {
+        padding: 20px;
+    }
+    
+    .modal-footer {
+        padding: 16px 20px;
+    }
 }
 
-.empty-state p {
-    margin: 0;
-    font-size: 14px;
+/* Tekniker-kort styling */
+.technician-card {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 2px solid #bae6fd;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    cursor: grab;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
-/* Scrollbar Styling */
-.planner-column::-webkit-scrollbar {
-    width: 6px;
+.technician-card:hover {
+    border-color: #3b82f6;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-.planner-column::-webkit-scrollbar-track {
-    background: #f1f3f4;
-    border-radius: 3px;
+.technician-card.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
 }
 
-.planner-column::-webkit-scrollbar-thumb {
-    background: #d1d5db;
-    border-radius: 3px;
+/* Kunde-kort styling */
+.project-card {
+    background-color: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.planner-column::-webkit-scrollbar-thumb:hover {
-    background: #9ca3af;
+.project-card.drag-over {
+    background-color: #dbeafe;
+    border-color: #3b82f6;
+    border-style: dashed;
+}
+
+.technician-avatar {
+    width: 40px;
+    height: 40px;
+    background-color: #3b82f6;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
 }

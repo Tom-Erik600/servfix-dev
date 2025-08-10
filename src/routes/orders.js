@@ -132,6 +132,9 @@ router.get('/today', async (req, res) => {
 });
 
 // GET single order
+// GET single order - KOMPLETT FUNKSJON for src/routes/orders.js
+// GET single order - KOMPLETT FUNKSJON for src/routes/orders.js
+// GET single order - KOMPLETT FUNKSJON for src/routes/orders.js
 router.get('/:id', async (req, res) => {
   try {
     const pool = await db.getTenantConnection(req.session.tenantId);
@@ -158,53 +161,63 @@ router.get('/:id', async (req, res) => {
         };
     }
 
-// Prøv å hente fullstendig kundeinformasjon fra Tripletex
-try {
-    const tripletexService = require('../services/tripletexService');
-    const customerDetails = await tripletexService.getCustomer(order.customer_id);
-    
-    if (customerDetails) {
-        customer.contact = customerDetails.customerContact 
-            ? `${customerDetails.customerContact.firstName || ''} ${customerDetails.customerContact.lastName || ''}`.trim()
-            : '';
-        customer.email = customerDetails.email || customerDetails.invoiceEmail || '';
-        customer.phone = customerDetails.phoneNumber || customerDetails.phoneNumberMobile || '';
-        customer.physicalAddress = customerDetails.physicalAddress 
-            ? `${customerDetails.physicalAddress.addressLine1 || ''}, ${customerDetails.physicalAddress.postalCode || ''} ${customerDetails.physicalAddress.city || ''}`.trim()
-            : '';
+    // Prøv å hente fullstendig kundeinformasjon fra Tripletex
+    try {
+        const tripletexService = require('../services/tripletexService');
+        const customerDetails = await tripletexService.getCustomer(order.customer_id);
+        
+        if (customerDetails) {
+            customer.contact = customerDetails.customerContact 
+                ? `${customerDetails.customerContact.firstName || ''} ${customerDetails.customerContact.lastName || ''}`.trim()
+                : '';
+            customer.email = customerDetails.email || customerDetails.invoiceEmail || '';
+            customer.phone = customerDetails.phoneNumber || customerDetails.phoneNumberMobile || '';
+            customer.physicalAddress = customerDetails.physicalAddress 
+                ? `${customerDetails.physicalAddress.addressLine1 || ''} ${customerDetails.physicalAddress.addressLine2 || ''}`.trim()
+                : '';
+            customer.postalAddress = customerDetails.postalAddress 
+                ? `${customerDetails.postalAddress.addressLine1 || ''} ${customerDetails.postalAddress.addressLine2 || ''}`.trim()
+                : '';
+        }
+    } catch (tripletexError) {
+        console.log('Could not fetch customer details from Tripletex:', tripletexError.message);
     }
-} catch (error) {
-    console.log('Could not fetch customer details from Tripletex:', error.message);
-    // Fortsett med grunnleggende kundeinfo
-}
 
-    // Hvis ikke, prøv å hente fra customers tabell hvis den finnes
-    // (Dette krever at du har en customers tabell, ellers skip denne delen)
-
-    // Fetch equipment data for the customer
-   const equipmentResult = await pool.query(
+    // VIKTIG FIX: Hent equipment basert på included_equipment_ids hvis spesifisert
+    let equipmentResult;
+    if (order.included_equipment_ids && order.included_equipment_ids.length > 0) {
+      // Hent KUN inkluderte anlegg
+      console.log('Fetching only included equipment:', order.included_equipment_ids);
+      equipmentResult = await pool.query(
         `SELECT 
-            e.id, 
-            e.customer_id, 
-            e.type, 
-            e.name, 
-            e.location, 
-            e.data,
-            -- Fjernet: data->>'serviceStatus' as service_status,
+            e.*, 
+            e.data as data,
             COALESCE(sr.status, 'not_started') as service_status,
-            e.data->>'systemNumber' as system_number,
-            e.data->>'systemType' as system_type,
-            e.data->>'operator' as operator
+            COALESCE(sr.status, 'not_started') as service_report_status
         FROM equipment e
-        LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
-        WHERE e.customer_id = $1`,
-        [order.customer_id || order.customerId, order.id]
-    );
+        LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $1)
+        WHERE e.id = ANY($2)`,
+        [order.id, order.included_equipment_ids]  // KORREKT PARAMETER REKKEFØLGE
+      );
+    } else {
+      // Bakoverkompatibel: hvis ingen spesifikke anlegg er valgt, hent alle aktive
+      console.log('No specific equipment selected, fetching all active equipment');
+      equipmentResult = await pool.query(
+        `SELECT 
+            e.*, 
+            e.data as data,
+            COALESCE(sr.status, 'not_started') as service_status,
+            COALESCE(sr.status, 'not_started') as service_report_status
+        FROM equipment e
+        LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $1)
+        WHERE e.customer_id = $2 
+        AND (e.data->>'status' IS NULL OR e.data->>'status' = 'active')`,
+        [order.id, customer.id]  // KORREKT PARAMETER REKKEFØLGE
+      );
+    }
 
-    // Transform equipment data
     const equipment = equipmentResult.rows.map(eq => ({
         id: eq.id,
-        customerId: eq.customer_id,
         type: eq.type,
         name: eq.name,
         location: eq.location,
@@ -212,17 +225,21 @@ try {
         systemNumber: eq.system_number || '',
         systemType: eq.system_type || '',
         operator: eq.operator || '',
-        data: eq.data
+        data: eq.data,
+        serviceReportStatus: eq.service_report_status || 'not_started',
+        internalNotes: eq.data?.internalNotes || ''
     }));
 
-    // Fetch technician data (assuming technicianId is available in order or session)
+    // Fetch technician data
     const technicianResult = await pool.query('SELECT * FROM technicians WHERE id = $1', [order.technician_id]);
     const technician = technicianResult.rows[0] || {};
     
     res.json({
       order: {
           ...order,
-          customer_data: customer // Legg til customer data på ordre objektet
+          customer_data: customer,
+          // VIKTIG: Send med included_equipment_ids til frontend
+          included_equipment_ids: order.included_equipment_ids || null
       },
       customer: customer,
       equipment: equipment,
@@ -292,35 +309,65 @@ router.post('/:orderId/complete', async (req, res) => {
     
     console.log(`🚀 Ferdigstiller ordre ${orderId}...`);
     
+    // Hent ordre med included_equipment_ids
+    const orderResult = await pool.query(
+      'SELECT included_equipment_ids FROM orders WHERE id = $1',
+      [orderId]
+    );
+    
+    if (orderResult.rows.length === 0) {
+      throw new Error('Ordre ikke funnet');
+    }
+    
+    const includedEquipmentIds = orderResult.rows[0].included_equipment_ids;
+    console.log('Inkluderte anlegg:', includedEquipmentIds);
+    
     // Oppdater ordre status til completed
     await pool.query(
       'UPDATE orders SET status = $1 WHERE id = $2',
       ['completed', orderId]
     );
    
-    // Hent alle service_reports for denne ordren
-    serviceReportsResult = await pool.query(
-      `SELECT sr.*, e.type as equipment_type, e.name as equipment_name
-       FROM service_reports sr
-       JOIN equipment e ON sr.equipment_id = e.id
-       WHERE sr.order_id = $1 AND sr.status = 'completed'`,
-      [orderId]
-    );
+    // Hent service_reports - FILTRER på included_equipment_ids hvis spesifisert
+    let query;
+    let params;
     
-    console.log(`📋 Fant ${serviceReportsResult.rows.length} rapporter å generere PDF-er for`);
+    if (includedEquipmentIds && includedEquipmentIds.length > 0) {
+      // Kun generer PDF for valgte anlegg
+      query = `
+        SELECT sr.*, e.type as equipment_type, e.name as equipment_name
+        FROM service_reports sr
+        JOIN equipment e ON sr.equipment_id = e.id
+        WHERE sr.order_id = $1 
+        AND sr.status = 'completed'
+        AND sr.equipment_id = ANY($2)
+      `;
+      params = [orderId, includedEquipmentIds];
+    } else {
+      // Bakoverkompatibel: Generer for alle anlegg hvis ingen er spesifikt valgt
+      query = `
+        SELECT sr.*, e.type as equipment_type, e.name as equipment_name
+        FROM service_reports sr
+        JOIN equipment e ON sr.equipment_id = e.id
+        WHERE sr.order_id = $1 
+        AND sr.status = 'completed'
+      `;
+      params = [orderId];
+    }
     
-    // Sjekk om det finnes rapporter å generere
+    serviceReportsResult = await pool.query(query, params);
+    
+    console.log(`📋 Fant ${serviceReportsResult.rows.length} rapporter å generere PDF-er for (av ${includedEquipmentIds?.length || 'alle'} valgte anlegg)`);
+    
+    // Generer PDF-er for filtrerte rapporter
     if (serviceReportsResult.rows.length > 0) {
       try {
-        // Opprett PDF generator (IKKE kall init() her!)
         pdfGenerator = new UnifiedPDFGenerator();
         
-        // Generer PDF-er for alle rapporter
         for (const report of serviceReportsResult.rows) {
           try {
             console.log(`📄 Genererer PDF for rapport ${report.id} (${report.equipment_type})...`);
             
-            // generateReport() kaller init() internt, så vi trenger ikke gjøre det her
             const pdfPath = await pdfGenerator.generateReport(report.id, tenantId);
             
             generatedPDFs.push({
@@ -334,13 +381,11 @@ router.post('/:orderId/complete', async (req, res) => {
             
           } catch (pdfError) {
             console.error(`❌ PDF-generering feilet for rapport ${report.id}:`, pdfError.message);
-            // Fortsett med andre rapporter selv om én feiler
           }
         }
         
       } catch (pdfInitError) {
         console.error('❌ Kunne ikke opprette PDF-generator:', pdfInitError.message);
-        // Fortsett uten PDF-generering - ordre skal fortsatt ferdigstilles
       }
     }
     
@@ -349,32 +394,21 @@ router.post('/:orderId/complete', async (req, res) => {
     
     console.log(`✅ Ordre ${orderId} ferdigstilt med ${generatedPDFs.length} PDF-er generert`);
     
-    // Send alltid response tilbake
     res.json({
       success: true,
       orderId: orderId,
       message: generatedPDFs.length > 0 
         ? `Ordre ferdigstilt med ${generatedPDFs.length} servicerapporter`
-        : 'Ordre ferdigstilt (PDF-generering feilet eller ingen rapporter)',
+        : 'Ordre ferdigstilt',
       generatedPDFs: generatedPDFs,
-      warning: generatedPDFs.length === 0 && serviceReportsResult.rows.length > 0
-        ? 'PDF-generering feilet, men ordre er ferdigstilt'
-        : null
+      includedEquipmentCount: includedEquipmentIds?.length || 'alle'
     });
     
   } catch (error) {
-    console.error('❌ Feil ved ferdigstilling av ordre:', error);
-    
-    // Rollback hvis mulig
     if (pool) {
-      try {
-        await pool.query('ROLLBACK');
-      } catch (rollbackError) {
-        console.error('Feil ved rollback:', rollbackError);
-      }
+      await pool.query('ROLLBACK');
     }
-    
-    // Send alltid feilresponse
+    console.error('❌ Feil ved ferdigstilling av ordre:', error);
     res.status(500).json({ 
       error: 'Kunne ikke ferdigstille ordre',
       details: error.message 
@@ -418,6 +452,45 @@ router.get('/:id/reports', async (req, res) => {
     res.status(500).json({ error: 'Kunne ikke hente rapporter' });
   }
 });
+
+// PATCH update selected equipment for order
+  router.patch('/:orderId/equipment', async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const { includedEquipmentIds } = req.body;
+      
+      console.log('Updating equipment selection for order:', orderId);
+      console.log('New equipment IDs:', includedEquipmentIds);
+      
+      const pool = await db.getTenantConnection(req.session.tenantId);
+      
+      // Konverter til JSON string for JSONB
+      const equipmentIdsJsonString = includedEquipmentIds && Array.isArray(includedEquipmentIds) && includedEquipmentIds.length > 0
+        ? JSON.stringify(includedEquipmentIds)
+        : null;
+      
+      // Oppdater included_equipment_ids som JSONB
+      const result = await pool.query(
+        'UPDATE orders SET included_equipment_ids = $1::jsonb WHERE id = $2 AND technician_id = $3 RETURNING *',
+        [equipmentIdsJsonString, orderId, req.session.technicianId]
+      );
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Ordre ikke funnet eller tilhører ikke denne teknikeren' });
+      }
+      
+      res.json({
+        success: true,
+        orderId: orderId,
+        includedEquipmentIds: result.rows[0].included_equipment_ids,
+        message: 'Anleggsvalg oppdatert'
+      });
+      
+    } catch (error) {
+      console.error('Error updating equipment selection:', error);
+      res.status(500).json({ error: 'Server error', details: error.message });
+    }
+  });
 
 // Oppdatert preview endpoint
 router.get('/service-report/:reportId/preview', async (req, res) => {

@@ -1,11 +1,12 @@
-// air-tech-app/assets/js/orders.js (v7.2 - Dynamic Facility Types)
+// air-tech-app/assets/js/orders.js - Tekniker frontend
 
 let pageState = { 
     order: null, 
     customer: null, 
     equipment: [], 
     technician: null,
-    quotes: []
+    quotes: [],
+    selectedEquipmentIds: [] // For equipment selection
 };
 
 async function checkAuth() {
@@ -87,6 +88,16 @@ async function initializePage() {
         
         pageState.equipment = uniqueEquipment;
         
+        // Håndter inkluderte anlegg
+        if (pageState.order.included_equipment_ids && pageState.order.included_equipment_ids.length > 0) {
+            pageState.selectedEquipmentIds = pageState.order.included_equipment_ids;
+            console.log('Loaded selected equipment from order:', pageState.selectedEquipmentIds);
+        } else {
+            // Bakoverkompatibel: NULL eller tom = alle anlegg inkludert
+            pageState.selectedEquipmentIds = pageState.equipment.map(eq => eq.id);
+            console.log('No specific selection, including all equipment:', pageState.selectedEquipmentIds);
+        }
+        
         console.log('Equipment after update:', {
             count: pageState.equipment.length,
             ids: pageState.equipment.map(eq => eq.id)
@@ -107,7 +118,6 @@ async function initializePage() {
     }
 }
 
-
 function renderPage() {
     renderHeader();
     renderCustomerInfo();
@@ -125,7 +135,15 @@ function renderHeader() {
         <a href="index.html" class="header-nav-button" title="Tilbake til dashbord">‹</a>
         <div class="header-main-content">
             <div class="logo-circle">
-                <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="14" stroke="white" stroke-width="2" fill="none"/><circle cx="16" cy="16" r="8" stroke="white" stroke-width="2" fill="none"/><circle cx="16" cy="16" r="3" fill="white"/><path d="M16 2 L16 8" stroke="white" stroke-width="2"/><path d="M16 24 L16 30" stroke="white" stroke-width="2"/><path d="M30 16 L24 16" stroke="white" stroke-width="2"/><path d="M8 16 L2 16" stroke="white" stroke-width="2"/></svg>
+                <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="16" cy="16" r="14" stroke="white" stroke-width="2" fill="none"/>
+                    <circle cx="16" cy="16" r="8" stroke="white" stroke-width="2" fill="none"/>
+                    <circle cx="16" cy="16" r="3" fill="white"/>
+                    <path d="M16 2 L16 8" stroke="white" stroke-width="2"/>
+                    <path d="M16 24 L16 30" stroke="white" stroke-width="2"/>
+                    <path d="M30 16 L24 16" stroke="white" stroke-width="2"/>
+                    <path d="M8 16 L2 16" stroke="white" stroke-width="2"/>
+                </svg>
             </div>
             <div class="company-info">
                 <h1>AIR-TECH AS</h1>
@@ -204,214 +222,282 @@ function renderEquipmentList() {
     container.innerHTML = `<div class="section-header"><h3>🏭 Anlegg for service</h3></div>` + equipmentHTML;
 }
 
-function renderActionButtons() { 
-    // Strengere validering - ALLE anlegg må være completed
-    const hasEquipment = pageState.equipment.length > 0;
-    const allCompleted = hasEquipment && pageState.equipment.every(eq => {
-        const status = eq.serviceStatus || eq.data?.serviceStatus || 'not_started';
-        return status === 'completed';
-    });
-    
-    // Ekstra logging for debugging
-    console.log('Equipment validation:', {
-        hasEquipment,
-        equipmentCount: pageState.equipment.length,
-        equipmentStatuses: pageState.equipment.map(eq => ({
-            id: eq.id,
-            serviceStatus: eq.serviceStatus,
-            dataServiceStatus: eq.data?.serviceStatus
-        })),
-        allCompleted
-    });
-    
-    document.querySelector('footer.action-buttons').innerHTML = `
-        <button class="action-btn" data-action="complete-order" 
-                ${!allCompleted ? 'disabled' : ''}
-                style="width: 100%; padding: 16px 24px; font-size: 16px; 
-                       font-weight: 600; background-color: ${allCompleted ? '#28a745' : '#6c757d'}; 
-                       border-color: ${allCompleted ? '#28a745' : '#6c757d'}; color: white;
-                       cursor: ${allCompleted ? 'pointer' : 'not-allowed'};">
-            ✅ Ferdigstill ordre
-        </button>
-    `; 
-}
-
 function createEquipmentCardHTML(eq) {
-    const statusMap = { 'not_started': 'Planlagt', 'in_progress': 'Under arbeid', 'completed': 'Fullført' };
+    const statusMap = { 
+        'not_started': 'Planlagt', 
+        'in_progress': 'Under arbeid', 
+        'completed': 'Fullført' 
+    };
     const statusText = statusMap[eq.serviceStatus] || 'Ukjent';
     const statusClass = eq.serviceStatus || 'not_started';
+    const isSelected = pageState.selectedEquipmentIds.includes(eq.id);
 
     return `
-        <div class="system-item ${statusClass}" data-equipment-id="${eq.id}">
-            <div class="system-content-wrapper">
-                <div class="system-header"><span class="system-badge">ID: ${eq.id}</span><button class="delete-icon-btn" data-action="delete-start" title="Deaktiver anlegg">🗑️</button></div>
+        <div class="system-item ${statusClass} ${!isSelected ? 'not-selected' : ''}" data-equipment-id="${eq.id}">
+            <!-- Checkbox område - IKKE klikkbart -->
+            <div class="equipment-selection-bar">
+                <label class="equipment-checkbox">
+                    <input type="checkbox" 
+                           class="equipment-select-checkbox" 
+                           data-equipment-id="${eq.id}" 
+                           ${isSelected ? 'checked' : ''}>
+                    <span class="checkbox-custom"></span>
+                    <span class="checkbox-label">Inkluder i rapport</span>
+                </label>
+            </div>
+            
+            <!-- Klikkbart område for å navigere til service -->
+            <div class="system-content-wrapper" data-action="navigate-to-service" data-equipment-id="${eq.id}">
+                <div class="system-header">
+                    <span class="system-badge">ID: ${eq.id}</span>
+                    <button class="delete-icon-btn" data-action="delete-start" title="Deaktiver anlegg">🗑️</button>
+                </div>
                 <div class="system-info">
-                    <div class="system-name">${eq.name}</div>
+                    <div class="system-name">${eq.name || 'Ikke navngitt'}</div>
                     <div class="system-details">
-                        <span>Type: ${eq.type}</span>
+                        <span>Type: ${eq.type || 'Ukjent'}</span>
+                        ${eq.location ? `<span>Plassering: ${eq.location}</span>` : ''}
                         ${eq.internalNotes ? `<span class="internal-notes">💡 ${eq.internalNotes}</span>` : ''}
                     </div>
                 </div>
-                <div class="system-status"><span class="status-text">${statusText}</span></div>
+                <div class="system-status">
+                    <span class="status-text">${statusText}</span>
+                </div>
             </div>
-            <div class="confirm-delete-container">
+            
+            <!-- Delete confirmation (skjult som standard) -->
+            <div class="confirm-delete-container" style="display: none;">
                 <p>Sikker på at du vil deaktivere anlegget?</p>
-                <div class="form-group"><label for="deactivation-reason-${eq.id}">Årsak til deaktivering (obligatorisk)</label><textarea id="deactivation-reason-${eq.id}" class="deactivation-reason" placeholder="F.eks. anlegget er fjernet..."></textarea></div>
-                <div class="confirm-delete-actions"><button class="btn-cancel-delete" data-action="delete-cancel">Avbryt</button><button class="btn-delete-final" data-action="delete-confirm" disabled>Ja, deaktiver</button></div>
+                <div class="form-group">
+                    <label for="deactivation-reason-${eq.id}">Årsak til deaktivering (obligatorisk)</label>
+                    <textarea id="deactivation-reason-${eq.id}" class="deactivation-reason" placeholder="F.eks. anlegg byttet ut, ikke lenger i bruk"></textarea>
+                </div>
+                <div class="delete-actions">
+                    <button class="btn btn-secondary" data-action="delete-cancel">Avbryt</button>
+                    <button class="btn btn-danger" data-action="delete-confirm" data-equipment-id="${eq.id}">Bekreft deaktivering</button>
+                </div>
             </div>
-        </div>`;
+        </div>
+    `;
 }
 
+    function renderActionButtons() {
+        const footer = document.querySelector('.action-buttons');
+        if (!footer || !pageState.order) return;
+        
+        // Finn kun valgte anlegg (de som har checkbox avkrysset)
+        const selectedEquipment = pageState.equipment.filter(eq => 
+            pageState.selectedEquipmentIds.includes(eq.id)
+        );
+        
+        // Sjekk om alle VALGTE anlegg er ferdigstilt
+        const allSelectedCompleted = selectedEquipment.length > 0 && 
+            selectedEquipment.every(eq => eq.serviceStatus === 'completed');
+        
+        // Sjekk om ordren allerede er ferdigstilt
+        const isOrderCompleted = pageState.order.status === 'completed';
+        
+        console.log('Action button status:', {
+            totalEquipment: pageState.equipment.length,
+            selectedCount: selectedEquipment.length,
+            allSelectedCompleted,
+            isOrderCompleted,
+            selectedIds: pageState.selectedEquipmentIds
+        });
+        
+        // Hvis ordre er ferdigstilt, vis kun status med knapp tilbake
+        if (isOrderCompleted) {
+            footer.innerHTML = `
+                <div class="order-completed-message">
+                    <i data-lucide="check-circle" style="color: #10b981;"></i>
+                    <span>Ordre er fullført</span>
+                </div>
+                <button class="btn btn-secondary" onclick="window.location.href='index.html'">
+                    <i data-lucide="list"></i> Tilbake til oversikt
+                </button>
+            `;
+        } else {
+            // Ordre ikke ferdigstilt - vis ferdigstill-knappen
+            let buttonClass = 'btn-disabled';
+            let buttonText = 'Fullfør alle valgte anlegg først';
+            let disabled = true;
+            
+            if (selectedEquipment.length === 0) {
+                // Ingen anlegg valgt
+                buttonText = 'Ingen anlegg valgt for ferdigstilling';
+            } else if (allSelectedCompleted) {
+                // Alle valgte anlegg er ferdigstilt
+                buttonClass = 'btn-success';
+                buttonText = 'Ferdigstill ordre';
+                disabled = false;
+            } else {
+                // Noen valgte anlegg er ikke ferdigstilt ennå
+                const notCompleted = selectedEquipment.filter(eq => eq.serviceStatus !== 'completed').length;
+                buttonText = `${notCompleted} av ${selectedEquipment.length} valgte anlegg ikke ferdig`;
+            }
+            
+            footer.innerHTML = `
+                <button 
+                    class="btn ${buttonClass}" 
+                    onclick="handleCompleteOrder()"
+                    ${disabled ? 'disabled' : ''}>
+                    <i data-lucide="check-circle"></i>
+                    ${buttonText}
+                </button>
+            `;
+        }
+        
+        // Re-initialize lucide icons
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+    }
+
 function setupEventListeners() {
-    document.body.addEventListener('click', handleGlobalClick);
-    document.body.addEventListener('input', handleGlobalInput);
+    // Eksisterende kode...
     
-    // Legg til event listener for quote form
-    document.body.addEventListener('submit', (e) => {
-        if (e.target.id === 'quote-form') {
-            handleSaveQuote(e);
+    document.addEventListener('click', async (event) => {
+        const target = event.target.closest('[data-action]');
+        if (!target) return;
+        
+        const action = target.dataset.action;
+        
+        // Håndter navigering til service separat
+        if (action === 'navigate-to-service') {
+            event.preventDefault();
+            event.stopPropagation();
+            const equipmentId = target.dataset.equipmentId;
+            navigateToServicePage(equipmentId);
+            return;
+        }
+        
+        // Resten av eksisterende actions...
+        switch(action) {
+            case 'add-equipment': showSelectTypeDialog(); break;
+            case 'delete-start': handleDeleteStart(event); break;
+            case 'delete-cancel': handleDeleteCancel(event); break;
+            case 'delete-confirm': handleDeleteConfirm(event); break;
+            case 'complete-order': handleCompleteOrder(); break;
+            case 'create-quote': handleCreateQuote(); break;
+            // ... andre cases
+        }
+    });
+    
+    // Håndter checkbox endringer - VIKTIG: Stopp propagation
+    document.addEventListener('change', async (e) => {
+        if (e.target.matches('.equipment-checkbox-input')) {
+            const equipmentId = e.target.dataset.equipmentId;
+            const isChecked = e.target.checked;
+            await handleEquipmentSelectionChange(equipmentId, isChecked);
+        }
+    });
+    
+    // Stopp propagation på checkbox label clicks også
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('.equipment-checkbox')) {
+            e.stopPropagation();
         }
     });
 }
 
-async function handleGlobalClick(e) {
-    const actionTarget = e.target.closest('[data-action]');
-    if (actionTarget) {
-        e.preventDefault();
-        const action = actionTarget.dataset.action;
-        const equipmentCard = actionTarget.closest('.system-item');
-
-        switch (action) {
-            case 'delete-start': showDeleteConfirmation(equipmentCard); break;
-            case 'delete-cancel': hideDeleteConfirmation(equipmentCard); break;
-            case 'delete-confirm': deactivateEquipment(equipmentCard); break;
-            case 'add-equipment': showSelectTypeDialog(); break;
-            case 'create-quote': await handleCreateQuote(); break;
-            case 'delete-quote': await handleDeleteQuote(actionTarget.dataset.quoteId); break;
-            case 'complete-order': await completeOrder(); break;
-        }
-        return;
+// Håndter checkbox endringer for anleggsvalg
+async function handleEquipmentSelectionChange(equipmentId, isChecked) {
+    console.log('Equipment selection changed:', equipmentId, '=', isChecked);
+    
+    if (isChecked && !pageState.selectedEquipmentIds.includes(equipmentId)) {
+        // Legg til i valgte anlegg
+        pageState.selectedEquipmentIds.push(equipmentId);
+    } else if (!isChecked) {
+        // Fjern fra valgte anlegg
+        pageState.selectedEquipmentIds = pageState.selectedEquipmentIds.filter(id => id !== equipmentId);
     }
-
-    const cardTarget = e.target.closest('.system-item');
-    if (cardTarget && !cardTarget.classList.contains('is-deleting')) {
-        navigateToServicePage(cardTarget.dataset.equipmentId);
-    }
+    
+    console.log('Updated selectedEquipmentIds:', pageState.selectedEquipmentIds);
+    
+    // Lagre valget til backend
+    await saveSelectedEquipment();
+    
+    // Oppdater visning av equipment cards
+    updateEquipmentCardStyles();
+    
+    // Oppdater action buttons (ferdigstill-knappen)
+    renderActionButtons();
 }
 
-// I public/app/assets/js/orders.js - Erstatt hele completeOrder funksjonen:
-
-async function completeOrder() {
-    console.log('=== COMPLETE ORDER START ===');
-    
-    // Sjekk at alle anlegg er ferdigstilt
-    const incompleteEquipment = pageState.equipment.filter(eq => 
-        eq.serviceStatus !== 'completed' && eq.serviceStatus !== 'omitted'
-    );
-    
-    if (incompleteEquipment.length > 0) {
-        showToast('Alle anlegg må være ferdigstilt før ordren kan fullføres!', 'error');
-        return;
-    }
-
-    // Bekreftelse fra bruker
-    if (!confirm('Er du sikker på at du vil ferdigstille denne ordren?\n\nDette vil generere servicerapporter og markere ordren som fullført.')) {
-        return;
-    }
-
-    setLoading(true);
-    
+// Oppdater visuell stil på equipment cards basert på valg
+function updateEquipmentCardStyles() {
+    pageState.equipment.forEach(eq => {
+        const card = document.querySelector(`[data-equipment-id="${eq.id}"]`);
+        if (card) {
+            if (pageState.selectedEquipmentIds.includes(eq.id)) {
+                card.classList.remove('not-selected');
+            } else {
+                card.classList.add('not-selected');
+            }
+        }
+    });
+}
+// Lagre valgte anlegg til database
+async function saveSelectedEquipment() {
     try {
-        console.log('Ferdigstiller ordre og genererer PDF-rapporter...');
+        console.log('Saving selected equipment:', pageState.selectedEquipmentIds);
         
-        // Kall den nye /complete endepunktet som også genererer PDF-er
-        const response = await fetch(`/api/orders/${pageState.order.id}/complete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include'
+        const response = await fetch(`/api/orders/${pageState.order.id}/equipment`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+                includedEquipmentIds: pageState.selectedEquipmentIds
+            })
         });
         
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Ukjent feil ved ferdigstillelse');
+            const error = await response.json();
+            throw new Error(error.error || 'Kunne ikke oppdatere anleggsvalg');
         }
         
         const result = await response.json();
-        console.log('Ordre ferdigstilt:', result);
-        
-        // Vis suksess-melding med info om genererte PDF-er
-        let message = 'Ordre er fullført!';
-        
-        if (result.generatedPDFs && result.generatedPDFs.length > 0) {
-            message += ` ${result.generatedPDFs.length} PDF-rapporter generert.`;
-        } else if (result.warning) {
-            message += ` (${result.warning})`;
-        }
-        
-        showToast(message, result.warning ? 'warning' : 'success');
-        
-        // Oppdater knapp-tekst og deaktiver knappen direkte
-        const completeBtn = document.querySelector('[data-action="complete-order"]');
-        if (completeBtn) {
-            completeBtn.textContent = 'Ordre er fullført ✓';
-            completeBtn.disabled = true;
-            completeBtn.style.backgroundColor = '#28a745';
-            completeBtn.style.opacity = '0.7';
-        }
-        
-        // Oppdater ordre status lokalt
-        pageState.order.status = 'completed';
-        
-        // Naviger til dashboard etter kort forsinkelse
-        setTimeout(() => {
-            window.location.href = 'index.html';
-        }, 2000);
+        console.log('Selected equipment saved successfully:', result);
         
     } catch (error) {
-        console.error('Feil ved ferdigstilling av ordre:', error);
-        showToast(error.message || 'Kunne ikke ferdigstille ordre. Prøv igjen.', 'error');
-    } finally {
-        setLoading(false);
+        console.error('Error saving selected equipment:', error);
+        showToast('Kunne ikke lagre anleggsvalg', 'error');
+        // Ikke kast feilen videre, la UI fortsette å fungere
     }
 }
 
-function handleGlobalInput(e) {
-    if (e.target.classList.contains('deactivation-reason')) {
-        const card = e.target.closest('.system-item');
-        const confirmButton = card.querySelector('.btn-delete-final');
-        confirmButton.disabled = e.target.value.trim() === '';
-    }
+function startDeleteProcess(button) {
+    const systemItem = button.closest('.system-item');
+    const confirmContainer = systemItem.querySelector('.confirm-delete-container');
+    confirmContainer.style.display = 'block';
+    systemItem.classList.add('deleting');
+}
+
+function cancelDeleteProcess(button) {
+    const systemItem = button.closest('.system-item');
+    const confirmContainer = systemItem.querySelector('.confirm-delete-container');
+    confirmContainer.style.display = 'none';
+    systemItem.classList.remove('deleting');
+}
+
+async function confirmDeleteEquipment(equipmentId) {
+    const reasonTextarea = document.getElementById(`deactivation-reason-${equipmentId}`);
+    const reason = reasonTextarea.value.trim();
     
-    // Handle input for quote modal
-    if (e.target.matches('.product-price-input') || e.target.matches('#quote-price')) {
-        updateQuoteTotals();
-    }
-}
-
-function showDeleteConfirmation(cardElement) { cardElement.classList.add('is-deleting'); }
-function hideDeleteConfirmation(cardElement) {
-    cardElement.classList.remove('is-deleting');
-    cardElement.querySelector('.deactivation-reason').value = '';
-    cardElement.querySelector('.btn-delete-final').disabled = true;
-}
-
-async function deactivateEquipment(cardElement) {
-    setLoading(true);
-    const equipmentId = cardElement.dataset.equipmentId;
-    const deactivationReason = cardElement.querySelector('.deactivation-reason').value.trim();
-    
-    // Valider at deaktiveringsgrunnen er fylt ut
-    if (!deactivationReason) {
-        showToast('Deaktiveringsgrunnen er påkrevd', 'error');
-        setLoading(false);
+    if (!reason) {
+        showToast('Du må oppgi en årsak for deaktivering', 'error');
+        reasonTextarea.focus();
         return;
     }
     
+    setLoading(true);
     try {
-        const response = await fetch(`/api/equipment/${equipmentId}`, { 
-            method: 'DELETE',
+        const response = await fetch(`/api/equipment/${equipmentId}/deactivate`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deactivationReason })
+            body: JSON.stringify({ reason })
         });
         
         if (!response.ok) {
@@ -419,10 +505,9 @@ async function deactivateEquipment(cardElement) {
             throw new Error(errorData.error || 'Deaktivering feilet');
         }
         
-        // Beholder eksisterende animasjon og UI-oppdatering
-        cardElement.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-        cardElement.style.opacity = '0';
-        cardElement.style.transform = 'scale(0.95)';
+        const systemItem = document.querySelector(`[data-equipment-id="${equipmentId}"]`);
+        systemItem.classList.add('fade-out');
+        
         setTimeout(() => {
             pageState.equipment = pageState.equipment.filter(eq => eq.id.toString() !== equipmentId.toString());
             renderEquipmentList();
@@ -438,16 +523,246 @@ async function deactivateEquipment(cardElement) {
     }
 }
 
-function navigateToServicePage(equipmentId) {
-    // Hent orderId fra URL hvis pageState.order ikke er satt
-    const orderId = pageState.order?.id || new URLSearchParams(window.location.search).get('id');
+async function handleCompleteOrder() {
+    // Dobbeltsjekk at alle valgte anlegg er ferdigstilt
+    const selectedEquipment = pageState.equipment.filter(eq => 
+        pageState.selectedEquipmentIds.includes(eq.id)
+    );
     
-    if (!orderId) {
-        showToast('Mangler ordre-ID', 'error');
+    const allSelectedCompleted = selectedEquipment.length > 0 && 
+        selectedEquipment.every(eq => eq.serviceStatus === 'completed');
+    
+    if (!allSelectedCompleted) {
+        showToast('Alle valgte anlegg må være ferdigstilt før ordre kan ferdigstilles', 'error');
         return;
     }
     
-    window.location.href = `service.html?orderId=${orderId}&equipmentId=${equipmentId}`;
+    // Bekreft med bruker
+    const confirmMessage = `Er du sikker på at du vil ferdigstille denne ordren?\n\n` +
+        `${selectedEquipment.length} anlegg vil inkluderes i rapporten.\n` +
+        `${pageState.equipment.length - selectedEquipment.length} anlegg er ikke valgt og vil ikke inkluderes.`;
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    setLoading(true);
+    try {
+        const response = await fetch(`/api/orders/${pageState.order.id}/complete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Kunne ikke ferdigstille ordre');
+        }
+        
+        const result = await response.json();
+        console.log('Order completed:', result);
+        
+        // Oppdater lokal state
+        pageState.order.status = 'completed';
+        
+        // Re-render action buttons
+        renderActionButtons();
+        
+        showToast('Ordre ferdigstilt!', 'success');
+        
+        // Vent litt før redirect slik at bruker ser meldingen
+        setTimeout(() => {
+            window.location.href = 'index.html';
+        }, 1500);
+        
+    } catch (error) {
+        console.error('Complete order error:', error);
+        showToast(error.message, 'error');
+    } finally {
+        setLoading(false);
+    }
+}
+
+async function handleDeleteQuote(quoteId) {
+    if (!confirm('Er du sikker på at du vil slette dette tilbudet?')) return;
+    
+    setLoading(true);
+    try {
+        await fetch(`/api/quotes/${quoteId}`, { method: 'DELETE' });
+        pageState.quotes = pageState.quotes.filter(q => q.id !== quoteId);
+        renderEquipmentList();
+        showToast('Tilbud slettet', 'success');
+    } catch (error) {
+        showToast('Kunne ikke slette tilbud', 'error');
+    } finally {
+        setLoading(false);
+    }
+}
+
+function showSelectTypeDialog() {
+    const modal = document.getElementById('add-equipment-modal');
+    modal.querySelector('.modal-content').innerHTML = `
+        <div class="modal-header">
+            <h3>Velg Anleggstype</h3>
+            <button class="close-btn" data-action="close-modal">×</button>
+        </div>
+        <div class="modal-body">
+            <p>Laster anleggstyper...</p>
+        </div>
+    `;
+    modal.style.display = 'flex';
+    modal.addEventListener('click', handleModalClicks);
+
+    fetch('/api/checklist-templates')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Kunne ikke hente anleggstyper.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const typeSelectionGrid = document.createElement('div');
+            typeSelectionGrid.className = 'type-selection-grid';
+            
+            data.facilityTypes.forEach(type => {
+                const button = document.createElement('button');
+                button.dataset.action = 'select-type';
+                button.dataset.type = type.id;
+                button.textContent = type.name;
+                typeSelectionGrid.appendChild(button);
+            });
+            
+            modal.querySelector('.modal-body').innerHTML = '';
+            modal.querySelector('.modal-body').appendChild(typeSelectionGrid);
+        })
+        .catch(error => {
+            console.error('Feil ved lasting av anleggstyper:', error);
+            modal.querySelector('.modal-body').innerHTML = `<p style="color: red;">Feil: ${error.message}</p>`;
+        });
+}
+
+function handleModalClicks(e) {
+    const target = e.target.closest('[data-action]');
+    if (!target) { 
+        if (e.target.classList.contains('modal-overlay')) hideModal(); 
+        return; 
+    }
+    const action = target.dataset.action;
+    if (action === 'select-type') { 
+        pageState.selectedEquipmentType = target.dataset.type; 
+        showAddEquipmentForm(); 
+    }
+    if (action === 'close-modal') { 
+        hideModal(); 
+    }
+}
+
+function showAddEquipmentForm() {
+    const modalContent = document.querySelector('#add-equipment-modal .modal-content');
+    const typeName = pageState.selectedEquipmentType.charAt(0).toUpperCase() + pageState.selectedEquipmentType.slice(1);
+    
+    let formFields = '';
+    if (pageState.selectedEquipmentType === 'custom') {
+        formFields = `
+            <div class="form-group">
+                <label for="plassering">Beskrivelse</label>
+                <input type="text" id="plassering" required placeholder="F.eks. Kontroll av taksluk, etc.">
+            </div>
+        `;
+    } else {
+        formFields = `
+            <div class="form-group">
+                <label for="plassering">Plassering</label>
+                <input type="text" id="plassering" required placeholder="F.eks. Teknisk rom 1. etasje, Tak aggregat A">
+            </div>
+            <div class="form-group">
+                <label for="internalNotes">Intern kommentar <span style="color: #6c757d; font-weight: normal;">(valgfritt)</span></label>
+                <textarea id="internalNotes" rows="3" placeholder="F.eks. Trenger stige for adgang, nøkkel hos vaktmester, kun originale deler..." style="width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-family: inherit; font-size: 14px; resize: vertical; box-sizing: border-box;"></textarea>
+            </div>
+        `;
+    }
+
+    modalContent.innerHTML = `
+        <form id="equipment-form">
+            <div class="modal-header">
+                <h3>Legg til anlegg: ${typeName}</h3>
+                <button type="button" class="close-btn" data-action="close-modal">×</button>
+            </div>
+            <div class="modal-body">${formFields}</div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-action="close-modal">Avbryt</button>
+                <button type="submit" class="btn-primary">Legg til anlegg</button>
+            </div>
+        </form>
+    `;
+    document.getElementById('equipment-form').addEventListener('submit', handleSaveEquipment);
+}
+
+async function handleSaveEquipment(event) {
+    event.preventDefault(); 
+    setLoading(true);
+    
+    const orderId = pageState.order?.id || new URLSearchParams(window.location.search).get('id');
+    const customerId = pageState.order?.customer_id || pageState.order?.customerId || pageState.customer?.id;
+    
+    if (!customerId) {
+        showToast('Feil: Mangler kunde-ID for denne ordren', 'error');
+        setLoading(false);
+        return;
+    }
+    
+    const newEquipmentData = {
+        customerId: customerId,
+        type: pageState.selectedEquipmentType,
+        name: document.getElementById('plassering').value,
+        internalNotes: document.getElementById('internalNotes')?.value || '',
+        status: 'active'
+    };
+    
+    console.log('Sender equipment data:', newEquipmentData);
+    console.log('Current orderId:', orderId);
+    
+    try {
+        const response = await fetch('/api/equipment', { 
+            method: 'POST', 
+            headers: { 
+                'Content-Type': 'application/json'
+            }, 
+            body: JSON.stringify(newEquipmentData),
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Server error:', errorData);
+            throw new Error(errorData.error || 'Lagring feilet');
+        }
+        
+        const savedEquipment = await response.json();
+        console.log('Equipment saved:', savedEquipment);
+        
+        savedEquipment.serviceStatus = savedEquipment.serviceStatus || 'not_started';
+        savedEquipment.internalNotes = savedEquipment.internalNotes || savedEquipment.data?.internalNotes || '';
+        
+        pageState.equipment.push(savedEquipment);
+        
+        // Legg til i selectedEquipmentIds automatisk
+        pageState.selectedEquipmentIds.push(savedEquipment.id);
+        await saveSelectedEquipment();
+        
+        renderEquipmentList();
+        renderActionButtons();
+        hideModal();
+        showToast('Anlegg lagt til', 'success');
+    } catch (error) { 
+        console.error('Error saving equipment:', error);
+        showToast(`Feil: ${error.message}`, 'error'); 
+    } 
+    finally { 
+        setLoading(false); 
+    }
 }
 
 async function handleCreateQuote() {
@@ -481,149 +796,52 @@ function showQuoteModal() {
                 </div>
                 
                 <div class="form-section">
-                    <div class="products-header">
-                        <label class="form-label">Produkter/materialer</label>
-                        <button type="button" class="add-product-btn-custom" onclick="addQuoteProduct()">
-                            + Legg til produkt
-                        </button>
-                    </div>
-                    <div id="quote-products-container" class="products-container">
-                        <div class="product-row">
-                            <div class="product-inputs">
-                                <input type="text" placeholder="Produktnavn" class="product-name-input">
-                                <input type="text" placeholder="0" class="product-price-input">
-                            </div>
-                            <button type="button" class="remove-product-btn" onclick="removeQuoteProduct(this)">
-                                <span>×</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="totals-section">
-                    <div class="total-row">
-                        <span>Produkter:</span>
-                        <span id="quote-products-total">0 kr</span>
-                    </div>
-                    <div class="total-row">
-                        <span>Arbeid:</span>
-                        <span id="quote-work-total">0 kr</span>
-                    </div>
-                    <div class="total-row grand-total">
-                        <span>Totalt:</span>
-                        <span id="quote-grand-total">0 kr</span>
+                    <label class="form-label">Produkter/deler <span class="optional">(valgfritt)</span></label>
+                    <div id="quote-items-container" class="quote-items-container">
+                        <button type="button" class="add-item-btn" onclick="addQuoteItem()">+ Legg til produkt</button>
                     </div>
                 </div>
             </div>
             
             <div class="modal-footer-custom">
                 <button type="button" class="btn-secondary-custom" data-action="close-modal">Avbryt</button>
-                <button type="button" class="btn-preview-custom" disabled title="Kommer snart">Forhåndsvisning</button>
-                <button type="submit" class="btn-primary-custom">Send til admin</button>
+                <button type="submit" class="btn-primary-custom">Opprett tilbud</button>
             </div>
         </form>
     `;
     
     modal.style.display = 'flex';
-    modal.addEventListener('click', handleQuoteModalClicks);
-    
-    // Initial totals update
-    updateQuoteTotals();
-}
-
-function addQuoteProduct() {
-    const container = document.getElementById('quote-products-container');
-    const newRow = document.createElement('div');
-    newRow.className = 'product-row';
-    newRow.innerHTML = `
-        <div class="product-inputs">
-            <input type="text" placeholder="Produktnavn" class="product-name-input">
-            <input type="text" placeholder="0" class="product-price-input">
-        </div>
-        <button type="button" class="remove-product-btn" onclick="removeQuoteProduct(this)">
-            <span>×</span>
-        </button>
-    `;
-    container.appendChild(newRow);
-    updateQuoteTotals();
-}
-
-function removeQuoteProduct(button) {
-    button.closest('.product-row').remove();
-    updateQuoteTotals();
-}
-
-function updateQuoteTotals() {
-    const productInputs = document.querySelectorAll('#quote-products-container .product-price-input');
-    const workPriceInput = document.getElementById('quote-price');
-    
-    let productsTotal = 0;
-    productInputs.forEach(input => {
-        const price = parseFloat(input.value) || 0;
-        productsTotal += price;
-    });
-    
-    const workTotal = parseFloat(workPriceInput?.value) || 0;
-    const grandTotal = productsTotal + workTotal;
-    
-    // Oppdater visning
-    const productsSpan = document.getElementById('quote-products-total');
-    const workSpan = document.getElementById('quote-work-total');
-    const grandSpan = document.getElementById('quote-grand-total');
-    
-    if (productsSpan) productsSpan.textContent = `${productsTotal.toLocaleString('no-NO')} kr`;
-    if (workSpan) workSpan.textContent = `${workTotal.toLocaleString('no-NO')} kr`;
-    if (grandSpan) grandSpan.textContent = `${grandTotal.toLocaleString('no-NO')} kr`;
-}
-
-function handleQuoteModalClicks(e) {
-    const target = e.target.closest('[data-action]');
-    if (!target) { 
-        if (e.target.classList.contains('modal-overlay')) hideModal(); 
-        return; 
-    }
-    
-    const action = target.dataset.action;
-    if (action === 'close-modal') hideModal();
+    document.getElementById('quote-form').addEventListener('submit', handleSaveQuote);
 }
 
 async function handleSaveQuote(event) {
     event.preventDefault();
     setLoading(true);
     
-    const description = document.getElementById('quote-description').value;
-    const hours = document.getElementById('quote-hours').value;
-    const price = document.getElementById('quote-price').value;
-    
-    // Samle produkter
-    const productRows = document.querySelectorAll('#quote-products-container .product-row');
-    const products = Array.from(productRows).map(row => ({
-        name: row.querySelector('.product-name-input').value,
-        price: parseFloat(row.querySelector('.product-price-input').value) || 0
-    })).filter(p => p.name.trim() !== '');
-    
-    const quoteData = {
-        orderId: pageState.order.id,
-        description,
-        estimatedHours: parseFloat(hours) || 0,
-        estimatedPrice: parseFloat(price) || 0,
-        products
-    };
-    
     try {
-        const savedQuote = await fetch('/api/quotes', {
+        const quoteData = {
+            orderId: pageState.order.id,
+            description: document.getElementById('quote-description').value,
+            estimatedHours: parseFloat(document.getElementById('quote-hours').value) || 0,
+            estimatedPrice: parseFloat(document.getElementById('quote-price').value) || 0,
+            items: gatherQuoteItems(),
+            status: 'pending'
+        };
+        
+        const response = await fetch('/api/quotes', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(quoteData)
-        }).then(res => {
-            if (!res.ok) throw new Error('Lagring feilet');
-            return res.json();
         });
         
+        if (!response.ok) throw new Error('Kunne ikke opprette tilbud');
+        
+        const savedQuote = await response.json();
         pageState.quotes.push(savedQuote);
         renderEquipmentList();
         hideModal();
-        showToast('Tilbud sendt til admin', 'success');
+        showToast('Tilbud opprettet', 'success');
+        
     } catch (error) {
         showToast('Kunne ikke opprette tilbud', 'error');
     } finally {
@@ -631,151 +849,49 @@ async function handleSaveQuote(event) {
     }
 }
 
-async function handleDeleteQuote(quoteId) {
-    if (!confirm('Er du sikker på at du vil slette dette tilbudet?')) return;
+function gatherQuoteItems() {
+    const items = [];
+    const itemElements = document.querySelectorAll('.quote-item-row');
     
-    setLoading(true);
-    try {
-        await fetch(`/api/quotes/${quoteId}`, { method: 'DELETE' });
-        pageState.quotes = pageState.quotes.filter(q => q.id !== quoteId);
-        renderEquipmentList();
-        showToast('Tilbud slettet', 'success');
-    } catch (error) {
-        showToast('Kunne ikke slette tilbud', 'error');
-    } finally {
-        setLoading(false);
-    }
-}
-
-function showSelectTypeDialog() {
-    const modal = document.getElementById('add-equipment-modal');
-    modal.querySelector('.modal-content').innerHTML = `<div class="modal-header"><h3>Velg Anleggstype</h3><button class="close-btn" data-action="close-modal">×</button></div><div class="modal-body"><p>Laster anleggstyper...</p></div>`;
-    modal.style.display = 'flex';
-    modal.addEventListener('click', handleModalClicks);
-
-    fetch('/api/checklist-templates')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Kunne ikke hente anleggstyper.');
-            }
-            return response.json();
-        })
-        .then(data => {
-            const typeSelectionGrid = document.createElement('div');
-            typeSelectionGrid.className = 'type-selection-grid';
-            
-            data.facilityTypes.forEach(type => {
-                const button = document.createElement('button');
-                button.dataset.action = 'select-type';
-                button.dataset.type = type.id;
-                button.textContent = type.name;
-                typeSelectionGrid.appendChild(button);
-            });
-            
-            modal.querySelector('.modal-body').innerHTML = ''; // Clear loading text
-            modal.querySelector('.modal-body').appendChild(typeSelectionGrid);
-        })
-        .catch(error => {
-            console.error('Feil ved lasting av anleggstyper:', error);
-            modal.querySelector('.modal-body').innerHTML = `<p style="color: red;">Feil: ${error.message}</p>`;
-        });
-}
-
-function handleModalClicks(e) {
-    const target = e.target.closest('[data-action]');
-    if (!target) { 
-        if (e.target.classList.contains('modal-overlay')) hideModal(); 
-        return; 
-    }
-    const action = target.dataset.action;
-    if (action === 'select-type') { pageState.selectedEquipmentType = target.dataset.type; showAddEquipmentForm(); }
-    if (action === 'close-modal') { hideModal(); }
-}
-
-function showAddEquipmentForm() {
-    const modalContent = document.querySelector('#add-equipment-modal .modal-content');
-    const typeName = pageState.selectedEquipmentType.charAt(0).toUpperCase() + pageState.selectedEquipmentType.slice(1);
+    itemElements.forEach(row => {
+        const description = row.querySelector('.item-description')?.value;
+        const quantity = parseFloat(row.querySelector('.item-quantity')?.value) || 0;
+        const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
+        
+        if (description && quantity && price) {
+            items.push({ description, quantity, price });
+        }
+    });
     
-    let formFields = '';
-    if (pageState.selectedEquipmentType === 'custom') {
-        formFields = `<div class="form-group"><label for="plassering">Beskrivelse</label><input type="text" id="plassering" required placeholder="F.eks. Kontroll av taksluk, etc."></div>`;
-    } else {
-    formFields = `
-        <div class="form-group">
-            <label for="plassering">Plassering</label>
-            <input type="text" id="plassering" required placeholder="F.eks. Teknisk rom 1. etasje, Tak aggregat A">
-        </div>
-        <div class="form-group">
-            <label for="internalNotes">Intern kommentar <span style="color: #6c757d; font-weight: normal;">(valgfritt)</span></label>
-            <textarea id="internalNotes" rows="3" placeholder="F.eks. Trenger stige for adgang, nøkkel hos vaktmester, kun originale deler..." style="width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-family: inherit; font-size: 14px; resize: vertical; box-sizing: border-box;"></textarea>
-        </div>
+    return items;
+}
+
+window.addQuoteItem = function() {
+    const container = document.getElementById('quote-items-container');
+    const itemRow = document.createElement('div');
+    itemRow.className = 'quote-item-row';
+    itemRow.innerHTML = `
+        <input type="text" class="item-description" placeholder="Beskrivelse">
+        <input type="number" class="item-quantity" placeholder="Antall" min="1" value="1">
+        <input type="number" class="item-price" placeholder="Pris" min="0">
+        <button type="button" class="remove-item-btn" onclick="removeQuoteItem(this)">×</button>
     `;
-}
+    container.insertBefore(itemRow, container.querySelector('.add-item-btn'));
+};
 
-    modalContent.innerHTML = `<form id="equipment-form"><div class="modal-header"><h3>Legg til anlegg: ${typeName}</h3><button type="button" class="close-btn" data-action="close-modal">×</button></div><div class="modal-body">${formFields}</div><div class="modal-footer"><button type="button" class="btn-secondary" data-action="close-modal">Avbryt</button><button type="submit" class="btn-primary">Legg til anlegg</button></div></form>`;
-    document.getElementById('equipment-form').addEventListener('submit', handleSaveEquipment);
-}
+window.removeQuoteItem = function(button) {
+    button.closest('.quote-item-row').remove();
+};
 
-async function handleSaveEquipment(event) {
-    event.preventDefault(); 
-    setLoading(true);
-    
-    // Hent orderId fra URL hvis pageState.order ikke er satt
+function navigateToServicePage(equipmentId) {
     const orderId = pageState.order?.id || new URLSearchParams(window.location.search).get('id');
-    const customerId = pageState.order?.customer_id || pageState.order?.customerId || pageState.customer?.id;
     
-    if (!customerId) {
-        showToast('Feil: Mangler kunde-ID for denne ordren', 'error');
-        setLoading(false);
+    if (!orderId) {
+        showToast('Mangler ordre-ID', 'error');
         return;
     }
     
-    const newEquipmentData = {
-        customerId: customerId,
-        type: pageState.selectedEquipmentType,
-        name: document.getElementById('plassering').value,
-        internalNotes: document.getElementById('internalNotes')?.value || '',
-        status: 'active'
-    };
-    
-    console.log('Sender equipment data:', newEquipmentData);
-    console.log('Current orderId:', orderId); // Debug logging
-    
-    try {
-        const response = await fetch('/api/equipment', { 
-            method: 'POST', 
-            headers: { 
-                'Content-Type': 'application/json'
-            }, 
-            body: JSON.stringify(newEquipmentData),
-            credentials: 'include'
-        });
-        
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Server error:', errorData);
-            throw new Error(errorData.error || 'Lagring feilet');
-        }
-        
-        const savedEquipment = await response.json();
-        console.log('Equipment saved:', savedEquipment);
-        
-        // Sørg for at savedEquipment har riktig format
-        savedEquipment.serviceStatus = savedEquipment.serviceStatus || 'not_started';
-        savedEquipment.internalNotes = savedEquipment.internalNotes || savedEquipment.data?.internalNotes || '';
-        
-        pageState.equipment.push(savedEquipment);
-        renderEquipmentList();
-        renderActionButtons();
-        hideModal();
-        showToast('Anlegg lagt til', 'success');
-    } catch (error) { 
-        console.error('Error saving equipment:', error);
-        showToast(`Feil: ${error.message}`, 'error'); 
-    } 
-    finally { 
-        setLoading(false); 
-    }
+    window.location.href = `service.html?orderId=${orderId}&equipmentId=${equipmentId}`;
 }
 
 function hideModal() {
@@ -784,7 +900,9 @@ function hideModal() {
     modal.removeEventListener('click', handleModalClicks);
 }
 
-function setLoading(isLoading) { document.getElementById('loading-indicator').style.display = isLoading ? 'flex' : 'none'; }
+function setLoading(isLoading) { 
+    document.getElementById('loading-indicator').style.display = isLoading ? 'flex' : 'none'; 
+}
 
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container') || document.body;
@@ -793,8 +911,13 @@ function showToast(message, type = 'info') {
     toast.textContent = message;
     
     Object.assign(toast.style, {
-        position: 'fixed', top: '20px', right: '20px', padding: '1em',
-        borderRadius: '8px', color: 'white', zIndex: '1001',
+        position: 'fixed', 
+        top: '20px', 
+        right: '20px', 
+        padding: '1em',
+        borderRadius: '8px', 
+        color: 'white', 
+        zIndex: '1001',
         background: type === 'error' ? '#d9534f' : type === 'success' ? '#5cb85c' : '#5bc0de',
         boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
     });

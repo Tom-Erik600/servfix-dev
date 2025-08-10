@@ -1925,3 +1925,127 @@ button[type="submit"].action-btn.primary:hover {
 .checklist-item-fullwidth[data-item-type="virkningsgrad"] .item-actions {
     align-self: flex-end;
 }
+
+/* ===== EQUIPMENT SELECTION CHECKBOXES ===== */
+
+/* Checkbox container og styling */
+.equipment-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: auto;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.equipment-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    margin: 0;
+    flex-shrink: 0;
+    accent-color: #28a745;
+}
+
+.equipment-checkbox .checkbox-label {
+    font-size: 14px;
+    color: #374151;
+    font-weight: 500;
+    user-select: none;
+}
+
+.equipment-checkbox:hover .checkbox-label {
+    color: #1f2937;
+}
+
+/* Ikke-valgte anlegg styling */
+.system-item.not-selected {
+    opacity: 0.6;
+    background-color: #f9fafb;
+    position: relative;
+}
+
+.system-item.not-selected .system-content-wrapper {
+    border-left: 4px solid #e5e7eb;
+}
+
+.system-item.not-selected::after {
+    content: 'Ikke inkludert i rapport';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 11px;
+    color: #6b7280;
+    background-color: #f3f4f6;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+/* Status-spesifikk styling for ikke-valgte */
+.system-item.not-selected.completed {
+    background-color: #f3f4f6;
+}
+
+.system-item.not-selected.completed .system-content-wrapper {
+    border-left-color: #9ca3af;
+}
+
+.system-item.not-selected.in_progress {
+    background-color: #fef3c7;
+    opacity: 0.5;
+}
+
+/* Hover effekter */
+.system-item.not-selected:hover {
+    opacity: 0.8;
+    background-color: #f3f4f6;
+}
+
+/* Oppdatert system-header layout */
+.system-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.system-header .system-badge {
+    margin-left: auto;
+    font-size: 12px;
+    background-color: #e5e7eb;
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: #6b7280;
+}
+
+.system-header .delete-icon-btn {
+    margin-left: 8px;
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.system-header .delete-icon-btn:hover {
+    opacity: 1;
+}
+
+/* Responsiv design */
+@media (max-width: 640px) {
+    .system-header {
+        gap: 8px;
+    }
+    
+    .equipment-checkbox .checkbox-label {
+        font-size: 13px;
+    }
+    
+    .system-item.not-selected::after {
+        font-size: 10px;
+        padding: 1px 6px;
+    }
+}

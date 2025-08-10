@@ -40,47 +40,132 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Oppdatert POST route i src/routes/admin/orders.js
+// Oppdatert POST route i src/routes/admin/orders.js med bedre error handling
+// Oppdater POST route i src/routes/admin/orders.js
+
+// POST create new order - OPPDATERT VERSJON
+// Oppdatert POST route for src/routes/admin/orders.js
 router.post('/', async (req, res) => {
   try {
-    const { customerId, customerName, description, serviceType, technicianId, scheduledDate, customerData } = req.body;
+    const { 
+      customerId, 
+      customerName, 
+      customerData,
+      description, 
+      serviceType, 
+      technicianId, 
+      scheduledDate,
+      includedEquipmentIds
+    } = req.body;
     
-    // Bruk RIKTIG ID-format
+    console.log('=== CREATE ORDER REQUEST ===');
+    console.log('Body:', req.body);
+    console.log('includedEquipmentIds:', includedEquipmentIds);
+    console.log('Type:', typeof includedEquipmentIds);
+    console.log('Is Array:', Array.isArray(includedEquipmentIds));
+    
+    if (!customerId || !customerName) {
+      return res.status(400).json({ error: 'Customer ID and name are required' });
+    }
+    
+    const pool = await db.getTenantConnection(req.session.tenantId);
     const orderId = `PROJ-${new Date().getFullYear()}-${Date.now()}`;
     
-    // Valider påkrevde felter
-    if (!customerId || !customerName) {
-      return res.status(400).json({ error: 'customerId og customerName er påkrevd' });
-    }
-
-    const pool = await db.getTenantConnection(req.adminTenantId);
-    
-    // Opprett customer_data objekt hvis det ikke er sendt
-    const customer_data = customerData || {
-      id: customerId,
-      name: customerName,
+    // Opprett customer_data objekt
+    const customer_data = {
+      id: String(customerId),
+      name: String(customerName),
       snapshot_date: new Date().toISOString()
     };
     
-    // Oppdatert INSERT med customer_data kolonne
-    const result = await pool.query(
-      `INSERT INTO orders (
-        id, customer_id, customer_name, customer_data, description, 
-        service_type, technician_id, scheduled_date, status
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [orderId, customerId, customerName, JSON.stringify(customer_data), description, 
-       serviceType || 'Generell service', technicianId, 
-       scheduledDate, technicianId ? 'scheduled' : 'pending']
-    );
+    // Merge med eksisterende customerData hvis sendt
+    if (customerData && typeof customerData === 'object') {
+      Object.assign(customer_data, customerData);
+    }
+    
+    console.log('Customer data objekt:', customer_data);
+    
+    // Build INSERT query - bruk parameterisert query for JSONB
+    const insertQuery = `
+      INSERT INTO orders (
+        id, 
+        customer_id, 
+        customer_name, 
+        customer_data, 
+        description, 
+        service_type, 
+        technician_id, 
+        scheduled_date, 
+        status, 
+        included_equipment_ids
+      ) VALUES (
+        $1, 
+        $2::integer, 
+        $3, 
+        $4::jsonb, 
+        $5, 
+        $6, 
+        $7, 
+        $8::date, 
+        $9, 
+        $10::jsonb
+      ) RETURNING *
+    `;
+    
+    // Håndter equipment IDs - konverter til JSON string for JSONB
+    let equipmentIdsJsonString = null;
+    if (includedEquipmentIds && Array.isArray(includedEquipmentIds) && includedEquipmentIds.length > 0) {
+      // Konverter array til JSON string
+      equipmentIdsJsonString = JSON.stringify(includedEquipmentIds);
+    }
+    
+    console.log('Equipment IDs as JSON string:', equipmentIdsJsonString);
+    
+    const params = [
+      orderId,                                    // $1 - character varying
+      parseInt(customerId),                       // $2 - integer
+      String(customerName),                       // $3 - character varying
+      JSON.stringify(customer_data),              // $4 - jsonb (som string)
+      description || null,                        // $5 - text
+      serviceType || 'Generell service',         // $6 - character varying
+      technicianId || null,                       // $7 - character varying
+      scheduledDate || null,                      // $8 - date
+      technicianId ? 'scheduled' : 'pending',     // $9 - character varying
+      equipmentIdsJsonString                      // $10 - jsonb (som string eller null)
+    ];
+    
+    console.log('INSERT params:');
+    params.forEach((param, index) => {
+      console.log(`Param ${index + 1}:`, param, 'Type:', typeof param);
+    });
+    
+    // Kjør INSERT
+    const result = await pool.query(insertQuery, params);
     
     // Legg til orderNumber for frontend
     result.rows[0].orderNumber = `SO-${orderId.split('-')[1]}-${orderId.split('-')[2].slice(-6)}`;
     
+    console.log('Order created successfully:', {
+      id: result.rows[0].id,
+      included_equipment_ids: result.rows[0].included_equipment_ids
+    });
+    
     res.status(201).json(result.rows[0]);
     
   } catch (error) {
-    console.error('Error creating order:', error);
-    res.status(500).json({ error: error.message });
+    console.error('=== ORDER CREATE ERROR ===');
+    console.error('Error:', error);
+    console.error('Error message:', error.message);
+    console.error('Error detail:', error.detail);
+    console.error('Error code:', error.code);
+    console.error('Error stack:', error.stack);
+    
+    res.status(500).json({ 
+      error: error.message,
+      detail: error.detail || 'Se server logs for detaljer',
+      code: error.code
+    });
   }
 });
-
 module.exports = router;
