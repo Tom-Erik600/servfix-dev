@@ -222,6 +222,13 @@ async function saveComponent() {
             equipmentId: state.equipmentId,
             reportData: updateData  // Send kun components og overallComment
         });
+
+        // Oppdater lokal equipment status hvis første sjekkliste
+        if (state.serviceReport.reportData.components.length === 1 && 
+            (!state.equipment.serviceStatus || state.equipment.serviceStatus === 'not_started')) {
+            state.equipment.serviceStatus = 'in_progress';
+            renderAnleggInfo(); // Re-render anleggsinfo for å vise ny status
+        }
         
         // Update UI
         renderComponentList();

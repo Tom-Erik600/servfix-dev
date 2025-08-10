@@ -328,27 +328,53 @@ router.put('/:reportId', async (req, res) => {
       console.log('📸 Beholder eksisterende bilder - tom array sendt men bilder finnes');
     }
     
-    // Oppdater rapport MED separat photos-håndtering
-    const updateResult = await pool.query(
+    // Sjekk om dette er første gang en sjekkliste lagres
+    const currentStatusResult = await pool.query(
+      'SELECT status FROM service_reports WHERE id = $1',
+      [reportId]
+    );
+
+    const currentStatus = currentStatusResult.rows[0]?.status || 'draft';
+    const hasComponents = reportData.components && reportData.components.length > 0;
+
+    // Automatisk sett status til 'in_progress' hvis:
+    // 1. Current status er 'draft' eller 'not_started'
+    // 2. Vi har minst én sjekkliste-komponent
+    let newStatus = reportData.status;
+    if (!newStatus && hasComponents && (currentStatus === 'draft' || currentStatus === 'not_started')) {
+      newStatus = 'in_progress';
+    }
+
+    const result = await pool.query(
       `UPDATE service_reports 
        SET checklist_data = $1, 
            products_used = $2, 
            additional_work = $3,
            photos = $4
+           ${newStatus ? ', status = $6' : ''}
        WHERE id = $5 
        RETURNING *`,
+      newStatus ? 
       [
         JSON.stringify(dbData.checklist_data),
         JSON.stringify(dbData.products_used),
         JSON.stringify(dbData.additional_work),
-        dbData.photos, // Bruker enten eksisterende eller nye bilder
+        dbData.photos,
+        reportId,
+        newStatus
+      ] :
+      [
+        JSON.stringify(dbData.checklist_data),
+        JSON.stringify(dbData.products_used),
+        JSON.stringify(dbData.additional_work),
+        dbData.photos,
         reportId
       ]
     );
     
-    console.log(`✅ Rapport oppdatert. Antall bilder: ${updateResult.rows[0].photos?.length || 0}`);
+    console.log(`✅ Rapport oppdatert. Antall bilder: ${result.rows[0].photos?.length || 0}`);
     
-    res.json(transformDbRowToFrontend(updateResult.rows[0]));
+    res.json(transformDbRowToFrontend(result.rows[0]));
   } catch (error) {
     console.error('Feil ved oppdatering av servicerapport:', error);
     res.status(500).json({ error: 'Intern serverfeil', details: error.message });

@@ -228,7 +228,7 @@ function createEquipmentCardHTML(eq) {
         'in_progress': 'Under arbeid', 
         'completed': 'Fullført' 
     };
-    const statusText = statusMap[eq.serviceStatus] || 'Ukjent';
+    const statusText = statusMap[eq.serviceStatus || 'not_started'] || 'Planlagt';
     const statusClass = eq.serviceStatus || 'not_started';
     const isSelected = pageState.selectedEquipmentIds.includes(eq.id);
 
@@ -374,9 +374,20 @@ function setupEventListeners() {
         // Resten av eksisterende actions...
         switch(action) {
             case 'add-equipment': showSelectTypeDialog(); break;
-            case 'delete-start': handleDeleteStart(event); break;
-            case 'delete-cancel': handleDeleteCancel(event); break;
-            case 'delete-confirm': handleDeleteConfirm(event); break;
+            case 'delete-start': 
+                event.preventDefault();
+                event.stopPropagation();
+                startDeleteProcess(target);
+                break;
+            case 'delete-cancel': 
+                event.preventDefault();
+                cancelDeleteProcess(target);
+                break;
+            case 'delete-confirm': 
+                event.preventDefault();
+                const equipmentId = target.closest('.system-item').dataset.equipmentId;
+                confirmDeleteEquipment(equipmentId);
+                break;
             case 'complete-order': handleCompleteOrder(); break;
             case 'create-quote': handleCreateQuote(); break;
             // ... andre cases
@@ -494,10 +505,10 @@ async function confirmDeleteEquipment(equipmentId) {
     
     setLoading(true);
     try {
-        const response = await fetch(`/api/equipment/${equipmentId}/deactivate`, {
-            method: 'POST',
+        const response = await fetch(`/api/equipment/${equipmentId}`, {
+            method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reason })
+            body: JSON.stringify({ deactivationReason: reason })
         });
         
         if (!response.ok) {
@@ -508,8 +519,19 @@ async function confirmDeleteEquipment(equipmentId) {
         const systemItem = document.querySelector(`[data-equipment-id="${equipmentId}"]`);
         systemItem.classList.add('fade-out');
         
-        setTimeout(() => {
+        setTimeout(async () => {
+            // Fjern fra equipment array
             pageState.equipment = pageState.equipment.filter(eq => eq.id.toString() !== equipmentId.toString());
+            
+            // Fjern fra selectedEquipmentIds og oppdater backend
+            const wasSelected = pageState.selectedEquipmentIds.includes(equipmentId);
+            pageState.selectedEquipmentIds = pageState.selectedEquipmentIds.filter(id => id !== equipmentId);
+            
+            if (wasSelected) {
+                await saveSelectedEquipment();
+            }
+            
+            // Oppdater visningen
             renderEquipmentList();
             renderActionButtons();
             showToast('Anlegg deaktivert', 'success');
