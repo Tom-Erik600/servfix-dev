@@ -234,6 +234,34 @@ router.get('/:id', async (req, res) => {
     const technicianResult = await pool.query('SELECT * FROM technicians WHERE id = $1', [order.technician_id]);
     const technician = technicianResult.rows[0] || {};
     
+    let quotes = [];
+    try {
+      const quotesResult = await pool.query(`
+        SELECT 
+          q.*,
+          q.items::jsonb as items_data
+        FROM quotes q 
+        WHERE q.order_id = $1
+        ORDER BY q.created_at DESC
+      `, [req.params.id]);
+      
+      quotes = quotesResult.rows.map(quote => {
+        const itemsData = typeof quote.items_data === 'string' ? JSON.parse(quote.items_data) : quote.items_data;
+        
+        return {
+          ...quote,
+          description: itemsData?.description || '',
+          estimatedHours: itemsData?.estimatedHours || 0,
+          estimatedPrice: quote.total_amount,
+          products: itemsData?.products || [],
+          items: itemsData?.products || []
+        };
+      });
+    } catch (error) {
+      console.log('Could not fetch quotes for order:', req.params.id);
+      // quotes forblir tom array
+    }
+
     res.json({
       order: {
           ...order,
@@ -244,7 +272,7 @@ router.get('/:id', async (req, res) => {
       customer: customer,
       equipment: equipment,
       technician: technician,
-      quotes: []
+      quotes: quotes
     });
     
   } catch (error) {

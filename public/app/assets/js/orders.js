@@ -788,39 +788,43 @@ async function handleSaveEquipment(event) {
 }
 
 async function handleCreateQuote() {
-    showQuoteModal();
+    showCreateQuoteDialog();
 }
 
-function showQuoteModal() {
+function showCreateQuoteDialog() {
     const modal = document.getElementById('add-equipment-modal');
     modal.querySelector('.modal-content').innerHTML = `
-        <div class="modal-header-custom">
+        <div class="modal-header">
             <h3>Opprett tilbud</h3>
-            <button type="button" class="close-btn-custom" data-action="close-modal">×</button>
+            <button class="close-btn" data-action="close-modal">×</button>
         </div>
-        
-        <form id="quote-form">
-            <div class="modal-body-custom">
+        <form id="quote-form" class="quote-form">
+            <div class="modal-body">
                 <div class="form-section">
-                    <label class="form-label">Beskrivelse av arbeid</label>
-                    <textarea id="quote-description" class="form-textarea" required placeholder="Beskriv arbeidsoppgaven som trenger tilbud..." rows="4"></textarea>
-                </div>
-                
-                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Beskrivelse av arbeid</label>
+                        <textarea id="quote-description" class="form-input" rows="4" 
+                                placeholder="Her trenger man å lage et tilbud" required></textarea>
+                    </div>
                     <div class="form-group">
                         <label class="form-label">Estimerte timer</label>
-                        <input type="text" id="quote-hours" class="form-input" placeholder="0">
+                        <input type="number" id="quote-hours" class="form-input" 
+                               step="0.5" min="0" value="0" placeholder="0">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Totalpris for arbeid (kr)</label>
-                        <input type="text" id="quote-price" class="form-input" placeholder="0">
+                        <input type="number" id="quote-price" class="form-input" 
+                               step="0.01" min="0" value="0" placeholder="0">
                     </div>
                 </div>
                 
                 <div class="form-section">
-                    <label class="form-label">Produkter/deler <span class="optional">(valgfritt)</span></label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <label class="form-label" style="margin-bottom: 0;">Produkter/deler <span class="optional">(valgfritt)</span></label>
+                        <button type="button" class="add-item-btn" onclick="addQuoteItem()" style="background: #4A90E2; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px;">+ Legg til produkt</button>
+                    </div>
                     <div id="quote-items-container" class="quote-items-container">
-                        <button type="button" class="add-item-btn" onclick="addQuoteItem()">+ Legg til produkt</button>
+                        <!-- Produkter vil bli lagt til her -->
                     </div>
                 </div>
             </div>
@@ -873,15 +877,15 @@ async function handleSaveQuote(event) {
 
 function gatherQuoteItems() {
     const items = [];
-    const itemElements = document.querySelectorAll('.quote-item-row');
+    const itemElements = document.querySelectorAll('.product-item');
     
     itemElements.forEach(row => {
-        const description = row.querySelector('.item-description')?.value;
-        const quantity = parseFloat(row.querySelector('.item-quantity')?.value) || 0;
-        const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
+        const name = row.querySelector('.product-name')?.value?.trim();
+        const quantity = parseInt(row.querySelector('.product-quantity')?.value) || 1;
+        const price = parseFloat(row.querySelector('.product-price')?.value) || 0;
         
-        if (description && quantity && price) {
-            items.push({ description, quantity, price });
+        if (name) {
+            items.push({ name, quantity, price });
         }
     });
     
@@ -891,14 +895,14 @@ function gatherQuoteItems() {
 window.addQuoteItem = function() {
     const container = document.getElementById('quote-items-container');
     const itemRow = document.createElement('div');
-    itemRow.className = 'quote-item-row';
+    itemRow.className = 'product-item';
     itemRow.innerHTML = `
-        <input type="text" class="item-description" placeholder="Beskrivelse">
-        <input type="number" class="item-quantity" placeholder="Antall" min="1" value="1">
-        <input type="number" class="item-price" placeholder="Pris" min="0">
-        <button type="button" class="remove-item-btn" onclick="removeQuoteItem(this)">×</button>
+        <input type="text" placeholder="Produktnavn" class="product-name">
+        <input type="number" placeholder="Antall" class="product-quantity" min="1" value="1">
+        <input type="number" placeholder="Pris" class="product-price" min="0" step="0.01">
+        <button type="button" class="remove-line-btn" onclick="removeQuoteItem(this)"></button>
     `;
-    container.insertBefore(itemRow, container.querySelector('.add-item-btn'));
+    container.appendChild(itemRow);
 };
 
 window.removeQuoteItem = function(button) {
@@ -946,4 +950,377 @@ function showToast(message, type = 'info') {
 
     container.appendChild(toast);
     setTimeout(() => toast.remove(), 3500);
+}
+
+// CSS som matcher service.html produkter nøyaktig
+const quoteModalStyles = `
+<style>
+/* Tilbud modal stiler som matcher service.html */
+.quote-form .form-section {
+    margin-bottom: 20px;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 20px;
+}
+
+.quote-form .form-section:last-child {
+    border-bottom: none;
+}
+
+/* Container for produkter - matcher service.html */
+.quote-items-container {
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    background-color: #f8f9fa;
+    padding: 12px;
+    min-height: 60px;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+}
+
+/* Produkt-rad som matcher service.html styling NØYAKTIG */
+.quote-item-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.quote-item-row:last-child {
+    margin-bottom: 0;
+}
+
+/* Produktnavn input - største felt (som i service.html) */
+.item-description {
+    flex: 2;
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+    background: white;
+}
+
+.item-description:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+/* Antall input - liten og sentrert (som i service.html) */
+.item-quantity {
+    flex: 0 0 45px;
+    width: 45px;
+    max-width: 45px;
+    padding: 8px 4px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+    background: white;
+}
+
+.item-quantity:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+/* Pris input - høyrejustert (som i service.html) */
+.item-price {
+    flex: 0 0 70px;
+    width: 70px;
+    max-width: 70px;
+    padding: 8px 6px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    text-align: right;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+    background: white;
+}
+
+.item-price:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+/* Legg til produkt knapp */
+.add-item-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    background: #4A90E2;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    margin-bottom: 8px;
+}
+
+.add-item-btn:hover {
+    background: #357ABD;
+    transform: translateY(-1px);
+}
+
+/* Fjern produkt knapp - rød sirkel med X (NØYAKTIG som service.html) */
+.remove-item-btn {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid #fecaca;
+    background: #fef2f2;
+    color: #dc2626;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    overflow: hidden;
+    flex: 0 0 auto;
+    position: relative;
+}
+
+.remove-item-btn:hover {
+    background: #dc2626;
+    color: white;
+    border-color: #dc2626;
+    transform: scale(1.1);
+}
+
+/* Optional tekst styling */
+.optional {
+    color: #6c757d;
+    font-weight: normal;
+    font-size: 12px;
+}
+
+/* Form grupper og labels */
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 6px;
+}
+
+.form-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+    background: white;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .quote-item-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    
+    .item-description,
+    .item-quantity,
+    .item-price {
+        flex: 1;
+        width: 100%;
+        max-width: none;
+    }
+    
+    .item-quantity,
+    .item-price {
+        text-align: left;
+    }
+    
+    .remove-item-btn {
+        align-self: flex-end;
+        margin-top: 4px;
+    }
+}
+
+/* Empty state */
+.quote-items-container:empty::before {
+    content: "Klikk 'Legg til produkt' for å legge til produkter/deler";
+    color: #6c757d;
+    font-style: italic;
+    font-size: 13px;
+    display: block;
+    text-align: center;
+    padding: 20px;
+}
+</style>
+`;
+
+// Legg til stilene i dokumentet
+if (!document.getElementById('quote-modal-styles')) {
+    const styleElement = document.createElement('div');
+    styleElement.id = 'quote-modal-styles';
+    styleElement.innerHTML = quoteModalStyles;
+    document.head.appendChild(styleElement);
+}
+
+// CSS kopierat exakt från service.html
+const serviceCSS = `
+<style>
+/* PRODUKTER - Exakt från service.html */
+.product-item { 
+    display: flex; 
+    gap: 8px; 
+    align-items: center; 
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.product-item .product-name,
+.product-item input[placeholder="Produktnavn"] { 
+    flex: 1 1 auto; 
+    min-width: 120px;
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+    background: white;
+}
+
+.product-item input[placeholder="Produktnavn"]:focus { 
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+.product-item .product-quantity,
+.product-item input[placeholder="Antall"] { 
+    flex: 0 0 45px;
+    width: 45px;
+    max-width: 45px;
+    padding: 8px 4px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+    background: white;
+}
+
+.product-item input[placeholder="Antall"]:focus { 
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+.product-item .product-price,
+.product-item input[placeholder="Pris"] { 
+    flex: 0 0 70px;
+    width: 70px;
+    max-width: 70px;
+    padding: 8px 6px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    text-align: right;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+    background: white;
+}
+
+.product-item input[placeholder="Pris"]:focus { 
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+/* PRODUKTER FJERN-KNAPP - RØDT X */
+.product-item .remove-line-btn { 
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid #fecaca;
+    background: #fef2f2;
+    color: #dc2626;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    text-indent: -9999px;
+    overflow: hidden;
+    flex: 0 0 auto;
+    position: relative;
+}
+
+.product-item .remove-line-btn:hover { 
+    background: #dc2626;
+    color: white;
+    border-color: #dc2626;
+    transform: scale(1.1);
+}
+
+.product-item .remove-line-btn::before {
+    content: "×";
+    font-size: 16px;
+    line-height: 1;
+    text-indent: 0;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* Container styling */
+.quote-items-container {
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    background-color: #f8f9fa;
+    padding: 12px;
+    min-height: 60px;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+}
+</style>
+`;
+
+// Lägg till CSS
+if (!document.getElementById('service-css-styles')) {
+    const styleElement = document.createElement('div');
+    styleElement.id = 'service-css-styles';
+    styleElement.innerHTML = serviceCSS;
+    document.head.appendChild(styleElement);
 }
