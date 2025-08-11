@@ -53,4 +53,53 @@ router.get('/', async (req, res) => {
   }
 });
 
+// POST new equipment
+router.post('/', async (req, res) => {
+  try {
+    const { customerId, type, name, location, data } = req.body;
+    
+    // Valider påkrevde felter
+    if (!customerId || !type || !name) {
+      return res.status(400).json({
+        error: 'Mangler påkrevde felter: customerId, type og name er påkrevd'
+      });
+    }
+    
+    // Generer ID - samme format som i technician equipment route
+    const equipmentId = `EQUIP-${new Date().getFullYear()}-${Date.now()}`;
+    
+    const pool = await db.getTenantConnection(req.adminTenantId);
+
+    // Merge data med standard verdier
+    const equipmentData = {
+      status: 'active',
+      serviceStatus: 'not_started',
+      ...data
+    };
+
+    const result = await pool.query(
+      'INSERT INTO equipment (id, customer_id, type, name, location, data) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;',
+      [equipmentId, customerId, type, name, location || name, equipmentData]
+    );
+    
+    // Returner data i forventet format
+    const equipment = result.rows[0];
+    equipment.status = equipment.data?.status;
+    equipment.serviceStatus = equipment.data?.serviceStatus;
+    equipment.internalNotes = equipment.data?.internalNotes;
+    
+    console.log('Equipment created by admin:', equipment);
+    res.status(201).json(equipment);
+    
+  } catch (error) {
+    console.error('Error creating equipment:', error);
+    
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Anlegg med denne ID finnes allerede' });
+    }
+    
+    res.status(500).json({ error: 'Kunne ikke opprette anlegg' });
+  }
+});
+
 module.exports = router;

@@ -239,96 +239,326 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // NY FUNKSJON: Vis modal med equipment selection
-    // Oppdater showModalWithEquipment for korrekt customerId håndtering
-
-    // Oppdatert showModalWithEquipment funksjon for planlegger.js
-    // Oppdatert showModalWithEquipment med today variabel fix
     async function showModalWithEquipment(customer, technicianName) {
-        try {
-            // Definer today lokalt i funksjonen
-            const today = new Date().toISOString().split('T')[0];
+    try {
+        // Definer today lokalt i funksjonen
+        const today = new Date().toISOString().split('T')[0];
+        
+        // VIKTIG: Behold customerId som string (konverteres til integer i backend)
+        const customerId = customer.id;
+        console.log('Henter anlegg for customerId:', customerId, 'type:', typeof customerId);
+        
+        // Hent anlegg for kunden
+        const response = await fetch(`/api/admin/equipment?customerId=${customerId}`, {
+            credentials: 'include'
+        });
+        
+        let equipment = [];
+        if (response.ok) {
+            equipment = await response.json();
+            console.log('Equipment hentet:', equipment);
+        } else {
+            console.error('Kunne ikke hente equipment:', response.status, response.statusText);
+        }
+        
+        // Bygg modal innhold med equipment selection OG description-felt
+        const modalContent = document.querySelector('.modal-content');
+        modalContent.innerHTML = `
+            <div class="modal-header">
+                <h3>Opprett serviceoppdrag</h3>
+            </div>
             
-            // VIKTIG: Behold customerId som string (konverteres til integer i backend)
-            const customerId = customer.id;
-            console.log('Henter anlegg for customerId:', customerId, 'type:', typeof customerId);
+            <div class="modal-body">
+                <p class="modal-info-text">
+                    Opprett nytt serviceoppdrag for <strong>${customer.name}</strong> 
+                    med tekniker <strong>${technicianName}</strong>.
+                </p>
+                
+                <div class="form-group">
+                    <label for="modal-date">Velg dato:</label>
+                    <input type="date" id="modal-date" value="${today}" min="${today}" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="modal-description">Beskrivelse:</label>
+                    <input type="text" id="modal-description" value="Service hos ${customer.name}" 
+                           placeholder="Skriv inn beskrivelse..." required>
+                </div>
+                
+                ${equipment.length > 0 ? `
+                    <div class="equipment-selection-section">
+                        <h4>Velg anlegg for service:</h4>
+                        <div class="equipment-selection-help">
+                            <small>Alle anlegg er valgt som standard. Fjern haken for anlegg som ikke skal inkluderes i dette oppdraget.</small>
+                        </div>
+                        <div class="equipment-selection-list">
+                            ${equipment.map(eq => `
+                                <label class="equipment-selection-item">
+                                    <input type="checkbox" 
+                                        class="equipment-checkbox" 
+                                        value="${eq.id}" 
+                                        checked>
+                                    <div class="equipment-info">
+                                        <span class="equipment-name">${eq.name || 'Uten navn'}</span>
+                                        <span class="equipment-type">${eq.type || 'Ukjent type'}</span>
+                                        ${eq.location ? `<span class="equipment-location">📍 ${eq.location}</span>` : ''}
+                                    </div>
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : '<p class="no-equipment-message">Ingen anlegg funnet for denne kunden</p>'}
+                
+                <div class="add-equipment-section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                    <button type="button" class="btn btn-outline" id="modal-add-equipment-btn">
+                        <span style="font-size: 16px;">➕</span> Opprett nytt anlegg
+                    </button>
+                </div>
+            </div>
             
-            // Hent anlegg for kunden
-            const response = await fetch(`/api/admin/equipment?customerId=${customerId}`, {
-                credentials: 'include'
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="modal-cancel-btn">Avbryt</button>
+                <button type="button" class="btn btn-primary" id="modal-save-btn">Opprett oppdrag</button>
+            </div>
+        `;
+        
+        // Vis modal
+        dateModal.style.display = 'flex';
+        dateModal.classList.add('show');
+        
+        // Re-attach event listeners til nye buttons
+        document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
+        document.getElementById('modal-save-btn').addEventListener('click', saveOrderWithEquipment);
+        const addEquipmentBtn = document.getElementById('modal-add-equipment-btn');
+        console.log('Add equipment button:', addEquipmentBtn);
+        if (addEquipmentBtn) {
+            addEquipmentBtn.addEventListener('click', () => {
+                console.log('Add equipment button clicked!');
+                showAddEquipmentModal(customer);
             });
-            
-            let equipment = [];
-            if (response.ok) {
-                equipment = await response.json();
-                console.log('Equipment hentet:', equipment);
-            } else {
-                console.error('Kunne ikke hente equipment:', response.status, response.statusText);
-            }
-            
-            // Bygg modal innhold med equipment selection
-            const modalContent = document.querySelector('.modal-content');
-            modalContent.innerHTML = `
+        } else {
+            console.error('Could not find modal-add-equipment-btn!');
+        }
+        
+    } catch (error) {
+        console.error('Error loading equipment:', error);
+        // Vis standard modal hvis equipment loading feiler
+        showStandardModal(customer, technicianName);
+    }
+}
+
+// Ny funksjon for å vise modal for å opprette anlegg
+async function showAddEquipmentModal(customer) {
+    try {
+        console.log('showAddEquipmentModal started with customer:', customer);
+        
+        // Hent facility types fra checklist templates
+        const response = await fetch('/api/admin/checklist-templates', {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            throw new Error('Kunne ikke hente anleggstyper');
+        }
+        
+        const data = await response.json();
+        console.log('Checklist templates data:', data);
+        
+        // Sjekk at vi har facilityTypes
+        if (!data.facilityTypes || !Array.isArray(data.facilityTypes)) {
+            throw new Error('Ingen anleggstyper funnet');
+        }
+        
+        // Opprett en overlay modal for anleggsoppretting
+        const equipmentModal = document.createElement('div');
+        equipmentModal.className = 'modal-overlay equipment-modal show';
+        equipmentModal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 9999;';
+        
+        equipmentModal.innerHTML = `
+            <div class="modal-content" style="background: white; padding: 20px; border-radius: 8px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;">
                 <div class="modal-header">
-                    <h3>Opprett serviceoppdrag</h3>
+                    <h3>Velg type anlegg</h3>
+                    <button type="button" class="close-btn" style="float: right; background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
                 </div>
                 
                 <div class="modal-body">
-                    <p class="modal-info-text">
-                        Opprett nytt serviceoppdrag for <strong>${customer.name}</strong> 
-                        med tekniker <strong>${technicianName}</strong>.
-                    </p>
-                    
-                    <div class="form-group">
-                        <label for="modal-date">Velg dato:</label>
-                        <input type="date" id="modal-date" value="${today}" min="${today}" required>
+                    <div class="type-selection-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 20px;">
+                        ${data.facilityTypes.map(type => `
+                            <button type="button" class="type-btn" data-type="${type.id}" 
+                                    style="padding: 15px; border: 1px solid #ccc; border-radius: 5px; background: white; cursor: pointer; transition: all 0.2s; text-align: center;">
+                                ${type.name}
+                            </button>
+                        `).join('')}
                     </div>
-                    
-                    ${equipment.length > 0 ? `
-                        <div class="equipment-selection-section">
-                            <h4>Velg anlegg for service:</h4>
-                            <div class="equipment-selection-help">
-                                <small>Alle anlegg er valgt som standard. Fjern haken for anlegg som ikke skal inkluderes i dette oppdraget.</small>
-                            </div>
-                            <div class="equipment-selection-list">
-                                ${equipment.map(eq => `
-                                    <label class="equipment-selection-item">
-                                        <input type="checkbox" 
-                                            class="equipment-checkbox" 
-                                            value="${eq.id}" 
-                                            checked>
-                                        <div class="equipment-info">
-                                            <span class="equipment-name">${eq.name || 'Uten navn'}</span>
-                                            <span class="equipment-type">${eq.type || 'Ukjent type'}</span>
-                                            ${eq.location ? `<span class="equipment-location">📍 ${eq.location}</span>` : ''}
-                                        </div>
-                                    </label>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : '<p class="no-equipment-message">Ingen anlegg funnet for denne kunden</p>'}
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(equipmentModal);
+        console.log('Equipment modal added to DOM');
+        
+        // Event listeners
+        equipmentModal.querySelector('.close-btn').addEventListener('click', () => {
+            document.body.removeChild(equipmentModal);
+        });
+        
+        equipmentModal.addEventListener('click', (e) => {
+            if (e.target === equipmentModal) {
+                document.body.removeChild(equipmentModal);
+            }
+        });
+        
+        // Type selection med hover effekt
+        equipmentModal.querySelectorAll('.type-btn').forEach(btn => {
+            // Hover effekt
+            btn.addEventListener('mouseenter', () => {
+                btn.style.backgroundColor = '#f3f4f6';
+                btn.style.borderColor = '#3b82f6';
+                btn.style.color = '#3b82f6';
+            });
+            
+            btn.addEventListener('mouseleave', () => {
+                btn.style.backgroundColor = 'white';
+                btn.style.borderColor = '#ccc';
+                btn.style.color = 'black';
+            });
+            
+            // Klikk handler
+            btn.addEventListener('click', () => {
+                console.log('Type button clicked!');
+                const selectedType = btn.dataset.type;
+                console.log('Selected type:', selectedType);
+                console.log('Customer:', customer);
+                
+                // Sjekk om funksjonen eksisterer
+                if (typeof showEquipmentForm === 'function') {
+                    document.body.removeChild(equipmentModal);
+                    showEquipmentForm(customer, selectedType);
+                } else {
+                    console.error('showEquipmentForm function not found!');
+                }
+            });
+        });
+        
+    } catch (error) {
+        console.error('Error in showAddEquipmentModal:', error);
+        showToast('Kunne ikke laste anleggstyper: ' + error.message, 'error');
+    }
+}
+
+// Funksjon for å vise skjema for å legge til anlegg
+function showEquipmentForm(customer, equipmentType) {
+    const typeName = equipmentType.charAt(0).toUpperCase() + equipmentType.slice(1);
+    
+    let formFields = '';
+    if (equipmentType === 'custom') {
+        formFields = `
+            <div class="form-group">
+                <label for="equipment-description">Beskrivelse</label>
+                <input type="text" id="equipment-description" required placeholder="F.eks. Kontroll av taksluk, etc.">
+            </div>
+        `;
+    } else {
+        formFields = `
+            <div class="form-group">
+                <label for="equipment-location">Plassering</label>
+                <input type="text" id="equipment-location" required placeholder="F.eks. Teknisk rom 1. etasje, Tak aggregat A">
+            </div>
+            <div class="form-group">
+                <label for="equipment-notes">Intern kommentar <span style="color: #6c757d; font-weight: normal;">(valgfritt)</span></label>
+                <textarea id="equipment-notes" rows="3" placeholder="F.eks. Vanskelig tilkomst, krever gardintrapp"></textarea>
+            </div>
+        `;
+    }
+    
+    const formModal = document.createElement('div');
+    formModal.className = 'modal-overlay equipment-form-modal show';
+    formModal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 10000;';
+    
+    formModal.innerHTML = `
+        <div class="modal-content" style="background: white; padding: 20px; border-radius: 8px; max-width: 500px; width: 90%;">
+            <div class="modal-header">
+                <h3>Legg til ${typeName}</h3>
+                <button type="button" class="close-btn" style="float: right; background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+            </div>
+            
+            <form id="equipment-form">
+                <div class="modal-body">
+                    ${formFields}
                 </div>
                 
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" id="modal-cancel-btn">Avbryt</button>
-                    <button type="button" class="btn btn-primary" id="modal-save-btn">Opprett oppdrag</button>
+                <div class="modal-footer" style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary cancel-btn">Avbryt</button>
+                    <button type="submit" class="btn btn-primary">Lagre anlegg</button>
                 </div>
-            `;
+            </form>
+        </div>
+    `;
+    
+    document.body.appendChild(formModal);
+    
+    // Event listeners
+    formModal.querySelector('.close-btn').addEventListener('click', () => {
+        document.body.removeChild(formModal);
+    });
+    
+    formModal.querySelector('.cancel-btn').addEventListener('click', () => {
+        document.body.removeChild(formModal);
+    });
+    
+    formModal.addEventListener('click', (e) => {
+        if (e.target === formModal) {
+            document.body.removeChild(formModal);
+        }
+    });
+    
+    // Form submit
+    formModal.querySelector('#equipment-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const equipmentData = {
+            customerId: customer.id,
+            type: equipmentType,
+            name: equipmentType === 'custom' ? 
+                document.getElementById('equipment-description').value : 
+                `${typeName} - ${document.getElementById('equipment-location').value}`,
+            location: document.getElementById('equipment-location')?.value || '',
+            data: {
+                internalNotes: document.getElementById('equipment-notes')?.value || ''
+            }
+        };
+        
+        try {
+            const response = await fetch('/api/admin/equipment', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify(equipmentData)
+            });
             
-            // Vis modal
-            dateModal.style.display = 'flex';
-            dateModal.classList.add('show');
+            if (!response.ok) {
+                throw new Error('Kunne ikke opprette anlegg');
+            }
             
-            // Re-attach event listeners til nye buttons
-            document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
-            document.getElementById('modal-save-btn').addEventListener('click', saveOrderWithEquipment);
+            const newEquipment = await response.json();
+            console.log('Nytt anlegg opprettet:', newEquipment);
+            
+            // Lukk form modal
+            document.body.removeChild(formModal);
+            
+            // Refresh equipment liste i hoved-modalen
+            await showModalWithEquipment(customer, document.querySelector('.modal-info-text strong:last-child').textContent);
+            
+            showToast('Anlegg opprettet!', 'success');
             
         } catch (error) {
-            console.error('Error loading equipment:', error);
-            // Vis standard modal hvis equipment loading feiler
-            showStandardModal(customer, technicianName);
+            console.error('Error creating equipment:', error);
+            showToast('Kunne ikke opprette anlegg', 'error');
         }
-    }
+    });
+}
 
     // Hjelpefunksjon for standard modal (fallback)
     function showStandardModal(customer, technicianName) {
@@ -384,100 +614,85 @@ document.addEventListener('DOMContentLoaded', async () => {
     // OPPDATERT: Lagre ordre med valgte anlegg
     // Finn og erstatt saveOrderWithEquipment funksjonen i planlegger.js med denne:
 
-    // Oppdatert saveOrderWithEquipment funksjon i planlegger.js
     async function saveOrderWithEquipment() {
-        console.log('Lagrer ordre med equipment selection...');
+    console.log('saveOrderWithEquipment called');
+    
+    if (!targetCustomer) {
+        console.error('No target customer');
+        showToast('Ingen kunde valgt', 'error');
+        return;
+    }
+    
+    const scheduledDate = document.getElementById('modal-date')?.value;
+    const description = document.getElementById('modal-description')?.value;
+    
+    if (!scheduledDate) {
+        showToast('Vennligst velg en dato', 'error');
+        return;
+    }
+    
+    if (!description) {
+        showToast('Vennligst skriv inn en beskrivelse', 'error');
+        return;
+    }
+    
+    try {
+        // Hent valgte anlegg
+        const selectedCheckboxes = document.querySelectorAll('.equipment-checkbox:checked');
+        const selectedEquipment = Array.from(selectedCheckboxes).map(cb => cb.value);
         
-        const scheduledDate = document.getElementById('modal-date').value;
+        console.log('Selected equipment IDs:', selectedEquipment);
         
-        if (!targetCustomer || !scheduledDate) {
-            alert('Vennligst fyll ut alle felt');
-            return;
-        }
-        
-        // Lagre kundenavn før vi nullstiller targetCustomer
+        // Lagre customerName før modal lukkes
         const customerName = targetCustomer.customerName;
         
-        // Hent valgte anlegg
-        const selectedEquipment = [];
-        const checkboxes = document.querySelectorAll('.equipment-checkbox:checked');
-        checkboxes.forEach(checkbox => {
-            selectedEquipment.push(checkbox.value);
+        const orderData = {
+            customerId: targetCustomer.customerId,
+            customerName: customerName,
+            description: description,  // Bruk description fra input-feltet
+            serviceType: 'Generell service',
+            technicianId: targetCustomer.technicianId,
+            scheduledDate: scheduledDate
+        };
+        
+        // Legg til includedEquipmentIds BARE hvis det er valgte anlegg
+        if (selectedEquipment.length > 0) {
+            orderData.includedEquipmentIds = selectedEquipment;
+        }
+        
+        console.log('Sending order data:', orderData);
+        
+        const response = await fetch('/api/admin/orders', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify(orderData)
         });
         
-        console.log('Valgte anlegg:', selectedEquipment);
-        
-        try {
-            // Find full customer data
-            const customer = allCustomers.find(c => c.id === targetCustomer.customerId);
+        if (response.ok) {
+            const newOrder = await response.json();
+            console.log('Ordre opprettet med valgte anlegg:', newOrder);
             
-            if (!customer) {
-                throw new Error('Kunne ikke finne kundedata');
-            }
+            // Lukk modal FØRST
+            closeModal();
             
-            // Lag customer_data snapshot
-            const customerData = {
-                id: customer.id,
-                name: customer.name,
-                customerNumber: customer.customerNumber,
-                organizationNumber: customer.organizationNumber,
-                contact: customer.contact || '',
-                email: customer.email || '',
-                phone: customer.phone || '',
-                physicalAddress: customer.physicalAddress || '',
-                postalAddress: customer.postalAddress || '',
-                invoiceEmail: customer.invoiceEmail || ''
-            };
+            // DERETTER refresh data
+            await fetchData();
             
-            // Opprett ordre MED valgte anlegg
-            const orderData = {
-                customerId: targetCustomer.customerId,
-                customerName: targetCustomer.customerName,
-                customerData: customerData,
-                description: 'Service',
-                serviceType: 'Generell service',
-                technicianId: targetCustomer.technicianId,
-                scheduledDate: scheduledDate
-            };
-            
-            // Legg til includedEquipmentIds BARE hvis det er valgte anlegg
-            if (selectedEquipment.length > 0) {
-                orderData.includedEquipmentIds = selectedEquipment;
-            }
-            
-            console.log('Sending order data:', orderData);
-            
-            const response = await fetch('/api/admin/orders', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-                body: JSON.stringify(orderData)
-            });
-            
-            if (response.ok) {
-                const newOrder = await response.json();
-                console.log('Ordre opprettet med valgte anlegg:', newOrder);
-                
-                // Lukk modal FØRST
-                closeModal();
-                
-                // DERETTER refresh data
-                await fetchData();
-                
-                // Til slutt vis melding med lagret kundenavn
-                showToast(`Ordre opprettet for ${customerName}`, 'success');
-            } else {
-                const errorData = await response.json();
-                console.error('Feil fra server:', errorData);
-                throw new Error(errorData.error || 'Failed to create order');
-            }
-        } catch (error) {
-            console.error('Error creating order:', error);
-            showToast(`Kunne ikke opprette ordre: ${error.message}`, 'error');
+            // Til slutt vis melding med lagret kundenavn
+            showToast(`Ordre opprettet for ${customerName}`, 'success');
+        } else {
+            const errorData = await response.json();
+            console.error('Feil fra server:', errorData);
+            throw new Error(errorData.error || 'Failed to create order');
         }
+    } catch (error) {
+        console.error('Error creating order:', error);
+        showToast(`Kunne ikke opprette ordre: ${error.message}`, 'error');
     }
+}
     // Original modal save function (for fallback)
     modalSaveBtn.addEventListener('click', async () => {
         const scheduledDate = modalDateInput.value;
