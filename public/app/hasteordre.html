@@ -25,9 +25,7 @@
         }
         
         .emergency-icon {
-            font-size: 36px;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-            animation: pulse 2s infinite;
+            font-size: 18px;
         }
         
         @keyframes pulse {
@@ -135,164 +133,115 @@
             border-bottom: none;
         }
         
+        /* Design 4: Minimal List Style Customer Info */
         .customer-info {
             background: white;
-            border-radius: 16px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-            border: 1px solid rgba(255, 107, 53, 0.1);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
             display: none;
-            margin-bottom: 20px;
-            overflow: hidden;
+            margin-bottom: 16px;
         }
-        
+
         .customer-info.active {
             display: block;
-            animation: fadeInUp 0.3s ease-out;
         }
-        
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(16px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        .customer-info-header {
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-            padding: 20px 24px;
-            border-bottom: 1px solid #e2e8f0;
-        }
-        
-        .customer-info-title {
+
+        .section-title {
             font-size: 18px;
-            font-weight: 700;
+            font-weight: 600;
             color: #1f2937;
+            margin: 0 0 16px 0;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #ff6b35;
+            display: inline-block;
+        }
+
+        .customer-info-card {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .info-list {
+            list-style: none;
             margin: 0;
+            padding: 0;
+        }
+
+        .info-list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 24px;
+            border-bottom: 1px solid #f1f5f9;
+            transition: background-color 0.2s ease;
+        }
+
+        .info-list-item:hover {
+            background: #f8fafc;
+        }
+
+        .info-list-item:last-child {
+            border-bottom: none;
+        }
+
+        .info-list-label {
+            font-size: 14px;
+            color: #64748b;
+            font-weight: 500;
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        
-        .customer-info-body {
-            padding: 24px;
-        }
-        
-        /* FORBEDRET KUNDEINFO GRID */
-        .info-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 16px;
-            margin-bottom: 32px;
-        }
-        
-        @media (min-width: 640px) {
-            .info-grid {
-                grid-template-columns: 1fr 1fr;
-                gap: 20px;
-            }
-        }
-        
-        .info-card {
-            background: linear-gradient(135deg, #fef7f3 0%, #fff7ed 100%);
-            border: 2px solid rgba(255, 107, 53, 0.2);
-            border-radius: 12px;
-            padding: 18px;
-            transition: all 0.2s;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .info-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(255, 107, 53, 0.15);
-            border-color: rgba(255, 107, 53, 0.4);
-        }
-        
-        .info-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 4px;
-            height: 100%;
-            background: linear-gradient(135deg, #ff6b35 0%, #e55a2b 100%);
-            border-radius: 2px 0 0 2px;
-        }
-        
-        .info-label {
-            font-size: 11px;
-            color: #6b7280;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            margin-bottom: 8px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        
-        .info-value {
+
+        .info-list-value {
             font-size: 15px;
-            color: #1f2937;
+            color: #1e293b;
             font-weight: 600;
+            text-align: right;
             word-break: break-word;
-            min-height: 20px;
-            line-height: 1.4;
+            max-width: 60%;
+        }
+
+        .icon {
+            width: 16px;
+            height: 16px;
+            opacity: 0.7;
+            flex-shrink: 0;
         }
         
         .create-order-btn {
-            background: linear-gradient(135deg, #ff6b35 0%, #e55a2b 100%);
+            width: 100%;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, #ff6b35, #ff8f65);
             color: white;
-            padding: 18px 32px;
             border: none;
-            border-radius: 12px;
+            border-radius: 10px;
             font-size: 16px;
-            font-weight: 700;
+            font-weight: 600;
             cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 12px;
-            width: 100%;
-            transition: all 0.2s;
-            box-shadow: 0 8px 24px rgba(255, 107, 53, 0.3);
-            position: relative;
-            overflow: hidden;
+            gap: 8px;
         }
-        
-        .create-order-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-            transition: left 0.5s;
-        }
-        
-        .create-order-btn:hover::before {
-            left: 100%;
-        }
-        
-        .create-order-btn:hover {
+
+        .create-order-btn:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 12px 32px rgba(255, 107, 53, 0.4);
+            box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4);
         }
-        
+
         .create-order-btn:disabled {
-            background: #9ca3af;
+            opacity: 0.6;
             cursor: not-allowed;
             transform: none;
-            box-shadow: 0 2px 8px rgba(156, 163, 175, 0.3);
-        }
-        
-        .create-order-btn:disabled::before {
-            display: none;
         }
         
         .btn-icon {
@@ -469,46 +418,72 @@
             </div>
             
             <div class="customer-info" id="customerInfo">
-                <div class="customer-info-header">
-                    <h3 class="customer-info-title">
-                        <span class="customer-icon">👤</span>
-                        Kundeinfo
-                    </h3>
-                </div>
-                <div class="customer-info-body">
-                    <div class="info-grid">
-                        <div class="info-card">
-                            <div class="info-label">📋 Kundenummer</div>
-                            <div class="info-value" id="customerNumber">-</div>
-                        </div>
-                        <div class="info-card">
-                            <div class="info-label">🏢 Kundenavn</div>
-                            <div class="info-value" id="customerName">-</div>
-                        </div>
-                        <div class="info-card">
-                            <div class="info-label">📍 Adresse</div>
-                            <div class="info-value" id="customerAddress">-</div>
-                        </div>
-                        <div class="info-card">
-                            <div class="info-label">📞 Telefon</div>
-                            <div class="info-value" id="customerPhone">-</div>
-                        </div>
-                        <div class="info-card">
-                            <div class="info-label">👨‍💼 Kontaktperson</div>
-                            <div class="info-value" id="customerContact">-</div>
-                        </div>
-                        <div class="info-card">
-                            <div class="info-label">✉️ E-post</div>
-                            <div class="info-value" id="customerEmail">-</div>
-                        </div>
-                    </div>
-                    
-                    <button class="create-order-btn" id="createOrderBtn" disabled>
-                        <span class="btn-icon">⚡</span>
-                        Opprett hasteordre
-                    </button>
-                </div>
-            </div>
+    <h3 class="section-title">Kundeinfo</h3>
+    <div class="customer-info-card">
+        <ul class="info-list">
+            <li class="info-list-item">
+                <span class="info-list-label">
+                    <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zM18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z"></path>
+                    </svg>
+                    Kundenummer
+                </span>
+                <span class="info-list-value" id="customerNumber">-</span>
+            </li>
+            <li class="info-list-item">
+                <span class="info-list-label">
+                    <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z" clip-rule="evenodd"></path>
+                    </svg>
+                    Firmanavn
+                </span>
+                <span class="info-list-value" id="customerName">-</span>
+            </li>
+            <li class="info-list-item">
+                <span class="info-list-label">
+                    <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path>
+                    </svg>
+                    Adresse
+                </span>
+                <span class="info-list-value" id="customerAddress">-</span>
+            </li>
+            <li class="info-list-item">
+                <span class="info-list-label">
+                    <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path>
+                    </svg>
+                    Telefon
+                </span>
+                <span class="info-list-value" id="customerPhone">-</span>
+            </li>
+            <li class="info-list-item">
+                <span class="info-list-label">
+                    <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"></path>
+                    </svg>
+                    Kontaktperson
+                </span>
+                <span class="info-list-value" id="customerContact">-</span>
+            </li>
+            <li class="info-list-item">
+                <span class="info-list-label">
+                    <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"></path>
+                        <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"></path>
+                    </svg>
+                    E-post
+                </span>
+                <span class="info-list-value" id="customerEmail">-</span>
+            </li>
+        </ul>
+    </div>
+    
+    <button class="create-order-btn" id="createOrderBtn" disabled>
+        <span class="emergency-icon">⚡</span>
+        Opprett hasteordre
+    </button>
+</div>
         </main>
     </div>
 
