@@ -144,10 +144,14 @@
 
 .reports-table td {
     padding: 14px 16px;
-    border-bottom: 1px solid #F1F5F9;
     font-size: 14px;
     vertical-align: top;
     line-height: 1.4;
+    border-bottom: none !important;
+}
+
+.reports-table tbody tr.group-last td {
+    border-bottom: 2px solid #E5E7EB !important;
 }
 
 .reports-table tbody tr {
@@ -616,4 +620,57 @@
     height: 20px;
     background-color: var(--text-light);
     opacity: 0.3;
+}
+
+.hasteordre-badge {
+    background-color: #ffc107;
+    color: #000;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    display: inline-block;
+    margin-top: 4px;
+}
+
+.row-emergency {
+    background-color: #fffbeb !important;
+    border-left-color: #f59e0b !important;
+}
+
+@keyframes pulse-orange {
+    0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+.emergency-badge {
+    background-color: #f59e0b;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    display: inline-block;
+    margin-top: 4px;
+    animation: pulse-orange 2s infinite;
+}
+
+.emergency-indicator {
+    font-size: 12px;
+    font-weight: 600;
+    color: #d97706;
+    margin-top: 4px;
+}
+
+/* Border kun mellom prosjektgrupper - ikke mellom anlegg i samme prosjekt */
+.reports-table tbody tr.group-last td {
+    border-bottom: 2px solid #E5E7EB;
+}
+
+/* Subtil hover-effekt for gruppering */
+.reports-table tbody tr:not(.group-last):hover + tr:not([class*="row-"]) {
+    background-color: #F8FAFC;
 }

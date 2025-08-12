@@ -178,7 +178,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         Object.entries(groupedReports).forEach(([orderId, orderReports]) => {
             orderReports.forEach((report, index) => {
-                html += createReportRow(report, index === 0, orderReports.length, !isFirstGroup);
+                const isFirstInGroup = index === 0;
+                const isLastInGroup = index === orderReports.length - 1;
+                html += createReportRow(report, isFirstInGroup, orderReports.length, !isFirstGroup, isLastInGroup);
             });
             isFirstGroup = false;
         });
@@ -231,30 +233,43 @@ document.addEventListener('DOMContentLoaded', async function() {
     /**
      * Create a table row for a report
      */
-    function createReportRow(report, isFirstInGroup, groupSize, needsTopBorder = false) {
+    function createReportRow(report, isFirstInGroup, groupSize, needsTopBorder = false, isLastInGroup = false) {
         const isInvoiced = report.is_invoiced;
         const isSent = report.sent_til_fakturering;
         const hasPDF = report.pdf_generated && report.pdf_path;
-        
+        const isHasteordre = report.service_type === 'Hasteordre';
+
         let rowClass = '';
-        if (isInvoiced) rowClass = 'row-invoiced';
-        else if (isSent) rowClass = 'row-sent';
-        else rowClass = 'row-pending';
-        
+        if (isHasteordre) {
+            rowClass = 'row-emergency';
+        } else if (isInvoiced) {
+            rowClass = 'row-invoiced';
+        } else if (isSent) {
+            rowClass = 'row-sent';
+        } else {
+            rowClass = 'row-pending';
+        }
+
+        // Legg til klasse for siste rad i prosjektgruppe
+        if (isLastInGroup) {
+            rowClass += ' group-last';
+        }
+
         // Legg til topp-border for nye prosjektgrupper
         const borderStyle = needsTopBorder ? 'border-top: 2px solid #3b82f6; padding-top: 8px;' : '';
-        
+
         return `
             <tr class="${rowClass}" style="${borderStyle}">
                 <td>
-                    ${isFirstInGroup ? 
-                        `<strong style="color: var(--primary-blue);">${report.order_id}</strong>` + 
+                    ${isFirstInGroup ?
+                        `<strong style="color: var(--primary-blue);">${report.order_id}</strong>` +
+                        (isHasteordre ? '<br><span class="emergency-badge">⚡ HASTEORDRE</span>' : '') +
                         (groupSize > 1 ? `<br><small style="color: var(--text-light);">${groupSize} anlegg</small>` : '') :
                         ''
                     }
                 </td>
                 <td>
-                    ${isFirstInGroup ? 
+                    ${isFirstInGroup ?
                         `<div style="font-weight: 500;">${formatDate(report.scheduled_date)}</div>` :
                         ''
                     }
@@ -266,10 +281,11 @@ document.addEventListener('DOMContentLoaded', async function() {
                 </td>
                 <td>
                     <div style="font-weight: 500;">${report.customer_name || 'Ukjent kunde'}</div>
+                    ${isHasteordre ? '<div class="emergency-indicator">⚡ Hasteordre</div>' : ''}
                 </td>
                 <td>
-                    ${report.technician_name ? 
-                        report.technician_name.split(' ').map(n => n[0]).join('').toUpperCase() : 
+                    ${report.technician_name ?
+                        report.technician_name.split(' ').map(n => n[0]).join('').toUpperCase() :
                         'N/A'
                     }
                 </td>
@@ -289,17 +305,17 @@ document.addEventListener('DOMContentLoaded', async function() {
                 </td>
                 <td>
                     <div class="action-buttons" style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start;">
-                        ${hasPDF ? 
+                        ${hasPDF ?
                             `<button class="btn btn-sm btn-outline" onclick="viewPDF('${report.id}')" title="Vis PDF" style="font-size: 12px; padding: 6px 10px;">
                                 📄 Vis PDF
-                            </button>` : 
+                            </button>` :
                             `<span style="color: var(--text-light); font-size: 11px;">PDF ikke generert</span>`
                         }
                         
-                        ${!isSent && hasPDF ? 
+                        ${!isSent && hasPDF ?
                             `<button class="btn btn-sm btn-primary" onclick="sendToCustomer('${report.id}')" title="Send til kunde" style="font-size: 11px; padding: 4px 8px; background-color: #3b82f6;">
                                 📧 Send til kunde
-                            </button>` : 
+                            </button>` :
                             ''
                         }
                         

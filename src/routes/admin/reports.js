@@ -66,11 +66,12 @@ router.get('/', async (req, res) => {
     // Step 5: Add technicians join (THIS IS PROBABLY WHERE IT FAILS)
     debugSteps.push('Adding technicians join...');
     query = `
-      SELECT 
+            SELECT 
         sr.*,
         o.customer_name,
         o.customer_id,
         o.scheduled_date,
+        o.service_type,
         e.name as equipment_name,
         e.type as equipment_type,
         t.name as technician_name
