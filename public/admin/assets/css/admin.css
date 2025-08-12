@@ -395,7 +395,12 @@ table {
 th, td { 
     text-align: left; 
     padding: 12px 8px; 
-    border-bottom: 1px solid var(--border-color); 
+    /* border-bottom fjernet - spesifikke tabeller styrer egne borders */
+}
+
+/* Kun generelle tabeller skal ha border - ikke reports-table */
+table:not(.reports-table) td {
+    border-bottom: 1px solid var(--border-color);
 }
 
 th { 

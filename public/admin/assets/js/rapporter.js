@@ -234,6 +234,11 @@ document.addEventListener('DOMContentLoaded', async function() {
      * Create a table row for a report
      */
     function createReportRow(report, isFirstInGroup, groupSize, needsTopBorder = false, isLastInGroup = false) {
+    // DEBUGGING - LEGG TIL DISSE LINJENE:
+    console.log(`🔍 DEBUGGING: ${report.equipment_name || report.order_id}`);
+    console.log(`   - isLastInGroup: ${isLastInGroup}`);
+    console.log(`   - groupSize: ${groupSize}`);
+    console.log(`   - index skulle være: ${groupSize - 1} for siste`);
         const isInvoiced = report.is_invoiced;
         const isSent = report.sent_til_fakturering;
         const hasPDF = report.pdf_generated && report.pdf_path;
