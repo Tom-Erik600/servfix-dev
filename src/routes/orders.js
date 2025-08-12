@@ -557,4 +557,145 @@ router.get('/service-report/:reportId/preview', async (req, res) => {
   }
 });
 
+// POST create new order (for teknikere)
+router.post('/', async (req, res) => {
+  try {
+    const { 
+      customerId, 
+      customerName, 
+      customerData,
+      description, 
+      serviceType, 
+      scheduledDate,
+      includedEquipmentIds
+    } = req.body;
+    
+    console.log('=== TECHNICIAN CREATE ORDER REQUEST ===');
+    console.log('Body:', req.body);
+    console.log('Technician ID:', req.session.technicianId);
+    
+    if (!customerId || !customerName) {
+      return res.status(400).json({ error: 'Customer ID and name are required' });
+    }
+    
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    const orderId = `PROJ-${new Date().getFullYear()}-${Date.now()}`;
+    
+    // Opprett customer_data objekt
+    const customer_data = {
+      id: String(customerId),
+      name: String(customerName),
+      snapshot_date: new Date().toISOString()
+    };
+    
+    // Merge med eksisterende customerData hvis sendt
+    if (customerData && typeof customerData === 'object') {
+      Object.assign(customer_data, customerData);
+    }
+    
+    console.log('Customer data objekt:', customer_data);
+    
+    // Build INSERT query
+    const insertQuery = `
+      INSERT INTO orders (
+        id, 
+        customer_id, 
+        customer_name, 
+        customer_data, 
+        description, 
+        service_type, 
+        technician_id, 
+        scheduled_date, 
+        status, 
+        included_equipment_ids
+      ) VALUES (
+        $1, 
+        $2::integer, 
+        $3, 
+        $4::jsonb, 
+        $5, 
+        $6, 
+        $7, 
+        $8::date, 
+        $9, 
+        $10::jsonb
+      ) RETURNING *
+    `;
+    
+    // Håndter equipment IDs
+    let equipmentIdsJsonString = null;
+    if (includedEquipmentIds && Array.isArray(includedEquipmentIds) && includedEquipmentIds.length > 0) {
+      equipmentIdsJsonString = JSON.stringify(includedEquipmentIds);
+    }
+    
+    const params = [
+      orderId,                                    // $1 - ordre ID
+      parseInt(customerId),                       // $2 - kunde ID
+      String(customerName),                       // $3 - kunde navn
+      JSON.stringify(customer_data),              // $4 - kunde data
+      description || null,                        // $5 - beskrivelse
+      serviceType || 'Generell service',         // $6 - service type
+      req.session.technicianId,                   // $7 - tekniker ID (fra session)
+      scheduledDate || null,                      // $8 - planlagt dato
+      'scheduled',                                // $9 - status (alltid scheduled for teknikere)
+      equipmentIdsJsonString                      // $10 - utstyr IDs
+    ];
+    
+    console.log('INSERT params:', params);
+    
+    // Kjør INSERT
+    const result = await pool.query(insertQuery, params);
+    
+    // Legg til orderNumber for frontend
+    result.rows[0].orderNumber = `SO-${orderId.split('-')[1]}-${orderId.split('-')[2].slice(-6)}`;
+    
+    console.log('✅ Order created successfully by technician:', {
+      id: result.rows[0].id,
+      technicianId: req.session.technicianId
+    });
+    
+    res.status(201).json(result.rows[0]);
+    
+  } catch (error) {
+    console.error('=== TECHNICIAN ORDER CREATE ERROR ===');
+    console.error('Error:', error);
+    res.status(500).json({ 
+      error: error.message,
+      detail: 'Se server logs for detaljer'
+    });
+  }
+});
+
+// Hent alle ordrer (for search-orders siden)
+router.get('/all', async (req, res) => {
+  try {
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    console.log('Fetching ALL orders for technician search-orders feature');
+    
+    const result = await pool.query(
+      `SELECT * FROM orders 
+       ORDER BY scheduled_date DESC, scheduled_time DESC`
+    );
+    
+    // Legg til orderNumber for frontend og normaliser feltnavn
+    const ordersWithNumber = result.rows.map(order => ({
+      ...order,
+      orderNumber: `SO-${order.id.split('-')[1]}-${order.id.split('-')[2].slice(-6)}`,
+      // Map database fields til frontend format
+      technicianId: order.technician_id,
+      customerId: order.customer_id,
+      plannedDate: order.scheduled_date,
+      type: order.service_type
+    }));
+    
+    console.log(`Found ${ordersWithNumber.length} total orders`);
+    
+    res.json(ordersWithNumber);
+    
+  } catch (error) {
+    console.error('Error fetching all orders:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

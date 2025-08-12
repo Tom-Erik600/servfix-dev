@@ -109,20 +109,12 @@
     // Load all customers
     async function loadCustomers() {
         try {
-            console.log('📋 Loading customers...');
+            console.log('📋 Loading customers from Tripletex...');
             
-            // Try admin endpoint first, fall back to regular endpoint
-            let response;
-            try {
-                response = await fetch('/api/admin/customers', {
-                    credentials: 'include'
-                });
-            } catch (error) {
-                console.log('Admin endpoint failed, trying regular endpoint');
-                response = await fetch('/api/customers', {
-                    credentials: 'include'
-                });
-            }
+            // Bruk tekniker-kompatibelt Tripletex endpoint
+            const response = await fetch('/api/customers/tripletex', {
+                credentials: 'include'
+            });
             
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -130,11 +122,11 @@
             
             const data = await response.json();
             state.allCustomers = Array.isArray(data) ? data : (data.customers || []);
-            console.log(`✅ Loaded ${state.allCustomers.length} customers`);
+            console.log(`✅ Loaded ${state.allCustomers.length} customers from Tripletex`);
             
         } catch (error) {
-            console.error('❌ Error loading customers:', error);
-            showToast('Kunne ikke laste kunder', 'error');
+            console.error('❌ Error loading customers from Tripletex:', error);
+            showToast('Kunne ikke laste kunder fra Tripletex', 'error');
         }
     }
     
@@ -225,6 +217,7 @@
     }
     
     // Create emergency order
+    // Create emergency order - OPPDATERT for tekniker endpoint
     async function handleCreateOrder() {
         if (!state.selectedCustomer || state.isLoading) return;
         
@@ -246,20 +239,16 @@
             const orderData = {
                 customerId: state.selectedCustomer.id,
                 customerName: state.selectedCustomer.name,
+                customerData: state.selectedCustomer, // Send all customer data from Tripletex
                 description: 'Hasteordre - Akutt serviceoppdrag',
                 serviceType: 'Hasteordre',
                 scheduledDate: new Date().toISOString().split('T')[0]
             };
             
-            // Legg til tekniker-ID hvis tilgjengelig
-            if (technicianId) {
-                orderData.technicianId = technicianId;
-            }
-            
             console.log('📤 Sending order data:', orderData);
             
-            // Bruk admin endpoint da det fungerer
-            const response = await fetch('/api/admin/orders', {
+            // Bruk tekniker endpoint (ikke admin)
+            const response = await fetch('/api/orders', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
