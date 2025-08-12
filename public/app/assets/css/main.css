@@ -391,3 +391,315 @@ main {
         padding: 20px;
     }
 }
+
+/* Filter bar styling */
+.filter-bar {
+    background: white;
+    padding: 16px;
+    margin-bottom: 16px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+}
+
+.filter-group {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.filter-group select {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
+    color: #374151;
+    transition: all 0.2s ease;
+}
+
+.filter-group select:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.search-group {
+    display: flex;
+}
+
+.search-group input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
+    transition: all 0.2s ease;
+}
+
+.search-group input:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.search-group input::placeholder {
+    color: #9ca3af;
+}
+
+/* Order search card styling */
+.order-search-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.order-search-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+}
+
+/* Status indicator styling */
+.order-search-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background-color: #6b7280; /* Default gray */
+}
+
+.order-search-card.status-pending::before {
+    background-color: #f59e0b; /* Orange */
+}
+
+.order-search-card.status-scheduled::before {
+    background-color: #3b82f6; /* Blue */
+}
+
+.order-search-card.status-in_progress::before {
+    background-color: #fbbf24; /* Yellow */
+}
+
+.order-search-card.status-completed::before {
+    background-color: #10b981; /* Green */
+}
+
+/* Card main info layout */
+.card-main-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.order-summary h3.customer-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0 0 4px 0;
+}
+
+.order-summary p.order-description {
+    font-size: 14px;
+    color: #6b7280;
+    margin: 0 0 4px 0;
+    font-weight: 500;
+}
+
+.order-summary p.customer-address {
+    font-size: 13px;
+    color: #9ca3af;
+    margin: 0;
+}
+
+.order-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.order-meta span {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.order-meta .technician-name {
+    font-weight: 500;
+}
+
+.order-meta .order-date {
+    font-weight: 400;
+}
+
+/* Card actions styling */
+.card-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.details-btn,
+.take-over-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.details-btn {
+    background-color: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+}
+
+.details-btn:hover {
+    background-color: #e5e7eb;
+    border-color: #9ca3af;
+}
+
+.take-over-btn {
+    background-color: #4A90E2;
+    color: white;
+    border: 1px solid #4A90E2;
+}
+
+.take-over-btn:hover {
+    background-color: #357ABD;
+    border-color: #357ABD;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(74, 144, 226, 0.3);
+}
+
+/* Status-specific card styling */
+.order-search-card.status-completed {
+    background-color: #f0fdf4;
+    border-color: #bbf7d0;
+}
+
+.order-search-card.status-completed:hover {
+    background-color: #ecfdf5;
+}
+
+.order-search-card.status-in_progress {
+    background-color: #fffbeb;
+    border-color: #fed7aa;
+}
+
+.order-search-card.status-in_progress:hover {
+    background-color: #fef3c7;
+}
+
+/* Responsive design */
+@media (min-width: 640px) {
+    .filter-group {
+        margin-bottom: 0;
+    }
+    
+    .card-main-info {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+    
+    .order-summary {
+        flex: 1;
+    }
+    
+    .order-meta {
+        text-align: right;
+        min-width: 140px;
+    }
+    
+    .card-actions {
+        justify-content: flex-start;
+    }
+}
+
+/* Placeholder text styling */
+.placeholder-text {
+    text-align: center;
+    color: #9ca3af;
+    font-style: italic;
+    padding: 40px 20px;
+    background: white;
+    border-radius: 12px;
+    border: 2px dashed #d1d5db;
+}
+
+/* Modal styling for order details */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    max-width: 500px;
+    width: 100%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.modal-close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.modal-close-btn:hover {
+    background-color: #f3f4f6;
+    color: #374151;
+}
+
+.modal-body {
+    padding: 24px;
+}
