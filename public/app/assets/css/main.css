@@ -703,3 +703,114 @@ main {
 .modal-body {
     padding: 24px;
 }
+/* MODAL MOBILE FIX - Kun modal, ikke kort-design */
+@media (max-width: 768px) {
+    .modal-overlay {
+        padding: 12px;
+        align-items: flex-start;
+        padding-top: 40px;
+    }
+    
+    .modal-content {
+        max-width: none;
+        width: 100%;
+        max-height: calc(100vh - 80px);
+        border-radius: 12px 12px 0 0;
+    }
+    
+    .modal-header {
+        padding: 14px 16px;
+        background-color: #f8f9fa;
+    }
+    
+    .modal-body {
+        padding: 16px;
+        font-size: 14px;
+    }
+}
+/* MODAL MOBILE FIX */
+@media (max-width: 768px) {
+    .modal-overlay {
+        padding: 12px;
+        align-items: flex-start;
+        padding-top: 40px;
+    }
+    
+    .modal-content {
+        max-width: none;
+        width: 100%;
+        max-height: calc(100vh - 80px);
+        border-radius: 12px 12px 0 0;
+    }
+    
+    .modal-header {
+        padding: 14px 16px;
+        background-color: #f8f9fa;
+    }
+    
+    .modal-header h2 {
+        font-size: 16px;
+    }
+    
+    .modal-close-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 20px;
+    }
+    
+    .modal-body {
+        padding: 16px;
+        font-size: 14px;
+    }
+    
+    .modal-body strong {
+        display: block;
+        margin-bottom: 2px;
+        font-size: 12px;
+    }
+    
+    .modal-body p {
+        margin: 6px 0;
+        font-size: 13px;
+    }
+}
+/* Page title section */
+.page-title-section {
+    padding: 20px 16px 16px 16px;
+    background: white;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.page-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1f2937;
+    margin: 0 0 4px 0;
+}
+
+.page-description {
+    font-size: 14px;
+    color: #6b7280;
+    margin: 0;
+}
+
+/* Oppdater filter-bar spacing */
+.filter-bar {
+    margin-top: 0;
+    margin-bottom: 16px;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .page-title-section {
+        padding: 16px 12px 12px 12px;
+    }
+    
+    .page-title {
+        font-size: 20px;
+    }
+    
+    .page-description {
+        font-size: 13px;
+    }
+}

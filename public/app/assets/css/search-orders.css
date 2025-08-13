@@ -1,0 +1,274 @@
+/* Reset og base */
+* {
+    box-sizing: border-box;
+}
+
+.main-content {
+    max-width: 100vw;
+    overflow-x: hidden;
+    padding: 0;
+}
+
+.search-page-container {
+    background: white;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid #e5e7eb;
+}
+
+/* Page header */
+.page-header {
+    padding: 20px 16px 16px 16px;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.page-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1f2937;
+    margin: 0 0 4px 0;
+}
+
+.page-description {
+    font-size: 14px;
+    color: #6b7280;
+    margin: 0;
+}
+
+/* Filter bar */
+.filter-bar {
+    display: flex;
+    gap: 16px;
+    padding: 16px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.filter-group {
+    flex: 1;
+    min-width: 150px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.filter-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+}
+
+.filter-select,
+.search-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    color: #374151;
+    transition: all 0.2s ease;
+}
+
+.filter-select:focus,
+.search-input:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.search-input::placeholder {
+    color: #9ca3af;
+}
+
+/* Orders section */
+.orders-section {
+    padding: 0 16px 20px 16px;
+    max-width: 100%;
+}
+
+/* Order cards (beholl eksisterende styling) */
+.order-search-card {
+    background: white;
+    border: 1px solid #e1e5e9;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    padding: 16px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: box-shadow 0.2s ease;
+    position: relative;
+    border-left: 4px solid #6b7280;
+}
+
+.order-search-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.order-search-card.status-scheduled {
+    border-left-color: #3b82f6;
+}
+
+.order-search-card.status-completed {
+    border-left-color: #10b981;
+    background-color: #f0fdf4;
+}
+
+.order-search-card.status-in_progress {
+    border-left-color: #fbbf24;
+    background-color: #fffbeb;
+}
+
+.card-main-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.order-summary h3.customer-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0 0 4px 0;
+}
+
+.order-summary p.order-description {
+    font-size: 14px;
+    color: #6b7280;
+    margin: 0;
+    font-weight: 500;
+}
+
+.order-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.order-meta span {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.order-meta .technician-name {
+    font-weight: 500;
+}
+
+.card-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 12px;
+}
+
+.details-btn,
+.take-over-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.details-btn {
+    background-color: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+}
+
+.details-btn:hover {
+    background-color: #e5e7eb;
+    border-color: #9ca3af;
+}
+
+.take-over-btn {
+    background-color: #4A90E2;
+    color: white;
+    border: 1px solid #4A90E2;
+}
+
+.take-over-btn:hover {
+    background-color: #357ABD;
+    border-color: #357ABD;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(74, 144, 226, 0.3);
+}
+
+/* MOBILE RESPONSIVE */
+@media (max-width: 768px) {
+    .page-header {
+        padding: 16px 12px 12px 12px;
+    }
+    
+    .page-title {
+        font-size: 20px;
+    }
+    
+    .page-description {
+        font-size: 13px;
+    }
+    
+    .filter-bar {
+        flex-direction: column;
+        gap: 12px;
+        padding: 12px;
+    }
+    
+    .filter-group {
+        min-width: unset;
+        width: 100%;
+    }
+    
+    .orders-section {
+        padding: 0 12px 20px 12px;
+    }
+    
+    .order-search-card {
+        padding: 12px;
+    }
+    
+    .card-actions {
+        gap: 6px;
+    }
+    
+    .details-btn,
+    .take-over-btn {
+        flex: 1;
+        text-align: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .page-header {
+        padding: 12px 8px 8px 8px;
+    }
+    
+    .page-title {
+        font-size: 18px;
+    }
+    
+    .filter-bar {
+        padding: 8px;
+    }
+    
+    .orders-section {
+        padding: 0 8px 16px 8px;
+    }
+    
+    .card-actions {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .details-btn,
+    .take-over-btn {
+        width: 100%;
+        padding: 12px;
+        font-size: 14px;
+    }
+}

@@ -4,11 +4,11 @@ document.addEventListener('DOMContentLoaded', () => {
         orders: [],
         technicians: new Map(),
         customers: new Map(),
-        currentTechnicianId: null, // Ikke bruk localStorage, hent fra autentisering
+        currentTechnicianId: null,
         currentTechnicianName: null,
         filters: {
-            technician: 'all_except_own', // Standard: alle minus egen tekniker
-            status: 'active', // Standard: kun aktive ordre (aldri completed)
+            technician: 'all_except_own',
+            status: 'active',
             searchTerm: ''
         }
     };
@@ -31,7 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const showToast = (message, type = 'success') => {
         let container = document.getElementById('toast-container');
         if (!container) {
-            // Opprett toast-container hvis den ikke finnes
             container = document.createElement('div');
             container.id = 'toast-container';
             container.style.cssText = `
@@ -77,7 +76,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return await response.json();
         } catch (error) {
-            // Reduser støy for forventede feil
             if (error.status === 401 && url.includes('/admin/')) {
                 console.log(`🔒 Admin endpoint unauthorized (expected): ${url}`);
             } else {
@@ -85,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             if (throwOnError) {
-                throw error; // Re-kast error for bedre error handling
+                throw error;
             } else {
                 showToast('Feil ved lasting av data.', 'error');
                 return [];
@@ -93,7 +91,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Hent autentisert tekniker
     const getCurrentTechnician = async () => {
         try {
             const response = await fetch('/api/auth/me');
@@ -112,22 +109,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadInitialData = async () => {
         showLoading(true);
         try {
-            // Først: hent autentisert tekniker
             const currentTechnician = await getCurrentTechnician();
             if (!currentTechnician) return;
 
             state.currentTechnicianId = currentTechnician.id;
             state.currentTechnicianName = currentTechnician.name;
 
-            // Hent ordre direkte fra tekniker endpoint (ikke prøv admin først)
             let orders = [];
             
             try {
-                console.log('🔍 Henter tekniker ordre...');
-                orders = await fetchData('/api/orders', true);
-                console.log('✅ Tekniker ordre hentet successfully');
+                console.log('🔍 Henter alle ordre for søk...');
+                orders = await fetchData('/api/orders/all', true);
+                console.log('✅ Alle ordre hentet successfully');
             } catch (error) {
-                console.log('❌ Tekniker endpoint feilet:', error);
+                console.log('❌ Orders/all endpoint feilet:', error);
                 orders = [];
                 showToast('Kunne ikke laste ordre. Sjekk tilkobling.', 'error');
             }
@@ -138,30 +133,12 @@ document.addEventListener('DOMContentLoaded', () => {
             ]);
 
             state.orders = orders;
-            console.log('📋 Orders loaded:', {
-                count: orders.length,
-                orders: orders.slice(0, 3).map(o => ({
-                    id: o.id,
-                    technician_id: o.technician_id || o.technicianId,
-                    customer_id: o.customer_id || o.customerId,
-                    customer_name: o.customer_name
-                }))
-            });
+            console.log('📋 Orders loaded:', orders.length);
+            
             technicians.forEach(t => state.technicians.set(t.id, t));
-            
-            // Debug kunde-loading
-            console.log('Customers loaded:', customers);
             customers.forEach(c => {
-                console.log('Setting customer:', c.id, 'type:', typeof c.id, 'data:', c);
-                state.customers.set(String(c.id), c); // Sørg for string-keys
+                state.customers.set(String(c.id), c);
             });
-            
-            console.log('Final customers map:', state.customers);
-            console.log('Example order customerIds:', orders.slice(0, 3).map(o => ({
-                orderId: o.id,
-                customerId: o.customerId || o.customer_id,
-                customerIdType: typeof (o.customerId || o.customer_id)
-            })));
 
             renderHeader();
             populateTechnicianFilter();
@@ -178,10 +155,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderHeader = () => {
         const header = document.getElementById('app-header');
         const today = new Date();
-        const dateString = `${today.getDate()}. ${today.toLocaleString('no-NO', { month: 'short' })} ${today.getFullYear()}`;
-
+        const dateString = `${today.getDate()}. ${['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Des'][today.getMonth()]}. ${today.getFullYear()}`;
+        
+        // SAMME STRUKTUR SOM orders.js og service.js
         header.innerHTML = `
-            <a href="home.html" class="header-nav-button" title="Tilbake til hjem">‹</a>
+            <a href="home.html" class="header-nav-button" title="Tilbake">‹</a>
             <div class="header-main-content">
                 <div class="logo-circle">
                     <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -196,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="company-info">
                     <h1>AIR-TECH AS</h1>
-                    <span class="app-subtitle">Søk & Ta Over Ordre</span>
+                    <span class="app-subtitle">Tekniker Portal</span>
                 </div>
             </div>
             <div class="header-user-info">
@@ -207,23 +185,19 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const populateTechnicianFilter = () => {
-        // Tøm eksisterende opsjoner
         technicianFilter.innerHTML = '';
 
-        // Legg til "Alle teknikere minus <navn på aktiv tekniker>" som default
         const allExceptOwnOption = document.createElement('option');
         allExceptOwnOption.value = 'all_except_own';
         allExceptOwnOption.textContent = `Alle teknikere minus ${state.currentTechnicianName}`;
         allExceptOwnOption.selected = true;
         technicianFilter.appendChild(allExceptOwnOption);
 
-        // Legg til "Alle teknikere"
         const allOption = document.createElement('option');
         allOption.value = 'all';
         allOption.textContent = 'Alle teknikere';
         technicianFilter.appendChild(allOption);
 
-        // Legg til individuelle teknikere
         state.technicians.forEach(tech => {
             const option = document.createElement('option');
             option.value = tech.id;
@@ -237,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const filteredOrders = getFilteredOrders();
 
         if (filteredOrders.length === 0) {
-            orderListContainer.innerHTML = `<div class="placeholder-text">Ingen ordre matchet filtrene.</div>`;
+            orderListContainer.innerHTML = `&lt;div class="placeholder-text"&gt;Ingen ordre matchet filtrene.&lt;/div&gt;`;
             return;
         }
 
@@ -245,33 +219,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const card = createOrderCard(order);
             orderListContainer.appendChild(card);
         });
-        
-        // Fix Lucide-problemet: sjekk om lucide eksisterer før kall
-        if (typeof lucide !== 'undefined') {
-            lucide.createIcons();
-        }
     };
 
     const createOrderCard = (order) => {
-        // Debug ordre struktur
-        console.log('Creating card for order:', {
-            id: order.id,
-            technician_id: order.technician_id,
-            technicianId: order.technicianId,
-            customer_id: order.customer_id,
-            customerId: order.customerId
-        });
-
-        // Fix field mapping fra database til frontend
         const technicianId = order.technicianId || order.technician_id;
         const customerId = order.customerId || order.customer_id;
         
-        // VIKTIG FIX: Sørg for at customer lookup fungerer
-        const customerIdString = String(customerId); // Konverter til string
-        console.log('Looking up customer:', customerIdString, 'type:', typeof customerIdString);
-        console.log('Available customers:', Array.from(state.customers.keys()));
-        
-        const customer = state.customers.get(customerIdString);
+        const customer = state.customers.get(String(customerId));
         const technician = technicianId ? state.technicians.get(technicianId) : null;
         const status = deriveOrderStatus(order);
 
@@ -281,17 +235,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const isOwnOrder = technicianId === state.currentTechnicianId;
 
+        // OPPRINNELIG DESIGN
         card.innerHTML = `
             <div class="card-main-info">
-                <div class="status-indicator"></div>
                 <div class="order-summary">
                     <h3 class="customer-name">${customer ? customer.name : 'Ukjent kunde'}</h3>
-                    <p class="order-description">#${order.id} - ${order.type || order.service_type || 'Service'}</p>
-                    <p class="customer-address">${customer?.address?.street || customer?.physicalAddress || ''}</p>
+                    <p class="order-description">#${order.id.slice(-6)} - ${order.type || order.service_type || 'Service'}</p>
                 </div>
                 <div class="order-meta">
-                     <span class="technician-name">Tildelt: ${technician ? technician.name : 'Ingen'}</span>
-                     <span class="order-date">Planlagt: ${new Date(order.plannedDate || order.scheduled_date).toLocaleDateString('no-NO')}</span>
+                    <span class="technician-name">Tildelt: ${technician ? technician.name : 'Ingen'}</span>
+                    <span class="order-date">Planlagt: ${new Date(order.plannedDate || order.scheduled_date).toLocaleDateString('no-NO')}</span>
                 </div>
             </div>
             <div class="card-actions">
@@ -300,13 +253,15 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
 
+        // Event listeners
         card.querySelector('.details-btn').addEventListener('click', (e) => {
             e.stopPropagation();
             showOrderDetails(order.id);
         });
 
-        if (!isOwnOrder) {
-            card.querySelector('.take-over-btn').addEventListener('click', (e) => {
+        const takeOverBtn = card.querySelector('.take-over-btn');
+        if (takeOverBtn) {
+            takeOverBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 takeOverOrder(order.id);
             });
@@ -317,8 +272,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const deriveOrderStatus = (order) => {
         if (order.status === 'completed') return 'completed';
-        if (order.status === 'in_progress' || (order.serviceReport && order.serviceReport.signature)) return 'in_progress';
-        if (order.technicianId) return 'scheduled';
+        if (order.status === 'in_progress') return 'in_progress';
+        if (order.technicianId || order.technician_id) return 'scheduled';
         return 'pending';
     };
 
@@ -328,15 +283,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
         return state.orders.filter(order => {
-            // Fix field mapping
             const customerId = order.customerId || order.customer_id;
             const technicianId = order.technicianId || order.technician_id;
             
-            // VIKTIG FIX: Konverter customer ID til string for lookup
             const customer = state.customers.get(String(customerId));
             const orderStatus = deriveOrderStatus(order);
 
-            // VIKTIG: Fullførte ordre skal ALDRI vises på denne siden
             if (orderStatus === 'completed') {
                 return false;
             }
@@ -346,16 +298,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (technician === 'all') {
                 matchesTechnician = true;
             } else if (technician === 'all_except_own') {
-                // Vis alle ordre UNNTATT egne - dette gir mening for "ta over" siden
                 matchesTechnician = technicianId !== state.currentTechnicianId;
             } else {
                 matchesTechnician = technicianId === technician;
             }
 
-            // Status-filter (etter at completed allerede er filtrert bort)
+            // Status-filter
             let matchesStatus = false;
             if (status === 'all' || status === 'active') {
-                // Siden completed allerede er filtrert bort, vis alle aktive
                 matchesStatus = true;
             } else {
                 matchesStatus = orderStatus === status;
@@ -364,17 +314,14 @@ document.addEventListener('DOMContentLoaded', () => {
             // Søk-filter
             const matchesSearch = !lowerCaseSearchTerm ||
                                   (customer && customer.name.toLowerCase().includes(lowerCaseSearchTerm)) ||
-                                  (customer?.address?.street?.toLowerCase().includes(lowerCaseSearchTerm)) ||
-                                  (customer?.physicalAddress?.toLowerCase().includes(lowerCaseSearchTerm)) ||
                                   order.id.toString().includes(lowerCaseSearchTerm) ||
-                                  (order.type && order.type.toLowerCase().includes(lowerCaseSearchTerm)) ||
-                                  (order.service_type && order.service_type.toLowerCase().includes(lowerCaseSearchTerm));
+                                  (order.type && order.type.toLowerCase().includes(lowerCaseSearchTerm));
 
             return matchesTechnician && matchesStatus && matchesSearch;
         });
     };
 
-    // --- ACTIONS & EVENT HANDLERS ---
+    // --- ACTIONS ---
     const takeOverOrder = async (orderId) => {
         if (!confirm('Er du sikker på at du vil overta denne ordren?')) return;
 
@@ -391,12 +338,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorData.message || 'Ukjent feil');
             }
 
-            showToast('Ordre overtatt!', 'success');
-            await loadInitialData(); // Reload all data to reflect change
+            showToast('Ordre overtatt! Navigerer til ordren...', 'success');
+            
+            setTimeout(() => {
+                window.location.href = `/app/orders.html?id=${orderId}`;
+            }, 1500);
+            
         } catch (error) {
             console.error('Failed to take over order:', error);
             showToast(`Kunne ikke overta ordre: ${error.message}`, 'error');
-        } finally {
             showLoading(false);
         }
     };
@@ -405,18 +355,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const order = state.orders.find(o => o.id === orderId);
         if (!order) return;
 
-        // Fix field mapping
         const customerId = order.customerId || order.customer_id;
         const technicianId = order.technicianId || order.technician_id;
         
-        // VIKTIG FIX: Konverter customer ID til string for lookup
         const customer = state.customers.get(String(customerId));
         const technician = technicianId ? state.technicians.get(technicianId) : null;
 
         modalBody.innerHTML = `
             <p><strong>Ordre ID:</strong> ${order.id}</p>
             <p><strong>Kunde:</strong> ${customer ? customer.name : 'N/A'}</p>
-            <p><strong>Adresse:</strong> ${customer?.address ? `${customer.address.street}, ${customer.address.postalCode} ${customer.address.city}` : customer?.physicalAddress || 'N/A'}</p>
+            <p><strong>Adresse:</strong> ${customer?.physicalAddress || 'N/A'}</p>
             <p><strong>Telefon:</strong> ${customer ? customer.phone : 'N/A'}</p>
             <hr>
             <p><strong>Ordretype:</strong> ${order.type || order.service_type || 'Service'}</p>

@@ -131,6 +131,38 @@ router.get('/today', async (req, res) => {
   }
 });
 
+// Hent alle ordrer (for search-orders siden)
+router.get('/all', async (req, res) => {
+  try {
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    console.log('Fetching ALL orders for technician search-orders feature');
+    
+    const result = await pool.query(
+      `SELECT * FROM orders 
+       ORDER BY scheduled_date DESC, scheduled_time DESC`
+    );
+    
+    // Legg til orderNumber for frontend og normaliser feltnavn
+    const ordersWithNumber = result.rows.map(order => ({
+      ...order,
+      orderNumber: `SO-${order.id.split('-')[1]}-${order.id.split('-')[2].slice(-6)}`,
+      // Map database fields til frontend format
+      technicianId: order.technician_id,
+      customerId: order.customer_id,
+      plannedDate: order.scheduled_date,
+      type: order.service_type
+    }));
+    
+    console.log(`Found ${ordersWithNumber.length} total orders`);
+    
+    res.json(ordersWithNumber);
+    
+  } catch (error) {
+    console.error('Error fetching all orders:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET single order
 // GET single order - KOMPLETT FUNKSJON for src/routes/orders.js
 // GET single order - KOMPLETT FUNKSJON for src/routes/orders.js
@@ -281,33 +313,94 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PUT update order status
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, technicianId } = req.body;
     
-    if (!status) {
-      return res.status(400).json({ error: 'Status er påkrevd' });
-    }
+    console.log('PUT /api/orders/:id request:', {
+      orderId: id,
+      body: req.body,
+      hasStatus: !!status,
+      hasTechnicianId: !!technicianId,
+      sessionTechnicianId: req.session.technicianId
+    });
     
     const pool = await db.getTenantConnection(req.session.tenantId);
     
-    const result = await pool.query(
-      'UPDATE orders SET status = $1 WHERE id = $2 AND technician_id = $3 RETURNING *',
-      [status, id, req.session.technicianId]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Ordre ikke funnet eller tilhører ikke denne teknikeren' });
+    // TEKNIKER-OVERTAGELSE: Hvis technicianId er sendt
+    if (technicianId) {
+      console.log(`🔄 Order ${id}: Tekniker ${req.session.technicianId} overtaking order`);
+      
+      // FIKSET: Oppdater KUN technician_id (uten updated_at som ikke eksisterer)
+      const result = await pool.query(
+        `UPDATE orders 
+         SET technician_id = $1
+         WHERE id = $2 
+         RETURNING id, technician_id, scheduled_date, customer_name`,
+        [technicianId, id]
+      );
+      
+      if (result.rows.length === 0) {
+        console.log(`❌ Order ${id} not found for takeover`);
+        return res.status(404).json({ error: 'Ordre ikke funnet' });
+      }
+      
+      const updatedOrder = result.rows[0];
+      console.log(`✅ Order ${id} overtatt av tekniker ${technicianId}`);
+      console.log(`   Scheduled date BEVART: ${updatedOrder.scheduled_date}`);
+      
+      res.json({ 
+        message: 'Ordre overtatt successfully',
+        order: updatedOrder,
+        debug: {
+          oldTechnician: req.session.technicianId,
+          newTechnician: technicianId,
+          preservedScheduledDate: updatedOrder.scheduled_date
+        }
+      });
+      return;
     }
     
-    console.log(`Order ${id} updated to status: ${status}`);
-    res.json(result.rows[0]);
+    // STATUS OPPDATERING: Hvis status er sendt (eksisterende funksjonalitet)
+    if (status) {
+      console.log(`🔄 Order ${id}: Status update to ${status}`);
+      
+      const result = await pool.query(
+        `UPDATE orders 
+         SET status = $1
+         WHERE id = $2 AND technician_id = $3 
+         RETURNING *`,
+        [status, id, req.session.technicianId]
+      );
+      
+      if (result.rows.length === 0) {
+        console.log(`❌ Order ${id} not found or not owned by technician ${req.session.technicianId}`);
+        return res.status(404).json({ 
+          error: 'Ordre ikke funnet eller tilhører ikke denne teknikeren' 
+        });
+      }
+      
+      console.log(`✅ Order ${id} updated to status: ${status}`);
+      res.json(result.rows[0]);
+      return;
+    }
+    
+    // Ingen valid parameter sendt
+    console.log(`❌ Invalid PUT request - missing both status and technicianId`);
+    return res.status(400).json({ 
+      error: 'Enten status eller technicianId må sendes for å oppdatere ordre',
+      receivedBody: req.body
+    });
     
   } catch (error) {
-    console.error('Error updating order status:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Error updating order:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Server error',
+      details: error.message,
+      orderId: req.params.id
+    });
   }
 });
 
@@ -663,38 +756,6 @@ router.post('/', async (req, res) => {
       error: error.message,
       detail: 'Se server logs for detaljer'
     });
-  }
-});
-
-// Hent alle ordrer (for search-orders siden)
-router.get('/all', async (req, res) => {
-  try {
-    const pool = await db.getTenantConnection(req.session.tenantId);
-    console.log('Fetching ALL orders for technician search-orders feature');
-    
-    const result = await pool.query(
-      `SELECT * FROM orders 
-       ORDER BY scheduled_date DESC, scheduled_time DESC`
-    );
-    
-    // Legg til orderNumber for frontend og normaliser feltnavn
-    const ordersWithNumber = result.rows.map(order => ({
-      ...order,
-      orderNumber: `SO-${order.id.split('-')[1]}-${order.id.split('-')[2].slice(-6)}`,
-      // Map database fields til frontend format
-      technicianId: order.technician_id,
-      customerId: order.customer_id,
-      plannedDate: order.scheduled_date,
-      type: order.service_type
-    }));
-    
-    console.log(`Found ${ordersWithNumber.length} total orders`);
-    
-    res.json(ordersWithNumber);
-    
-  } catch (error) {
-    console.error('Error fetching all orders:', error);
-    res.status(500).json({ error: 'Server error' });
   }
 });
 

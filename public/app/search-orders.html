@@ -10,98 +10,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <style>
-        /* Bruk opprinnelig vertikal filter-design */
-        .filter-bar {
-            background: white;
-            padding: 16px;
-            margin-bottom: 16px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            border: 1px solid #e5e7eb;
-        }
-
-        .filter-group {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 12px;
-        }
-
-        .filter-group select {
-            flex: 1;
-            padding: 10px 14px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 14px;
-            background: white;
-            color: #374151;
-            transition: all 0.2s ease;
-        }
-
-        .filter-group select:focus {
-            outline: none;
-            border-color: #4A90E2;
-            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
-        }
-
-        .search-group {
-            display: flex;
-        }
-
-        .search-group input {
-            width: 100%;
-            padding: 10px 14px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 14px;
-            background: white;
-            transition: all 0.2s ease;
-        }
-
-        .search-group input:focus {
-            outline: none;
-            border-color: #4A90E2;
-            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
-        }
-
-        .search-group input::placeholder {
-            color: #9ca3af;
-        }
-
-        /* Ledetekster */
-        .filter-label {
-            font-size: 12px;
-            font-weight: 600;
-            color: #6b7280;
-            margin-bottom: 4px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        /* Toast animasjoner */
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-        
-        @keyframes slideOut {
-            from {
-                transform: translateX(0);
-                opacity: 1;
-            }
-            to {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-        }
-    </style>
 </head>
 <body>
     <div id="toast-container"></div>
@@ -117,35 +25,39 @@
         <header class="app-header" id="app-header"></header>
         
         <main class="main-content">
-            <div class="filter-bar">
-                <div class="filter-group">
-                    <div style="flex: 1;">
-                        <div class="filter-label">Tekniker</div>
-                        <select id="technician-filter">
+            <div class="search-page-container">
+                <!-- Page title -->
+                <div class="page-header">
+                    <h1 class="page-title">Søk & Ta Over Ordre</h1>
+                    <p class="page-description">Finn og overta ordre fra andre teknikere</p>
+                </div>
+                
+                <!-- Filter bar -->
+                <div class="filter-bar">
+                    <div class="filter-group">
+                        <label class="filter-label">TEKNIKER</label>
+                        <select id="technician-filter" class="filter-select">
                             <!-- Fylles dynamisk -->
                         </select>
                     </div>
-                </div>
-                <div class="filter-group">
-                    <div style="flex: 1;">
-                        <div class="filter-label">Status</div>
-                        <select id="status-filter">
+                    
+                    <div class="filter-group">
+                        <label class="filter-label">STATUS</label>
+                        <select id="status-filter" class="filter-select">
                             <option value="active" selected>Aktive ordre</option>
                             <option value="all">Alle statuser</option>
                             <option value="scheduled">Planlagt</option>
                             <option value="in_progress">Pågår</option>
                         </select>
                     </div>
-                </div>
-                <div class="search-group">
-                    <div style="width: 100%;">
-                        <div class="filter-label">Søk</div>
-                        <input type="text" id="search-input" placeholder="Søk kunde, adresse, ordrenr...">
+                    
+                    <div class="filter-group">
+                        <label class="filter-label">SØK</label>
+                        <input type="text" id="search-input" class="search-input" placeholder="Søk kunde, adresse, ordrenr...">
                     </div>
                 </div>
             </div>
-
-            <!-- Orders List -->
+        
             <section class="orders-section" id="order-list-container">
                 <!-- Ordrekort blir lastet inn her av JavaScript -->
             </section>
