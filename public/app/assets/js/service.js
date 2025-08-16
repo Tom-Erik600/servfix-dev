@@ -635,6 +635,14 @@ async function initializePage() {
         
         console.log('Initializing with:', { orderId: state.orderId, equipmentId: state.equipmentId });
         
+        state.order = {
+            id: state.orderId,
+            orderNumber: state.orderId,
+            customer: {
+                name: 'Laster...' // Will be updated in loadEquipmentData
+            }
+        };
+
         // Load all necessary data in parallel
         const [equipment, technician] = await Promise.all([
             loadEquipmentData(state.equipmentId),
@@ -643,16 +651,6 @@ async function initializePage() {
         
         state.equipment = equipment;
         state.technician = technician;
-        
-        // For service.js, we don't need full order data
-        // Just set the minimum needed from what we have
-        state.order = {
-            id: state.orderId,
-            orderNumber: state.orderId,
-            customer: {
-                name: 'Laster...' // Will be loaded from equipment endpoint if needed
-            }
-        };
         
         // Load or create service report
         await loadServiceReport();
@@ -686,6 +684,33 @@ async function loadEquipmentData(equipmentId) {
         const equipment = await api.get(`/equipment/by-id/${equipmentId}`);
         console.log('Equipment data loaded:', equipment);
         
+// NYTT: Hent kundeinformasjon hvis customer_id finnes
+if (equipment.customer_id && state.order) {
+    try {
+        console.log('Loading customer info for customer_id:', equipment.customer_id);
+        
+        // Hent ordre-data som inneholder kundeinformasjon fra customer_data JSONB-feltet
+        const orderResponse = await api.get(`/orders/${state.orderId}`);
+        
+        if (orderResponse && orderResponse.customer) {
+            // Oppdater BARE customer-feltet i state.order
+            state.order.customer = {
+                id: orderResponse.customer.id,
+                name: orderResponse.customer.name || 'Ukjent kunde',
+                phone: orderResponse.customer.phone || '',
+                email: orderResponse.customer.email || '',
+                physicalAddress: orderResponse.customer.physicalAddress || ''
+            };
+            console.log('✅ Customer name updated:', state.order.customer.name);
+        } else {
+            console.warn('No customer data in order response');
+            state.order.customer.name = 'Kunde ikke funnet';
+        }
+    } catch (customerError) {
+        console.error('Could not load customer info:', customerError);
+        state.order.customer.name = 'Feil ved lasting';
+    }
+}
         // Normalize type to lowercase
         if (equipment.type) {
             equipment.type = equipment.type.toLowerCase();
