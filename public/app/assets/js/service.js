@@ -622,6 +622,7 @@ function generateReportId() {
 // Main initialization function
 async function initializePage() {
     setLoading(true);
+    clearAllImageContainers();
     
     try {
         // Get params from URL
@@ -942,6 +943,16 @@ function renderAll() {
     try { updateFinalizeButtonState(); } catch (e) { console.error('Error in updateFinalizeButtonState:', e); }
     try { updatePageFooterVisibility(); } catch (e) { console.error('Error in updatePageFooterVisibility:', e); }
     try { renderGeneralImages(); } catch (e) { console.error('Error in renderGeneralImages:', e); }
+    
+    // NYTT: Last også avvik-bilder for eksisterende sjekklister
+    setTimeout(() => {
+        try { 
+            renderAvvikImagesForChecklist(); 
+            console.log('✅ Avvik images rendered for existing checklist');
+        } catch (e) { 
+            console.error('Error in renderAvvikImagesForChecklist:', e); 
+        }
+    }, 500);
 }
 
 function renderHeader() {
@@ -1186,6 +1197,9 @@ function renderChecklist() {
     // Check if there are checklist items in the template
     const hasChecklistItems = state.checklistTemplate?.checklistItems && 
                              state.checklistTemplate.checklistItems.length > 0;
+    
+    // NYTT: Rydd opp bilder før re-rendering
+    clearAllImageContainers();
     
     container.style.display = hasChecklistItems ? 'block' : 'none';
     
@@ -1847,7 +1861,38 @@ function renderDriftScheduleSection() {
     }
 }
 
+// NYTT: Rydd opp alle bildecontainere
+function clearAllImageContainers() {
+    console.log('🧹 Clearing all image containers...');
+    
+    // Tøm ALLE bildecontainere eksplisitt
+    const containerSelectors = [
+        '#general-images-gallery',
+        '[id^="avvik-images-container-"]',
+        '[id^="byttet-images-container-"]',
+        '.avvik-images-container',
+        '.byttet-images-container'
+    ];
+    
+    containerSelectors.forEach(selector => {
+        const containers = document.querySelectorAll(selector);
+        containers.forEach(container => {
+            container.innerHTML = '';
+            console.log(`   ✅ Cleared: ${selector}`);
+        });
+    });
+    
+    // Nullstill photo context
+    if (window.currentPhotoContext) {
+        window.currentPhotoContext = null;
+    }
+    
+    console.log('✅ All image containers cleared');
+}
+
 function resetAndLoadForm(isEditing = false) {
+    clearAllImageContainers(); // <-- LEGG TIL DENNE LINJEN
+
     if (!isEditing) {
         state.editingComponentIndex = null;
     }
@@ -1929,6 +1974,17 @@ function loadChecklistForEditing(index) {
     // Resten forblir uendret
     if (component.checklist && state.checklistTemplate?.checklistItems) {
         populateChecklistItems(state.checklistTemplate.checklistItems, component.checklist);
+        
+        // NYTT: Hent bilder etter at sjekkliste er populert
+        setTimeout(() => {
+            try {
+                renderAvvikImagesForChecklist();
+                renderGeneralImages();
+                console.log('✅ Bilder hentet for eksisterende sjekkliste');
+            } catch (error) {
+                console.error('Feil ved bildehenting:', error);
+            }
+        }, 200);
     }
     
     if (component.products?.length > 0) {
@@ -2153,7 +2209,7 @@ function populateChecklistItems(items, checklistData) {
                 break;
                 
             case 'tilstandsgrad_dropdown':
-            case 'konsekvensgrad_dropdown':
+            case 'konsekvensgrad_dropdown': {
                 // Prøv først med ID, deretter med class
                 const selectElement = element.querySelector(`#select-${item.id}`) || 
                                     element.querySelector('.checklist-dropdown');
@@ -2161,6 +2217,7 @@ function populateChecklistItems(items, checklistData) {
                     selectElement.value = result;
                 }
                 break;
+            }
         }
         
         // Handle subpoints recursively
@@ -2522,7 +2579,7 @@ function collectComponentData() {
             const price = parseFloat(item.querySelector('.product-price')?.value) || 0;
             
             if (name || quantity > 0 || price > 0) {
-                products.push({ 
+                products.push({
                     id: `product_${Date.now()}_${index}`,
                     name, 
                     quantity, 
@@ -2543,7 +2600,7 @@ function collectComponentData() {
             const price = parseFloat(item.querySelector('.work-price')?.value) || 0;
             
             if (description || hours > 0 || price > 0) {
-                additionalWork.push({ 
+                additionalWork.push({
                     id: `work_${Date.now()}_${index}`,
                     description, 
                     hours, 
@@ -2785,6 +2842,7 @@ function getChecklistItemValue(itemId) {
         
         case 'timer': {
             const display = element.querySelector('.timer-display');
+            const timerData = element.dataset.timerData;
             return display ? display.textContent : '00:00:00';
         }
         
@@ -3364,13 +3422,55 @@ async function handlePhotoFile(file) {
 async function displayGeneralImage(imageUrl) {
     console.log('📸 Displaying general image:', imageUrl);
     
+    // NYTT: Valider state
+    if (!state.serviceReport || !state.serviceReport.reportId) {
+        console.log('⚠️  No valid state for displaying general image');
+        return;
+    }
+    
+    const expectedPrefix = `RPT-${state.orderId}-${state.equipmentId}`;
+    if (!state.serviceReport.reportId.startsWith(expectedPrefix)) {
+        console.log('⚠️  State mismatch, not reloading general images');
+        return;
+    }
+    
     // Reload general images to show the new one
     await renderGeneralImages();
 }
 
-// Display avvik image after upload
 async function displayAvvikImage(itemId, imageUrl) {
     console.log('📸 Displaying avvik image for item:', itemId, imageUrl);
+    
+    // NYTT: Valider at vi har riktig state før reloading
+    if (!state.serviceReport || !state.serviceReport.reportId) {
+        console.log('⚠️  No valid state for displaying avvik image');
+        return;
+    }
+    
+    // NYTT: Smartere validering for display funksjoner
+    const currentReportId = state.serviceReport.reportId;
+    const expectedPrefix = `RPT-${state.orderId}-${state.equipmentId}`;
+    const isNewFormat = currentReportId.startsWith(expectedPrefix);
+    const isValidExisting = currentReportId && currentReportId.length > 5;
+
+    if (!isNewFormat && !isValidExisting) {
+        console.log('⚠️  Invalid reportId, not reloading images:', {
+            reportId: currentReportId,
+            isNewFormat,
+            isValidExisting
+        });
+        return;
+    }
+
+    // NYTT: Kun sjekk ordre/anlegg for nye rapporter
+    if (isNewFormat && state.orderId && state.equipmentId) {
+        if (!currentReportId.includes(state.orderId) || !currentReportId.includes(state.equipmentId)) {
+            console.log('⚠️  ReportId ikke for denne kombinasjonen, not reloading images');
+            return;
+        }
+    }
+
+    console.log('✅ Display validering OK, reloading images');
     
     // Reload avvik images to show the new one
     await renderAvvikImagesForChecklist();
@@ -3536,15 +3636,42 @@ async function loadAndRenderImages() {
     }
 }
 
-async function renderAvvikImagesForChecklist() {
+async function renderAvvikImagesForChecklist(currentReportId) {
     console.log('🖼️ Rendering avvik images for checklist items');
     
-    // Hent ALLE avvik-bilder for rapporten (ikke per item)
+    // NYTT: Bruk reportId fra state hvis ikke eksplisitt sendt
+    const reportIdToUse = currentReportId || state.serviceReport?.reportId;
+    
+    // NYTT: Valider state før bilderedering
+    if (!reportIdToUse || !state.serviceReport || !state.serviceReport.reportId) {
+        console.log('⚠️  No valid reportId, clearing containers and skipping');
+        clearAllImageContainers();
+        return;
+    }
+    
+    // NYTT: Valider at reportId matcher current ordre/anlegg
+    const expectedPrefix = `RPT-${state.orderId}-${state.equipmentId}`;
+    
+    if (!reportIdToUse.startsWith(expectedPrefix)) {
+        console.log('⚠️  ReportId mismatch, clearing containers:', {
+            current: reportIdToUse,
+            expected: expectedPrefix
+        });
+        clearAllImageContainers();
+        return;
+    }
+    
+    // Hent ALLE avvik-bilder for rapporten
     try {
-        const avvikImages = await api.get(`/images/avvik/${state.serviceReport.reportId}`);
+        const avvikImages = await api.get(`/images/avvik/${reportIdToUse}`);
         console.log('📸 All avvik images:', avvikImages);
         
         if (Array.isArray(avvikImages)) {
+            // NYTT: Tøm alle containere først
+            document.querySelectorAll('[id^="avvik-images-container-"]').forEach(container => {
+                container.innerHTML = '';
+            });
+            
             // Group images by checklist_item_id
             const imagesByAvvik = {};
             avvikImages.forEach(img => {
@@ -3559,14 +3686,12 @@ async function renderAvvikImagesForChecklist() {
             
             // Render images for each avvik container
             Object.entries(imagesByAvvik).forEach(([itemId, images]) => {
-                const containerId = `avvik-images-container-${itemId}`;
-                const container = document.getElementById(containerId);
-                
-                if (container && images.length > 0) {
-                    container.innerHTML = images.map((img, index) => `
+                const container = document.getElementById(`avvik-images-container-${itemId}`);
+                if (container) {
+                    container.innerHTML = images.map(img => `
                         <div class="avvik-image-wrapper">
                             <img src="${img.image_url}" alt="Avvik ${img.avvik_number}" onclick="openImageModal('${img.image_url}', 'Avvik #${img.avvik_number}')">
-                            <button class="image-remove-btn" onclick="removeAvvikImage('${itemId}', '${img.id}')" title="Fjern bilde">×</button>
+                            <button type="button" class="image-remove-btn" onclick="removeAvvikImage('${itemId}', '${img.id}')" title="Fjern bilde">×</button>
                         </div>
                     `).join('');
                 }
@@ -3574,8 +3699,10 @@ async function renderAvvikImagesForChecklist() {
         }
     } catch (error) {
         console.log('Error loading avvik images:', error.message);
+        // Ikke vis feilmelding til bruker for bilderedering
     }
 
+    // Synkroniser byttet-bilder (eksisterende kode)
     document.querySelectorAll('.status-btn.byttet.active').forEach(btn => {
         const checklistItem = btn.closest('.checklist-item');
         if (checklistItem) {
@@ -3583,6 +3710,47 @@ async function renderAvvikImagesForChecklist() {
             syncByttetImages(itemId);
         }
     });
+}
+
+// MANGLENDE FUNKSJON: Slett avvik-bilde
+async function removeAvvikImage(itemId, imageId) {
+    console.log('🗑️ Removing avvik image:', { itemId, imageId });
+    
+    try {
+        // Bekreft sletting
+        if (!confirm('Er du sikker på at du vil slette dette bildet?')) {
+            return;
+        }
+        
+        showToast('🗑️ Sletter bilde...', 'info');
+        
+        // Slett fra backend
+        const response = await fetch(`/api/images/avvik/${imageId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            throw new Error('Kunne ikke slette bilde');
+        }
+        
+        showToast('✅ Bilde slettet!', 'success');
+        
+        // Oppdater UI
+        setTimeout(() => {
+            renderAvvikImagesForChecklist();
+            
+            // Hvis det var byttet-bilde, synkroniser også
+            const byttetContainer = document.getElementById(`byttet-images-container-${itemId}`);
+            if (byttetContainer && byttetContainer.innerHTML.trim()) {
+                syncByttetImages(itemId);
+            }
+        }, 200);
+        
+    } catch (error) {
+        console.error('Feil ved sletting av bilde:', error);
+        showToast(`❌ Kunne ikke slette bilde: ${error.message}`, 'error');
+    }
 }
 
 // Synkroniser byttet-bilder med avvik-bilder
@@ -3614,10 +3782,31 @@ function syncByttetImages(itemId) {
     });
 }
 
-// Render general images
 async function renderGeneralImages() {
+    // NYTT: Valider state først
+    if (!state.serviceReport || !state.serviceReport.reportId) {
+        console.log('⚠️  No valid reportId for general images, clearing container');
+        const container = document.getElementById('general-images-gallery');
+        if (container) container.innerHTML = '';
+        return;
+    }
+    
+    // NYTT: Valider reportId matcher current ordre/anlegg
+    const currentReportId = state.serviceReport.reportId;
+    const expectedPrefix = `RPT-${state.orderId}-${state.equipmentId}`;
+    
+    if (!currentReportId.startsWith(expectedPrefix)) {
+        console.log('⚠️  ReportId mismatch for general images, clearing container:', {
+            current: currentReportId,
+            expected: expectedPrefix
+        });
+        const container = document.getElementById('general-images-gallery');
+        if (container) container.innerHTML = '';
+        return;
+    }
+    
     try {
-        const generalResponse = await fetch(`/api/images/general/${state.serviceReport.reportId}`, {
+        const generalResponse = await fetch(`/api/images/general/${currentReportId}`, {
             credentials: 'include'
         });
         
@@ -3626,29 +3815,36 @@ async function renderGeneralImages() {
             console.log('📸 Reloaded general images:', generalImages);
             
             const container = document.getElementById('general-images-gallery');
-            if (container && generalImages.length > 0) {
-                // Alltid bruk progressiv lasting siden vi alltid er på mobil
-                container.innerHTML = generalImages.map((img, index) => `
-                    <div class="image-thumbnail" data-index="${index}">
-                        <div class="image-loading-placeholder"></div>
-                        <div class="image-info">
-                            <span class="image-title">Bilde ${index + 1}</span>
+            if (container) {
+                // NYTT: Tøm container først
+                container.innerHTML = '';
+                
+                if (generalImages.length > 0) {
+                    container.innerHTML = generalImages.map((img, index) => `
+                        <div class="image-thumbnail" data-index="${index}">
+                            <div class="image-loading-placeholder"></div>
+                            <div class="image-info">
+                                <span class="image-title">Bilde ${index + 1}</span>
+                            </div>
                         </div>
-                    </div>
-                `).join('');
-                
-                // Last inn bilder ett om gangen for bedre ytelse på mobil
-                loadImagesProgressively(generalImages);
-                
-                // Vis attachments section
-                const attachmentsSection = document.getElementById('attachments-section');
-                if (attachmentsSection) {
-                    attachmentsSection.style.display = 'block';
+                    `).join('');
+                    
+                    // Last inn bilder ett om gangen for bedre ytelse på mobil
+                    loadImagesProgressively(generalImages);
+                    
+                    // Vis attachments section
+                    const attachmentsSection = document.getElementById('attachments-section');
+                    if (attachmentsSection) {
+                        attachmentsSection.style.display = 'block';
+                    }
                 }
             }
         }
     } catch (error) {
-        console.log('Error reloading general images:', error.message);
+        console.error('Error loading general images:', error);
+        // Tøm container ved feil
+        const container = document.getElementById('general-images-gallery');
+        if (container) container.innerHTML = '';
     }
 }
 

@@ -36,8 +36,39 @@ document.addEventListener('DOMContentLoaded', async function() {
     await initializePage();
 });
 
+// NYTT: Rydd opp alle bildecontainere
+function clearAllImageContainers() {
+    console.log('🧹 Clearing all image containers...');
+    
+    // Tøm ALLE bildecontainere eksplisitt
+    const containerSelectors = [
+        '#general-images-gallery',
+        '[id^="avvik-images-container-"]',
+        '[id^="byttet-images-container-"]',
+        '.avvik-images-container',
+        '.byttet-images-container'
+    ];
+    
+    containerSelectors.forEach(selector => {
+        const containers = document.querySelectorAll(selector);
+        containers.forEach(container => {
+            container.innerHTML = '';
+            console.log(`   ✅ Cleared: ${selector}`);
+        });
+    });
+    
+    // Nullstill photo context
+    if (window.currentPhotoContext) {
+        window.currentPhotoContext = null;
+    }
+    
+    console.log('✅ All image containers cleared');
+}
+
 async function initializePage() {
     setLoading(true);
+    // NYTT: Rydd opp bilder fra forrige sjekkliste FØRST
+    clearAllImageContainers();
     const orderId = new URLSearchParams(window.location.search).get('id');
     if (!orderId) {
         showToast('Mangler ordre-ID!', 'error');
@@ -560,8 +591,11 @@ async function handleCompleteOrder() {
     }
     
     // Bekreft med bruker
-    const confirmMessage = `Er du sikker på at du vil ferdigstille denne ordren?\n\n` +
-        `${selectedEquipment.length} anlegg vil inkluderes i rapporten.\n` +
+    const confirmMessage = `Er du sikker på at du vil ferdigstille denne ordren?
+
+` +
+        `${selectedEquipment.length} anlegg vil inkluderes i rapporten.
+` +
         `${pageState.equipment.length - selectedEquipment.length} anlegg er ikke valgt og vil ikke inkluderes.`;
     
     if (!confirm(confirmMessage)) {

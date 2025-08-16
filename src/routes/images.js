@@ -353,6 +353,58 @@ router.delete('/logo', async (req, res) => {
   }
 });
 
+// DELETE /api/images/avvik/:imageId - Slett spesifikt avvik-bilde
+router.delete('/avvik/:imageId', async (req, res) => {
+  try {
+    const { imageId } = req.params;
+    const tenantId = req.session.tenantId || 'airtech';
+    
+    console.log(`🗑️ Sletter avvik-bilde ID: ${imageId}`);
+    
+    const pool = await db.getTenantConnection(tenantId);
+    
+    // Hent bilde-info før sletting
+    const imageResult = await pool.query(
+      'SELECT image_url FROM avvik_images WHERE id = $1',
+      [imageId]
+    );
+    
+    if (imageResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Bilde ikke funnet' });
+    }
+    
+    const imageUrl = imageResult.rows[0].image_url;
+    
+    // Slett fra database
+    await pool.query('DELETE FROM avvik_images WHERE id = $1', [imageId]);
+    
+    // Slett fra GCS
+    try {
+      const urlPath = new URL(imageUrl).pathname;
+      const filePath = urlPath.substring(urlPath.indexOf(bucketName) + bucketName.length + 1);
+      const decodedFilePath = decodeURIComponent(filePath);
+      
+      await bucket.file(decodedFilePath).delete();
+      console.log(`✅ Fil slettet fra GCS: ${decodedFilePath}`);
+    } catch (storageError) {
+      console.warn('Kunne ikke slette fra GCS:', storageError.message);
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Avvik-bilde slettet',
+      deletedImageId: imageId 
+    });
+    
+  } catch (error) {
+    console.error('Feil ved sletting av avvik-bilde:', error);
+    res.status(500).json({ 
+      error: 'Kunne ikke slette avvik-bilde',
+      details: error.message 
+    });
+  }
+});
+
 // GET /api/images/logo - Hent bare logo-info
 router.get('/logo', async (req, res) => {
   try {
@@ -717,7 +769,7 @@ router.get('/avvik/:reportId', async (req, res) => {
     const pool = await db.getTenantConnection(req.session.tenantId);
     
     const result = await pool.query(
-      `SELECT service_report_id, avvik_number, image_url, uploaded_at, metadata, checklist_item_id
+      `SELECT id, service_report_id, avvik_number, image_url, uploaded_at, metadata, checklist_item_id
        FROM avvik_images 
        WHERE service_report_id = $1 
        ORDER BY avvik_number ASC`,
