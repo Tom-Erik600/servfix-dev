@@ -1,0 +1,1591 @@
+/* ========================================
+   TILBUD.CSS - ServFix Tilbudssystem
+   Komplett styling for admin tilbud-side
+   ======================================== */
+
+/* CSS Variables for konsistent design */
+:root {
+    --primary-color: #3b82f6;
+    --primary-hover: #2563eb;
+    --primary-dark: #1d4ed8;
+    --success-color: #10b981;
+    --success-hover: #059669;
+    --warning-color: #f59e0b;
+    --warning-hover: #d97706;
+    --danger-color: #ef4444;
+    --danger-hover: #dc2626;
+    --purple-color: #8b5cf6;
+    --purple-hover: #7c3aed;
+    
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-600: #4b5563;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --gray-900: #111827;
+    
+    --border-radius: 8px;
+    --border-radius-lg: 12px;
+    --border-radius-xl: 16px;
+    
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    
+    --transition: all 0.2s ease;
+}
+
+/* ========================================
+   HOVEDLAYOUT - TILBUD
+   ======================================== */
+
+.quotes-layout {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 24px;
+    height: calc(100vh - 140px);
+    padding: 0;
+    margin: 0;
+}
+
+.quotes-list-panel,
+.quote-details-panel {
+    background: white;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--gray-200);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-sm);
+}
+
+.quotes-list-panel {
+    min-height: 0; /* For scroll å fungere */
+}
+
+.quote-details-panel {
+    position: sticky;
+    top: 24px;
+}
+
+/* ========================================
+   QUOTE LIST ITEMS
+   ======================================== */
+
+.quote-item {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--gray-100);
+    cursor: pointer;
+    transition: var(--transition);
+    background: white;
+    position: relative;
+}
+
+.quote-item:last-child {
+    border-bottom: none;
+}
+
+.quote-item:hover {
+    background: var(--gray-50);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.quote-item.selected {
+    background: #eff6ff;
+    border-left: 4px solid var(--primary-color);
+    padding-left: 12px; /* Kompensere for border */
+}
+
+.quote-item.selected::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--primary-color);
+}
+
+.quote-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+    gap: 12px;
+}
+
+.quote-title {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--gray-800);
+    line-height: 1.3;
+    flex: 1;
+}
+
+.quote-meta {
+    font-size: 13px;
+    color: var(--gray-500);
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+
+.quote-description {
+    font-size: 14px;
+    color: var(--gray-600);
+    margin-bottom: 10px;
+    line-height: 1.4;
+}
+
+.quote-price {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--success-color);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* ========================================
+   QUOTE DETAILS PANEL
+   ======================================== */
+
+.quote-details-content {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.quote-details-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 28px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--gray-200);
+}
+
+.quote-details-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--gray-900);
+}
+
+.detail-section {
+    margin-bottom: 24px;
+}
+
+.detail-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-500);
+    margin-bottom: 8px;
+    display: block;
+}
+
+.detail-value {
+    font-size: 15px;
+    color: var(--gray-700);
+    line-height: 1.5;
+}
+
+.detail-value strong {
+    color: var(--gray-900);
+}
+
+.detail-value small {
+    color: var(--gray-500);
+    font-size: 13px;
+}
+
+/* ========================================
+   ESTIMATE SUMMARY - ELEGANT LAYOUT
+   ======================================== */
+
+.estimate-summary .estimate-details {
+    background: linear-gradient(145deg, #f8fafc, #f1f5f9);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--border-radius-lg);
+    padding: 20px;
+    margin-top: 12px;
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    overflow: hidden;
+}
+
+.estimate-summary .estimate-details::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary-color), var(--success-color));
+}
+
+.estimate-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    font-size: 14px;
+}
+
+.estimate-row.total-row {
+    border-top: 2px solid var(--gray-300);
+    margin-top: 16px;
+    padding-top: 16px;
+    font-size: 16px;
+    background: rgba(59, 130, 246, 0.05);
+    margin-left: -20px;
+    margin-right: -20px;
+    padding-left: 20px;
+    padding-right: 20px;
+    border-radius: 0 0 var(--border-radius-lg) var(--border-radius-lg);
+}
+
+.estimate-label {
+    color: var(--gray-600);
+    font-weight: 500;
+}
+
+.estimate-value {
+    color: var(--gray-800);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+}
+
+.estimate-row.total-row .estimate-label,
+.estimate-row.total-row .estimate-value {
+    font-weight: 700;
+    color: var(--gray-900);
+    font-size: 17px;
+}
+
+/* ========================================
+   PRODUCTS LIST - ELEGANT DESIGN
+   ======================================== */
+
+.products-list {
+    list-style: none;
+    padding: 0;
+    margin: 12px 0 0 0;
+    background: var(--gray-50);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--gray-200);
+    overflow: hidden;
+}
+
+.product-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--gray-200);
+    background: white;
+    font-size: 14px;
+    transition: var(--transition);
+}
+
+.product-item:last-child {
+    border-bottom: none;
+}
+
+.product-item:hover {
+    background: var(--gray-50);
+}
+
+.product-item span:first-child {
+    color: var(--gray-700);
+    font-weight: 500;
+    flex: 1;
+}
+
+.product-item span:last-child {
+    color: var(--gray-900);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+}
+
+/* ========================================
+   ACTION BUTTONS - ENDELIG VERSJON (FIXED)
+   ======================================== */
+
+/* PRIMÆR FIX: Tilbudsdetaljer Action Buttons */
+.action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 2px solid var(--gray-200);
+    justify-content: flex-start;
+}
+
+/* KRITISK: Store, synlige knapper for tilbudsdetaljer */
+.action-buttons .btn {
+    padding: 20px 36px !important;
+    border-radius: 12px !important;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    cursor: pointer !important;
+    border: none !important;
+    transition: all 0.3s ease !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    min-width: 220px !important;
+    min-height: 70px !important;
+    justify-content: center !important;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.15) !important;
+    text-transform: none !important;
+    letter-spacing: 0.025em !important;
+    text-decoration: none !important;
+}
+
+/* Hover effects */
+.action-buttons .btn:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.25) !important;
+}
+
+.action-buttons .btn:active {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 12px rgba(0,0,0,0.2) !important;
+}
+
+/* Spesifikke knappfarger */
+.action-buttons .btn-preview {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    color: white !important;
+}
+
+.action-buttons .btn-edit-orange {
+    background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+    color: white !important;
+}
+
+.action-buttons .btn-send {
+    background: linear-gradient(135deg, #10b981, #059669) !important;
+    color: white !important;
+}
+
+.action-buttons .btn-reject-admin {
+    background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+    color: white !important;
+}
+
+.action-buttons .btn-reject-customer {
+    background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+    color: white !important;
+}
+
+/* Mobile responsiv */
+@media (max-width: 768px) {
+    .action-buttons {
+        flex-direction: column;
+        gap: 16px;
+    }
+    
+    .action-buttons .btn {
+        width: 100% !important;
+        min-width: unset !important;
+    }
+}
+
+/* ========================================
+   MODAL SYSTEM - MODERN OG SMOOTH
+   ======================================== */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(8px);
+}
+
+.modal-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-content {
+    background: white;
+    border-radius: var(--border-radius-xl);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    transform: scale(0.8) translateY(-40px);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    overflow: hidden;
+}
+
+.modal-overlay.show .modal-content {
+    transform: scale(1) translateY(0);
+}
+
+.large-modal .modal-content {
+    max-width: 1000px;
+    width: 95%;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24px 28px 20px;
+    border-bottom: 1px solid var(--gray-200);
+    background: linear-gradient(145deg, #fafbfc, #f9fafb);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--gray-900);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.close-btn {
+    background: var(--gray-100);
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+    color: var(--gray-600);
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-sm);
+}
+
+.close-btn:hover {
+    background: var(--gray-200);
+    color: var(--gray-800);
+    transform: rotate(90deg) scale(1.1);
+}
+
+.modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 28px;
+}
+
+.modal-footer {
+    padding: 20px 28px 24px;
+    border-top: 1px solid var(--gray-200);
+    background: var(--gray-50);
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+/* ========================================
+   QUOTE STATUS BADGES
+   ======================================== */
+
+.quote-status {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid transparent;
+    box-shadow: var(--shadow-sm);
+}
+
+.status-pending {
+    background: linear-gradient(135deg, #fef3c7, #fde68a);
+    color: #92400e;
+    border-color: #f59e0b;
+}
+
+.status-sent {
+    background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+    color: #1e40af;
+    border-color: #3b82f6;
+}
+
+.status-accepted {
+    background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+    color: #065f46;
+    border-color: #10b981;
+}
+
+.status-rejected,
+.status-rejected_customer,
+.status-rejected_admin {
+    background: linear-gradient(135deg, #fee2e2, #fecaca);
+    color: #991b1b;
+    border-color: #ef4444;
+}
+
+/* ========================================
+   TOAST NOTIFICATIONS
+   ======================================== */
+
+.toast {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    padding: 16px 24px;
+    border-radius: var(--border-radius-lg);
+    color: white;
+    font-weight: 500;
+    z-index: 10000;
+    transform: translateX(400px);
+    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    box-shadow: var(--shadow-xl);
+    max-width: 400px;
+    font-size: 14px;
+    backdrop-filter: blur(8px);
+}
+
+.toast.show {
+    transform: translateX(0);
+}
+
+.toast-success { 
+    background: linear-gradient(135deg, #10b981, #059669);
+    border-left: 4px solid #047857;
+}
+
+.toast-error { 
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    border-left: 4px solid #b91c1c;
+}
+
+.toast-info { 
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    border-left: 4px solid #1d4ed8;
+}
+
+.toast-warning {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    border-left: 4px solid #b45309;
+}
+
+/* ========================================
+   LOADING STATES
+   ======================================== */
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.btn:disabled:hover {
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.btn:disabled::before {
+    display: none;
+}
+
+/* Loading spinner */
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top: 2px solid currentColor;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* ========================================
+   EMPTY STATE
+   ======================================== */
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--gray-500);
+}
+
+.empty-state p {
+    font-size: 16px;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.empty-state::before {
+    content: '📄';
+    font-size: 48px;
+    display: block;
+    margin-bottom: 16px;
+    opacity: 0.6;
+}
+
+/* ========================================
+   SCROLLBAR STYLING
+   ======================================== */
+
+.quote-details-content::-webkit-scrollbar,
+.quotes-list-panel::-webkit-scrollbar,
+.modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.quote-details-content::-webkit-scrollbar-track,
+.quotes-list-panel::-webkit-scrollbar-track,
+.modal-body::-webkit-scrollbar-track {
+    background: var(--gray-100);
+    border-radius: 3px;
+}
+
+.quote-details-content::-webkit-scrollbar-thumb,
+.quotes-list-panel::-webkit-scrollbar-thumb,
+.modal-body::-webkit-scrollbar-thumb {
+    background: var(--gray-300);
+    border-radius: 3px;
+}
+
+.quote-details-content::-webkit-scrollbar-thumb:hover,
+.quotes-list-panel::-webkit-scrollbar-thumb:hover,
+.modal-body::-webkit-scrollbar-thumb:hover {
+    background: var(--gray-400);
+}
+
+/* ========================================
+   RESPONSIV DESIGN
+   ======================================== */
+
+@media (max-width: 1024px) {
+    .quotes-layout {
+        grid-template-columns: 1fr;
+        gap: 16px;
+        height: auto;
+    }
+    
+    .quote-details-panel {
+        position: static;
+    }
+}
+
+/* Legg til mellomsteg for tablets */
+@media (max-width: 1200px) and (min-width: 1025px) {
+    .quotes-layout {
+        grid-template-columns: 380px 1fr;
+        gap: 20px;
+    }
+}
+
+@media (max-width: 768px) {
+    .quotes-layout {
+        gap: 12px;
+    }
+    
+    .quote-item {
+        padding: 12px;
+    }
+    
+    .quote-details-content {
+        padding: 16px;
+    }
+    
+    .estimate-row {
+        font-size: 13px;
+    }
+    
+    .quote-details-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 12px;
+        border-radius: var(--border-radius-lg);
+    }
+    
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+    
+    .toast {
+        right: 12px;
+        left: 12px;
+        max-width: none;
+        transform: translateY(-100px);
+    }
+    
+    .toast.show {
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 480px) {
+    .quote-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .estimate-summary .estimate-details {
+        padding: 16px;
+    }
+    
+    .estimate-row.total-row {
+        margin-left: -16px;
+        margin-right: -16px;
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+}
+
+/* ========================================
+   ACCESSIBILITY
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    
+    .btn:hover {
+        transform: none;
+    }
+    
+    .quote-item:hover {
+        transform: none;
+    }
+}
+
+/* Focus states for keyboard navigation */
+.quote-item:focus,
+.btn:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .quote-status {
+        border-width: 2px;
+    }
+    
+    .estimate-summary .estimate-details {
+        border-width: 2px;
+    }
+}
+
+/* ========================================
+   UTILITY CLASSES
+   ======================================== */
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.slide-up {
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ========================================
+   EDIT QUOTE MODAL FORM
+   ======================================== */
+
+.edit-quote-form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-group label {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--gray-700);
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--border-radius);
+    font-size: 14px;
+    transition: var(--transition);
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.form-group textarea {
+    min-height: 120px;
+    resize: vertical;
+}
+
+.products-section h4 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.product-list-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.product-item-edit {
+    display: grid;
+    grid-template-columns: 1fr 120px 40px;
+    gap: 12px;
+    align-items: center;
+}
+
+.product-item-edit input {
+    margin: 0;
+}
+
+.btn-add-product {
+    margin-top: 12px;
+    align-self: flex-start;
+}
+
+.btn-remove-product {
+    background: none;
+    border: none;
+    color: var(--danger-color);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+.btn-remove-product:hover {
+    color: var(--danger-hover);
+}
+
+/* ========================================
+   PRINT STYLES
+   ======================================== */
+
+@media print {
+    .action-buttons,
+    .modal-overlay,
+    .toast {
+        display: none !important;
+    }
+    
+    .quote-item {
+        break-inside: avoid;
+    }
+    
+    .quotes-layout {
+        display: block;
+    }
+    
+    .quote-details-panel {
+        break-before: page;
+    }
+}
+
+/* ===== MODERNE KNAPP-SYSTEM ===== */
+
+.quote-actions-modern {
+    background: linear-gradient(145deg, #f8fafc, #f1f5f9);
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.actions-primary {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.actions-secondary {
+    display: flex;
+    gap: 10px;
+    padding-top: 16px;
+    border-top: 1px solid var(--gray-200);
+    flex-wrap: wrap;
+}
+
+/* Moderne knapp-stiler */
+.btn {
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn-icon {
+    font-size: 16px;
+}
+
+.btn-preview {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+}
+
+.btn-preview:hover {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.btn-edit-orange {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+}
+
+.btn-edit-orange:hover {
+    background: linear-gradient(135deg, #d97706, #b45309);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+.btn-send {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+}
+
+.btn-send:hover {
+    background: linear-gradient(135deg, #059669, #047857);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.btn-reject-customer {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+    font-size: 12px;
+    padding: 8px 14px;
+}
+
+.btn-reject-customer:hover {
+    background: linear-gradient(135deg, #d97706, #b45309);
+    transform: translateY(-1px);
+}
+
+.btn-reject-admin {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+    font-size: 12px;
+    padding: 8px 14px;
+}
+
+.btn-reject-admin:hover {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+    transform: translateY(-1px);
+}
+
+/* Sendt-status kort */
+.sent-status-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+    border: 1px solid #10b981;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+}
+
+.sent-icon {
+    font-size: 24px;
+    line-height: 1;
+}
+
+.sent-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #065f46;
+    margin-bottom: 4px;
+}
+
+.sent-details {
+    font-size: 13px;
+    color: #047857;
+    font-weight: 500;
+}
+
+/* Responsiv design for knapper */
+@media (max-width: 768px) {
+    .actions-primary,
+    .actions-secondary {
+        flex-direction: column;
+    }
+    
+    .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Loading state for knapper */
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* ==================================================
+   EDIT QUOTE MODAL STYLES - LEGG TIL DENNE CSS!
+   ================================================== */
+
+.edit-quote-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.edit-quote-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.edit-quote-form .form-group label {
+    font-weight: 600;
+    color: #374151;
+    font-size: 14px;
+}
+
+.edit-quote-form input,
+.edit-quote-form textarea,
+.edit-quote-form select {
+    padding: 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.edit-quote-form input:focus,
+.edit-quote-form textarea:focus,
+.edit-quote-form select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.edit-quote-form textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.products-section {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    background-color: #f9fafb;
+}
+
+.products-section h4 {
+    margin: 0 0 12px 0;
+    color: #1f2937;
+    font-size: 16px;
+}
+
+.product-list-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.product-item-edit {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+}
+
+.product-item-edit input {
+    margin: 0;
+    padding: 8px;
+}
+
+.btn-remove-product {
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.btn-remove-product:hover {
+    background: #dc2626;
+}
+
+.btn-add-product {
+    align-self: flex-start;
+    background: #10b981;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.btn-add-product:hover {
+    background: #059669;
+}
+
+.no-products-message {
+    text-align: center;
+    color: #6b7280;
+    font-style: italic;
+    padding: 20px;
+    background: white;
+    border: 1px dashed #d1d5db;
+    border-radius: 6px;
+}
+
+@media (max-width: 768px) {
+    .form-row {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .product-item-edit {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .edit-quote-form {
+        max-height: 60vh;
+    }
+}
+/* ==================================================
+   EDIT MODAL PRODUCT LAYOUT FIX
+   ================================================== */
+
+.product-item-edit {
+    display: grid;
+    grid-template-columns: 2fr 80px 100px 40px;
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.product-item-edit input {
+    padding: 6px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.btn-remove-product {
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-add-product {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 8px;
+}
+
+.products-section {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    background-color: #f9fafb;
+    margin-top: 16px;
+}
+/* Button Colors */
+.btn.btn-primary.preview-btn { background: #3b82f6; }
+.btn.btn-secondary.edit-btn { background: #f59e0b; }
+.btn.btn-success.send-btn { background: #10b981; }
+.btn.btn-danger.reject-btn { background: #ef4444; }
+
+
+.edit-quote-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group label {
+    font-weight: 600;
+    color: #374151;
+    font-size: 14px;
+}
+
+.form-group input,
+.form-group textarea {
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.products-section {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    background-color: #f9fafb;
+}
+
+.product-item-edit {
+    display: grid;
+    grid-template-columns: 2fr 80px 100px 40px;
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.btn-add-product {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-remove-product {
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+}
+
+/* Wider preview modal */
+.modal-content.large-modal {
+    width: 85%;
+    max-width: 1200px;
+}
+
+
+
+#quote-preview-iframe {
+    width: 100%;
+    height: 700px;
+    border: none;
+    border-radius: 8px;
+}
+/* Material items indentation */
+.material-item .material-name {
+    padding-left: 16px;
+    font-size: 13px;
+    color: var(--gray-600);
+}
+
+.estimate-row.material-item {
+    background-color: var(--gray-50);
+    margin-left: 10px;
+    margin-right: 10px;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 13px;
+}
+
+/* Quote Actions Styling */
+.quote-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/*
+.quote-actions .btn {
+    padding: 8px 12px;
+    font-size: 13px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+*/
+
+.quote-actions .btn-secondary {
+    background: var(--gray-100);
+    color: var(--gray-700);
+}
+
+.quote-actions .btn-secondary:hover {
+    background: var(--gray-200);
+}
+
+.quote-actions .btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.quote-actions .btn-primary:hover {
+    background: var(--primary-hover);
+}
+
+/* Estimate Row Styling */
+.estimate-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 14px;
+}
+
+.estimate-row:not(:last-child) {
+    border-bottom: 1px solid var(--gray-100);
+}
+
+/* Knappestiler for tilbud */
+.action-buttons .btn.btn-primary:has-text("Send til kunde") {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.action-buttons .btn.btn-secondary:has-text("Rediger") {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+.action-buttons .btn.btn-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+}
+
+/* Alternativ løsning med specifike klasser */
+.btn-send-customer {
+    background-color: #28a745 !important;
+    border-color: #28a745 !important;
+    color: white !important;
+}
+
+.btn-edit-quote {
+    background-color: #ffc107 !important;
+    border-color: #ffc107 !important;
+    color: #212529 !important;
+}
+
+.btn-reject-quote {
+    background-color: #dc3545 !important;
+    border-color: #dc3545 !important;
+    color: white !important;
+}
+
+
+
+/* ========================================
+   BTN-MODERN - MODERATE STØRRELSE
+   ======================================== */
+
+.btn-modern {
+    padding: 12px 20px !important;
+    border-radius: 8px !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    border: none !important;
+    transition: all 0.2s ease !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    min-width: 140px !important;
+    min-height: 44px !important;
+    justify-content: center !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    text-decoration: none !important;
+}
+
+.btn-modern:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+}
+
+.btn-modern.btn-preview {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    color: white !important;
+}
+
+.btn-modern.btn-edit {
+    background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+    color: white !important;
+}
+
+.btn-modern.btn-send {
+    background: linear-gradient(135deg, #10b981, #059669) !important;
+    color: white !important;
+}
+
+.btn-modern.btn-reject {
+    background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+    color: white !important;
+}
+
+.action-buttons-modern {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--gray-200);
+    justify-content: flex-start;
+}

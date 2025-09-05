@@ -145,6 +145,52 @@
                 </div>
             </div>
 
+            <!-- Tilbud-innstillinger -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>📄 Tilbud-innstillinger</h2>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="forbehold-text">Standard forbehold for alle tilbud</label>
+                        <textarea 
+                            id="forbehold-text" 
+                            class="form-input" 
+                            rows="3" 
+                            placeholder="Vi forbeholder oss prisendringer ved endringer hos underleverandører eller store valuta endringer!"
+                            style="resize: vertical; min-height: 80px;"
+                        ></textarea>
+                        <small style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">
+                            Denne teksten vil automatisk inkluderes i alle tilbud som sendes til kunder
+                        </small>
+                    </div>
+                    
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <div class="setting-title">
+                                    <span class="setting-icon">📄</span>
+                                    Inkluder forbehold i tilbud
+                                </div>
+                                <div class="setting-description">
+                                    Legg til standard forbehold automatisk i alle tilbud
+                                </div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="include-forbehold-toggle" checked>
+                                <span class="toggle-slider round"></span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 24px;">
+                        <button type="button" class="btn btn-large btn-primary" onclick="saveQuoteSettings()">
+                            💾 Lagre tilbud-innstillinger
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Lagre alle innstillinger -->
             <div class="card">
                 <div class="card-body" style="text-align: center;">
@@ -198,17 +244,27 @@
             const autoSendToggle = document.getElementById('auto-send-toggle');
             const copyAdminToggle = document.getElementById('copy-admin-toggle');
             
-            // Load settings from backend JSON file
-            loadAllSettingsFromBackend();
+            // Quote settings elements
+            const forbeholdTextInput = document.getElementById('forbehold-text');
+            const includeForbeholdToggle = document.getElementById('include-forbehold-toggle');
             
-            // Setup event listeners
+            // Initialize
+            loadAllSettings();
             setupEventListeners();
-            setupLogoUpload();
             
-            // === LOAD SETTINGS FROM JSON FILE ===
-            async function loadAllSettingsFromBackend() {
+            function setupEventListeners() {
+                // Logo upload
+                logoUploadArea?.addEventListener('click', () => logoFileInput?.click());
+                logoUploadArea?.addEventListener('dragover', handleDragOver);
+                logoUploadArea?.addEventListener('drop', handleDrop);
+                logoFileInput?.addEventListener('change', handleFileSelect);
+                uploadLogoBtn?.addEventListener('click', uploadLogo);
+                removePreviewBtn?.addEventListener('click', removePreview);
+                removeCurrentLogoBtn?.addEventListener('click', removeLogo);
+            }
+            
+            async function loadAllSettings() {
                 try {
-                    console.log('🔍 Loading all settings from backend JSON file...');
                     showLoading(true, 'Laster innstillinger...');
                     
                     const response = await fetch('/api/images/settings', {
@@ -216,170 +272,116 @@
                     });
                     
                     if (response.ok) {
-                        const data = await response.json();
-                        console.log('📋 Settings loaded from backend:', data);
-                        currentSettings = data;
-                        
-                        // Load company info
-                        if (data.companyInfo) {
-                            const info = data.companyInfo;
-                            if (info.name) companyNameInput.value = info.name;
-                            if (info.address) companyAddressInput.value = info.address;
-                            if (info.phone) companyPhoneInput.value = info.phone;
-                            if (info.email) companyEmailInput.value = info.email;
-                            if (info.cvr) companyCvrInput.value = info.cvr;
-                        }
-                        
-                        // Load logo
-                        if (data.logo?.url) {
-                            currentLogoUrl = data.logo.url;
-                            
-                            const testImg = new Image();
-                            testImg.onload = () => {
-                                currentLogo.src = data.logo.url;
-                                currentLogoSection.style.display = 'block';
-                            };
-                            testImg.onerror = () => {
-                                currentLogoSection.style.display = 'none';
-                            };
-                            testImg.src = data.logo.url;
-                        } else {
-                            currentLogoSection.style.display = 'none';
-                        }
-                        
-                        // Load report settings
-                        if (data.reportSettings) {
-                            const reportSettings = data.reportSettings;
-                            if (reportSettings.senderEmail) senderEmailInput.value = reportSettings.senderEmail;
-                            if (typeof reportSettings.autoSend === 'boolean') autoSendToggle.checked = reportSettings.autoSend;
-                            if (typeof reportSettings.copyAdmin === 'boolean') copyAdminToggle.checked = reportSettings.copyAdmin;
-                        }
-                        
+                        currentSettings = await response.json();
+                        populateFormFields();
+                        console.log('✅ Settings loaded:', currentSettings);
                     } else {
-                        console.warn('⚠️ Settings API request failed:', response.status);
+                        throw new Error('Kunne ikke laste innstillinger');
                     }
                 } catch (error) {
-                    console.error('❌ Could not load settings:', error);
+                    console.error('Error loading settings:', error);
+                    showToast('Kunne ikke laste innstillinger: ' + error.message, 'error');
                 } finally {
                     showLoading(false);
                 }
             }
             
-            // === EVENT LISTENERS ===
-            function setupEventListeners() {
-                const saveCompanyInfoBtn = document.getElementById('save-company-info');
-                if (saveCompanyInfoBtn) {
-                    saveCompanyInfoBtn.addEventListener('click', saveCompanyInfo);
+            function populateFormFields() {
+                // Company info
+                if (currentSettings.companyInfo) {
+                    companyNameInput.value = currentSettings.companyInfo.name || '';
+                    companyAddressInput.value = currentSettings.companyInfo.address || '';
+                    companyPhoneInput.value = currentSettings.companyInfo.phone || '';
+                    companyEmailInput.value = currentSettings.companyInfo.email || '';
+                    companyCvrInput.value = currentSettings.companyInfo.cvr || '';
                 }
                 
-                const saveReportSettingsBtn = document.getElementById('save-report-settings');
-                if (saveReportSettingsBtn) {
-                    saveReportSettingsBtn.addEventListener('click', saveReportSettings);
+                // Report settings
+                if (currentSettings.reportSettings) {
+                    senderEmailInput.value = currentSettings.reportSettings.senderEmail || '';
+                    autoSendToggle.checked = currentSettings.reportSettings.autoSend || false;
+                    copyAdminToggle.checked = currentSettings.reportSettings.copyAdmin || false;
                 }
                 
-                const saveAllBtn = document.getElementById('save-all-settings');
-                if (saveAllBtn) {
-                    saveAllBtn.addEventListener('click', saveAllSettings);
+                // Quote settings (NEW)
+                if (currentSettings.quoteSettings) {
+                    forbeholdTextInput.value = currentSettings.quoteSettings.forbeholdText || 'Vi forbeholder oss prisendringer ved endringer hos underleverandører eller store valuta endringer!';
+                    includeForbeholdToggle.checked = currentSettings.quoteSettings.includeForbehold !== false; // Default true
+                } else {
+                    // Set defaults
+                    forbeholdTextInput.value = 'Vi forbeholder oss prisendringer ved endringer hos underleverandører eller store valuta endringer!';
+                    includeForbeholdToggle.checked = true;
                 }
                 
-                if (removeCurrentLogoBtn) {
-                    removeCurrentLogoBtn.addEventListener('click', removeCurrentLogo);
-                }
-                
-                // Toggle change listeners (immediate feedback + async save)
-                if (autoSendToggle) {
-                    autoSendToggle.addEventListener('change', function() {
-                        fetch('/api/images/save-settings', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            credentials: 'include',
-                            body: JSON.stringify({ 
-                                reportSettings: { autoSend: this.checked } 
-                            })
-                        }).catch(error => console.error('Error saving auto-send:', error));
-                    });
-                }
-                
-                if (copyAdminToggle) {
-                    copyAdminToggle.addEventListener('change', function() {
-                        fetch('/api/images/save-settings', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            credentials: 'include',
-                            body: JSON.stringify({ 
-                                reportSettings: { copyAdmin: this.checked } 
-                            })
-                        }).catch(error => console.error('Error saving copy-admin:', error));
-                    });
+                // Logo
+                if (currentSettings.logo?.url) {
+                    currentLogoUrl = currentSettings.logo.url;
+                    showCurrentLogo();
                 }
             }
             
-            // === LOGO UPLOAD SETUP ===
-            function setupLogoUpload() {
-                logoUploadArea.addEventListener('click', () => logoFileInput.click());
-                logoFileInput.addEventListener('change', handleFileSelect);
-                
-                if (uploadLogoBtn) {
-                    uploadLogoBtn.addEventListener('click', uploadSelectedLogo);
+            function showCurrentLogo() {
+                if (currentLogoUrl) {
+                    currentLogo.src = currentLogoUrl;
+                    currentLogoSection.style.display = 'block';
+                } else {
+                    currentLogoSection.style.display = 'none';
                 }
-                
-                if (removePreviewBtn) {
-                    removePreviewBtn.addEventListener('click', clearSelectedLogo);
-                }
-                
-                // DRAG AND DROP
-                logoUploadArea.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    logoUploadArea.classList.add('dragover');
-                });
-                
-                logoUploadArea.addEventListener('dragleave', (e) => {
-                    e.preventDefault();
-                    logoUploadArea.classList.remove('dragover');
-                });
-                
-                logoUploadArea.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    logoUploadArea.classList.remove('dragover');
-                    
-                    const files = e.dataTransfer.files;
-                    if (files.length > 0) {
-                        handleFileSelect({ target: { files: files } });
-                    }
-                });
             }
             
-            // === FILE HANDLING ===
-            function handleFileSelect(event) {
-                const file = event.target.files[0];
+            // File handling functions
+            function handleDragOver(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                logoUploadArea.classList.add('drag-over');
+            }
+            
+            function handleDrop(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                logoUploadArea.classList.remove('drag-over');
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFileSelect({ target: { files } });
+                }
+            }
+            
+            function handleFileSelect(e) {
+                const file = e.target.files[0];
                 if (!file) return;
                 
                 if (!file.type.startsWith('image/')) {
-                    showToast('Kun bildefiler er tillatt', 'error');
+                    showToast('Velg kun bildefiler (PNG, JPG, SVG)', 'error');
                     return;
                 }
                 
                 if (file.size > 2 * 1024 * 1024) {
-                    showToast('Filen er for stor (maks 2MB)', 'error');
+                    showToast('Filen er for stor. Maks 2MB.', 'error');
                     return;
                 }
                 
                 selectedLogoFile = file;
-                
+                showLogoPreview(file);
+            }
+            
+            function showLogoPreview(file) {
                 const reader = new FileReader();
-                reader.onload = (e) => {
+                reader.onload = function(e) {
                     logoPreview.src = e.target.result;
                     logoPreviewSection.style.display = 'block';
-                    logoUploadArea.style.display = 'none';
                 };
                 reader.readAsDataURL(file);
             }
             
-            async function uploadSelectedLogo() {
-                if (!selectedLogoFile) {
-                    showToast('Ingen fil valgt', 'error');
-                    return;
-                }
+            function removePreview() {
+                selectedLogoFile = null;
+                logoPreviewSection.style.display = 'none';
+                logoFileInput.value = '';
+            }
+            
+            async function uploadLogo() {
+                if (!selectedLogoFile) return;
                 
                 try {
                     showLoading(true, 'Laster opp logo...');
@@ -393,20 +395,17 @@
                         body: formData
                     });
                     
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        showToast('Logo lastet opp og lagret!');
-                        
+                    if (response.ok) {
+                        const result = await response.json();
                         currentLogoUrl = result.logoUrl;
-                        currentLogo.src = result.logoUrl;
-                        currentLogoSection.style.display = 'block';
-                        clearSelectedLogo();
-                        
+                        showCurrentLogo();
+                        removePreview();
+                        showToast('Logo lastet opp!', 'success');
+                        await loadAllSettings(); // Refresh settings
                     } else {
-                        throw new Error(result.error || 'Upload failed');
+                        const error = await response.json();
+                        throw new Error(error.error || 'Opplasting feilet');
                     }
-                    
                 } catch (error) {
                     console.error('Logo upload error:', error);
                     showToast('Feil ved opplasting: ' + error.message, 'error');
@@ -415,16 +414,7 @@
                 }
             }
             
-            function clearSelectedLogo() {
-                selectedLogoFile = null;
-                logoPreviewSection.style.display = 'none';
-                logoUploadArea.style.display = 'flex';
-                logoFileInput.value = '';
-            }
-            
-            async function removeCurrentLogo() {
-                if (!confirm('Er du sikker på at du vil fjerne gjeldende logo?')) return;
-                
+            async function removeLogo() {
                 try {
                     showLoading(true, 'Fjerner logo...');
                     
@@ -434,49 +424,17 @@
                     });
                     
                     if (response.ok) {
-                        showToast('Logo fjernet');
-                        currentLogoSection.style.display = 'none';
                         currentLogoUrl = null;
-                    } else {
-                        const result = await response.json();
-                        throw new Error(result.error || 'Kunne ikke fjerne logo');
-                    }
-                } catch (error) {
-                    showToast('Feil ved fjerning: ' + error.message, 'error');
-                } finally {
-                    showLoading(false);
-                }
-            }
-            
-            // === SAVE FUNCTIONS ===
-            async function saveCompanyInfo() {
-                try {
-                    showLoading(true, 'Lagrer bedriftsinformasjon...');
-                    
-                    const companyInfo = {
-                        name: companyNameInput.value.trim(),
-                        address: companyAddressInput.value.trim(),
-                        phone: companyPhoneInput.value.trim(),
-                        email: companyEmailInput.value.trim(),
-                        cvr: companyCvrInput.value.trim()
-                    };
-                    
-                    const response = await fetch('/api/images/save-settings', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify({ companyInfo })
-                    });
-                    
-                    if (response.ok) {
-                        showToast('Bedriftsinformasjon lagret!');
-                        currentSettings.companyInfo = companyInfo;
+                        currentLogoSection.style.display = 'none';
+                        showToast('Logo fjernet', 'success');
+                        await loadAllSettings(); // Refresh settings
                     } else {
                         const error = await response.json();
-                        throw new Error(error.error || 'Kunne ikke lagre');
+                        throw new Error(error.error || 'Kunne ikke fjerne logo');
                     }
                 } catch (error) {
-                    showToast('Feil ved lagring: ' + error.message, 'error');
+                    console.error('Logo removal error:', error);
+                    showToast('Feil ved fjerning: ' + error.message, 'error');
                 } finally {
                     showLoading(false);
                 }
@@ -500,8 +458,39 @@
                     });
                     
                     if (response.ok) {
-                        showToast('Rapport-innstillinger lagret!');
+                        showToast('Rapport-innstillinger lagret!', 'success');
                         currentSettings.reportSettings = reportSettings;
+                    } else {
+                        const error = await response.json();
+                        throw new Error(error.error || 'Kunne ikke lagre');
+                    }
+                } catch (error) {
+                    showToast('Feil ved lagring: ' + error.message, 'error');
+                } finally {
+                    showLoading(false);
+                }
+            }
+            
+            // NEW: Save quote settings function
+            async function saveQuoteSettings() {
+                try {
+                    showLoading(true, 'Lagrer tilbud-innstillinger...');
+                    
+                    const quoteSettings = {
+                        forbeholdText: forbeholdTextInput.value.trim(),
+                        includeForbehold: includeForbeholdToggle.checked
+                    };
+                    
+                    const response = await fetch('/api/images/save-settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ quoteSettings })
+                    });
+                    
+                    if (response.ok) {
+                        showToast('Tilbud-innstillinger lagret!', 'success');
+                        currentSettings.quoteSettings = quoteSettings;
                     } else {
                         const error = await response.json();
                         throw new Error(error.error || 'Kunne ikke lagre');
@@ -529,6 +518,10 @@
                             senderEmail: senderEmailInput.value.trim(),
                             autoSend: autoSendToggle.checked,
                             copyAdmin: copyAdminToggle.checked
+                        },
+                        quoteSettings: {
+                            forbeholdText: forbeholdTextInput.value.trim(),
+                            includeForbehold: includeForbeholdToggle.checked
                         }
                     };
                     
@@ -540,7 +533,7 @@
                     });
                     
                     if (response.ok) {
-                        showToast('Alle innstillinger lagret!');
+                        showToast('Alle innstillinger lagret!', 'success');
                         currentSettings = { ...currentSettings, ...allSettings };
                     } else {
                         const error = await response.json();
@@ -553,7 +546,7 @@
                 }
             }
             
-            // === UTILITY FUNCTIONS ===
+            // Utility functions
             function showLoading(show, text = 'Laster...') {
                 if (show) {
                     document.getElementById('loading-text').textContent = text;
@@ -563,30 +556,41 @@
                 }
             }
             
-            function showToast(message, type = 'success') {
-                // Simple toast - create element and show briefly
+            function showToast(message, type = 'info') {
+                // Simple toast implementation
                 const toast = document.createElement('div');
+                toast.className = `toast toast-${type}`;
+                toast.textContent = message;
                 toast.style.cssText = `
                     position: fixed;
                     top: 20px;
                     right: 20px;
-                    background: ${type === 'error' ? '#ef4444' : '#10b981'};
-                    color: white;
                     padding: 12px 20px;
                     border-radius: 8px;
-                    font-weight: 500;
-                    z-index: 1000;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    color: white;
+                    font-weight: 600;
+                    z-index: 10000;
+                    transform: translateX(100%);
+                    transition: transform 0.3s ease;
                 `;
-                toast.textContent = message;
+                
+                if (type === 'success') toast.style.background = '#10b981';
+                else if (type === 'error') toast.style.background = '#ef4444';
+                else toast.style.background = '#3b82f6';
+                
                 document.body.appendChild(toast);
                 
+                setTimeout(() => toast.style.transform = 'translateX(0)', 100);
                 setTimeout(() => {
-                    if (toast.parentNode) {
-                        toast.parentNode.removeChild(toast);
-                    }
+                    toast.style.transform = 'translateX(100%)';
+                    setTimeout(() => document.body.removeChild(toast), 300);
                 }, 3000);
             }
+            
+            // Make functions global
+            window.saveReportSettings = saveReportSettings;
+            window.saveQuoteSettings = saveQuoteSettings;
+            window.saveAllSettings = saveAllSettings;
         });
     </script>
 </body>

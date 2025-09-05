@@ -51,12 +51,12 @@ class EmailService {
       
       const report = reportResult.rows[0];
       
-      // Hent kundens faktiske e-post fra Tripletex
-      const customerDetails = await tripletexService.getCustomer(report.customer_id);
-      const customerEmail = customerDetails?.email || customerDetails?.invoiceEmail;
-      
+      // Hent servfixmail-kontaktens e-post fra Tripletex
+      const servfixContact = await tripletexService.getServfixmailContact(report.customer_id);
+      const customerEmail = servfixContact?.email;
+
       if (!customerEmail) {
-        throw new Error('Ingen e-postadresse funnet for kunde');
+          throw new Error('Ingen servfixmail-kontakt funnet for kunde');
       }
       
       // Hent from-adresse fra lagrede innstillinger
@@ -146,6 +146,109 @@ class EmailService {
       throw error;
     }
   }
+  async sendQuoteToCustomer(quoteId, tenantId, pdfBuffer, customerEmail, quote) {
+    try {
+        console.log(`📧 Preparing email for quote ${quoteId} to ${customerEmail}`);
+        
+        // Hent settings for fra-adresse
+        let fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
+        try {
+            const settingsResponse = await fetch(`http://localhost:${process.env.PORT || 3000}/api/images/settings`);
+            if (settingsResponse.ok) {
+                const settings = await settingsResponse.json();
+                fromEmail = settings.reportSettings?.senderEmail || fromEmail;
+            }
+        } catch (error) {
+            console.warn('Could not load sender email, using default:', error.message);
+        }
+        
+        // Parse quote items for email content
+        let items = {};
+        try {
+            items = typeof quote.items === 'string' ? JSON.parse(quote.items) : (quote.items || {});
+        } catch (e) {
+            items = {};
+        }
+        
+        const products = items.products || [];
+        const hours = parseFloat(items.estimatedHours) || 0;
+        
+        // RIKTIG BEREGNING basert på din forklaring:
+        // 1. Timepris = total_amount fra database (allerede beregnet)
+        const timePris = parseFloat(quote.total_amount) || 0;
+        
+        // 2. Materialpris = sum av alle produkter
+        const materialPris = products.reduce((sum, product) => {
+            return sum + ((parseFloat(product.quantity) || 1) * (parseFloat(product.price) || 0));
+        }, 0);
+        
+        // 3. Totalpris eks. mva = timepris + materialpris
+        const totalEksMva = timePris + materialPris;
+        
+        // 4. MVA = 25%
+        const mvaAmount = totalEksMva * 0.25;
+        
+        // 5. Totalt inkl. mva
+        const totalInklMva = totalEksMva + mvaAmount;
+        
+        console.log(`📧 Price calculation:`, {
+            hours,
+            timePris,
+            materialPris,
+            totalEksMva,
+            mvaAmount,
+            totalInklMva
+        });
+        
+        // Email innhold med korrekt formatering
+        const mailOptions = {
+            from: fromEmail,
+            to: customerEmail,
+            subject: `Tilbud fra Air-Tech AS - ${quote.customer_name}`,
+            html: `
+                <h2>Tilbud fra Air-Tech AS</h2>
+                <p>Hei,</p>
+                <p>Vedlagt finner du tilbud for serviceoppdrag.</p>
+                
+                <div style="background: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                    <h3>Tilbudssammendrag:</h3>
+                    <p><strong>Kunde:</strong> ${quote.customer_name}</p>
+                    <p><strong>Beskrivelse:</strong> ${items.description || 'Serviceoppdrag'}</p>
+                    ${hours > 0 ? `<p><strong>Estimerte timer:</strong> ${hours} = ${timePris.toLocaleString('nb-NO')} kr</p>` : ''}
+                    ${materialPris > 0 ? `<p><strong>Materialer:</strong> ${materialPris.toLocaleString('nb-NO')} kr</p>` : ''}
+                    <p style="background: #e7f3ff; padding: 8px; border-radius: 3px; margin-top: 10px;"><strong>Totalt inkl. mva: ${totalInklMva.toLocaleString('nb-NO')} kr</strong></p>
+                </div>
+                
+                <p>Dette tilbudet er gyldig i 30 dager fra dagens dato.</p>
+                <p>Ta gjerne kontakt dersom du har spørsmål.</p>
+                
+                <p>Med vennlig hilsen,<br>
+                <strong>Air-Tech AS</strong><br>
+                post@air-tech.no<br>
+                +47 22 00 00 00</p>
+            `,
+            attachments: [{
+                filename: `tilbud_${quoteId}.pdf`,
+                content: pdfBuffer,
+                contentType: 'application/pdf'
+            }]
+        };
+        
+        console.log(`📧 Sending email from ${fromEmail} to ${customerEmail}`);
+        const result = await this.transporter.sendMail(mailOptions);
+        
+        return {
+            success: true,
+            messageId: result.messageId,
+            sentTo: customerEmail,
+            fromEmail: fromEmail
+        };
+        
+    } catch (error) {
+        console.error('📧 Email sending error:', error);
+        throw error;
+    }
+}
 }
 
 module.exports = new EmailService();

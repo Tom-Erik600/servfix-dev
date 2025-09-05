@@ -5,11 +5,12 @@ document.addEventListener('DOMContentLoaded', loadDashboardData);
 async function loadDashboardData() {
     try {
         // Hent data fra API
-        const [ordersResponse, customersResponse, techniciansResponse, reportsResponse] = await Promise.all([
+        const [ordersResponse, customersResponse, techniciansResponse, reportsResponse, quotesResponse] = await Promise.all([
             fetch('/api/admin/orders', { credentials: 'include' }),
             fetch('/api/admin/customers', { credentials: 'include' }),
             fetch('/api/admin/technicians', { credentials: 'include' }),
-            fetch('/api/admin/reports', { credentials: 'include' })
+            fetch('/api/admin/reports', { credentials: 'include' }),
+            fetch('/api/quotes', { credentials: 'include' })
         ]);
         
         if (!ordersResponse.ok || !customersResponse.ok || !techniciansResponse.ok || !reportsResponse.ok) {
@@ -21,6 +22,13 @@ async function loadDashboardData() {
         const technicians = await techniciansResponse.json();
         const reportsData = await reportsResponse.json();
         
+        let quotes = [];
+        if (quotesResponse.ok) {
+            quotes = await quotesResponse.json();
+        } else {
+            console.error("Klarte ikke å hente tilbudsdata:", quotesResponse.statusText);
+        }
+
         // Handle both array and object responses
         const ordersArray = Array.isArray(orders) ? orders : (orders.data || orders.orders || []);
         const customersArray = Array.isArray(customers) ? customers : (customers.data || customers.customers || []);
@@ -39,20 +47,22 @@ async function loadDashboardData() {
         console.log('Customers count:', customersArray.length);
         console.log('Technicians count:', techniciansArray.length);
         console.log('Reports count:', reportsArray.length);
+        console.log('Quotes count:', quotes.length);
         
-        populateDashboard(ordersArray, customersArray, techniciansArray, reportsArray);
+        populateDashboard(ordersArray, customersArray, techniciansArray, reportsArray, quotes);
     } catch (error) {
         console.error("Klarte ikke å laste data for dashbordet:", error);
         showErrorState();
     }
 }
 
-function populateDashboard(orders, customers, technicians, reports) {
+function populateDashboard(orders, customers, technicians, reports, quotes) {
     // Sjekk at vi har gyldige arrays
     orders = orders || [];
     customers = customers || [];
     technicians = technicians || [];
     reports = reports || [];
+    quotes = quotes || [];
     
     // Bygg customer map - sjekk både name og customer_name
     const customerMap = new Map();
@@ -72,18 +82,16 @@ function populateDashboard(orders, customers, technicians, reports) {
         }
     });
 
-    populateKpiCards(orders, technicians, reports);
+    populateKpiCards(orders, technicians, reports, quotes);
     populateTodaysTable(orders, customerMap, technicianMap);
     populateWeeklyTable(orders, customerMap, technicianMap);
+    populateUnfinishedTable(orders, customerMap, technicianMap); // NY
     
     // Gjør KPI-kortene klikkbare
     makeKpiCardsClickable();
-    
-    // Fjern uplanlagte oppdrag som forespurt
-    clearUnassignedTable();
 }
 
-function populateKpiCards(orders, technicians, reports) {
+function populateKpiCards(orders, technicians, reports, quotes) {
     const today = new Date().toISOString().slice(0, 10);
     const now = new Date();
     const startOfWeek = getStartOfWeek(now);
@@ -310,8 +318,10 @@ function populateKpiCards(orders, technicians, reports) {
         !r.is_invoiced && r.pdf_generated  // Må ha generert PDF for å kunne faktureres
     ).length;
 
-    // Tilbud venter på godkjenning - sett til 0 foreløpig
-    const tilbudVenter = 0;
+    // Tilbud venter på godkjenning
+    const tilbudVenter = Array.isArray(quotes) 
+        ? quotes.filter(q => q.status === 'pending' || q.status === 'sent').length
+        : 0;
 
     // Debug-logging for alle KPI-verdier
     console.log('=== KPI Beregninger ===');
@@ -447,7 +457,8 @@ function populateTodaysTable(orders, customerMap, technicianMap) {
         const customerId = order.customerId || order.customer_id;
         const technicianId = order.technicianId || order.technician_id;
         const serviceType = order.serviceType || order.service_type || 'Service';
-        const scheduledTime = order.scheduledTime || order.scheduled_time || 'Ikke satt';
+        const scheduledDate = parseDate(order.scheduledDate || order.scheduled_date);
+        const dateDisplay = scheduledDate ? formatDateNorwegian(scheduledDate) : 'Ikke satt';
         
         return `
         <tr style="${rowStyle}">
@@ -455,8 +466,8 @@ function populateTodaysTable(orders, customerMap, technicianMap) {
             <td>${technicianMap.get(technicianId) || '<span style="color: #EF4444;">Ikke tildelt</span>'}</td>
             <td>${customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde'}</td>
             <td>${serviceType}</td>
-            <td>${scheduledTime}</td>
-            <td><span class="status-badge status-${order.status || 'pending'}">${getStatusText(order.status)}</span></td>
+            <td>${dateDisplay}</td>
+            <td><span class="status-badge status-${deriveOrderStatus(order) || 'pending'}">${getStatusText(deriveOrderStatus(order))}</span></td>
         </tr>
     `}).join('');
 }
@@ -520,7 +531,7 @@ function populateWeeklyTable(orders, customerMap, technicianMap) {
     if (weeklyOrders.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="5" style="text-align: center; padding: 40px; color: #9CA3AF;">
+                <td colspan="6" style="text-align: center; padding: 40px; color: #9CA3AF;">
                     <div style="font-size: 48px; margin-bottom: 10px;">📋</div>
                     <div style="font-weight: 500;">Ingen planlagte oppdrag denne uken</div>
                 </td>
@@ -557,6 +568,7 @@ function populateWeeklyTable(orders, customerMap, technicianMap) {
         const orderNumber = order.orderNumber || order.order_number || order.id;
         const customerId = order.customerId || order.customer_id;
         const technicianId = order.technicianId || order.technician_id;
+        const serviceType = order.serviceType || order.service_type || 'Service';
         const scheduledDate = parseDate(order.scheduledDate || order.scheduled_date);
         const dateDisplay = scheduledDate ? formatDateNorwegian(scheduledDate) : 'Ikke satt';
         
@@ -565,30 +577,82 @@ function populateWeeklyTable(orders, customerMap, technicianMap) {
             <td><strong>${orderNumber}</strong></td>
             <td>${technicianMap.get(technicianId) || '<span style="color: #EF4444;">Ikke tildelt</span>'}</td>
             <td>${customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde'}</td>
+            <td>${serviceType}</td>
             <td>${dateDisplay}</td>
-            <td><span class="status-badge status-${order.status || 'pending'}">${getStatusText(order.status)}</span></td>
+            <td><span class="status-badge status-${deriveOrderStatus(order) || 'pending'}">${getStatusText(deriveOrderStatus(order))}</span></td>
         </tr>
     `}).join('');
 }
 
-function clearUnassignedTable() {
-    // Fjern eller blank ut uplanlagte oppdrag som forespurt
-    const unassignedSection = document.getElementById('utildelte-oppdrag');
-    if (unassignedSection) {
-        unassignedSection.style.display = 'none';
-    }
+function populateUnfinishedTable(orders, customerMap, technicianMap) {
+    const today = new Date().toISOString().slice(0, 10);
     
-    // Alternativt, hvis vi vil beholde seksjonen men vise den tom:
-    const tbody = document.getElementById('utildelte-oppdrag-liste');
-    if (tbody) {
+    const unfinishedOrders = orders.filter(o => {
+        // Skip fullførte ordre
+        if (o.status === 'completed') return false;
+        
+        const dateField = o.scheduledDate || o.scheduled_date;
+        const orderDate = parseDate(dateField);
+        
+        // Sjekk at vi har en gyldig dato
+        if (!orderDate) return false;
+        
+        const orderDateString = orderDate.toISOString().slice(0, 10);
+        
+        // Inkluder bare ordre som har dato før i dag (i går og tidligere)
+        if (orderDateString < today) {
+            // Ordre fra i går eller tidligere som ikke er fullført
+            const derivedStatus = deriveOrderStatus(o);
+            return derivedStatus === 'in_progress' || derivedStatus === 'scheduled' || derivedStatus === 'pending';
+        }
+        
+        return false;
+    });
+
+    const tbody = document.getElementById('uferdige-oppdrag-liste');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+
+    if (unfinishedOrders.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="3" style="text-align: center; padding: 20px; color: #9CA3AF;">
-                    <!-- Tom seksjon -->
+                <td colspan="6" style="text-align: center; padding: 40px; color: #9CA3AF;">
+                    <div style="font-size: 48px; margin-bottom: 10px;">🎉</div>
+                    <div style="font-weight: 500;">Ingen uferdige oppdrag</div>
+                    <div style="font-size: 14px; margin-top: 8px;">Alt er på stell!</div>
                 </td>
             </tr>`;
+        return;
     }
+
+    // Sorter etter dato (eldste først)
+    unfinishedOrders.sort((a, b) => {
+        const dateA = parseDate(a.scheduledDate || a.scheduled_date) || new Date(0);
+        const dateB = parseDate(b.scheduledDate || b.scheduled_date) || new Date(0);
+        return dateA.getTime() - dateB.getTime();
+    });
+
+    tbody.innerHTML = unfinishedOrders.map(order => {
+        const orderNumber = order.orderNumber || order.order_number || order.id;
+        const customerId = order.customerId || order.customer_id;
+        const technicianId = order.technicianId || order.technician_id;
+        const serviceType = order.serviceType || order.service_type || 'Service';
+        const scheduledDate = parseDate(order.scheduledDate || order.scheduled_date);
+        const dateDisplay = scheduledDate ? formatDateNorwegian(scheduledDate) : 'Ikke satt';
+        
+        return `
+        <tr>
+            <td><strong>${orderNumber}</strong></td>
+            <td>${technicianMap.get(technicianId) || '<span style="color: #EF4444;">Ikke tildelt</span>'}</td>
+            <td>${customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde'}</td>
+            <td>${serviceType}</td>
+            <td>${dateDisplay}</td>
+            <td><span class="status-badge status-${deriveOrderStatus(order) || 'pending'}">${getStatusText(deriveOrderStatus(order))}</span></td>
+        </tr>
+    `}).join('');
 }
+
 
 // Hjelpefunksjon for å parse datoer robust
 function parseDate(dateValue) {
@@ -677,6 +741,24 @@ function getStatusText(status) {
     return statusMap[status] || status || 'Ukjent';
 }
 
+// === AVLED ORDRE-STATUS BASERT PÅ ANLEGG-AKTIVITET ===
+function deriveOrderStatus(order) {
+    // Hvis ordre allerede er eksplisitt markert som completed, returner det
+    if (order.status === 'completed') return 'completed';
+    
+    // Sjekk equipment og service_reports status
+    if (order.equipment && order.equipment.length > 0) {
+        const anyServiceStarted = order.equipment.some(eq => 
+            eq.serviceReportStatus === 'in_progress' || 
+            eq.serviceReportStatus === 'completed'
+        );
+        
+        if (anyServiceStarted) return 'in_progress';
+    }
+    
+    return order.status || 'scheduled';
+}
+
 function showErrorState() {
     // Vis feilmelding i alle KPI-kort
     ['kpi-oppdrag-idag', 'kpi-fullfort-uke', 'kpi-rapporter-ikke-sendt', 
@@ -696,9 +778,11 @@ function showErrorState() {
     
     const dagensListe = document.getElementById('dagens-oppdrag-liste');
     const ukensListe = document.getElementById('ukens-oppdrag-liste');
-    
+    const uferdigeListe = document.getElementById('uferdige-oppdrag-liste');
+
     if (dagensListe) dagensListe.innerHTML = errorMessage;
-    if (ukensListe) ukensListe.innerHTML = errorMessage.replace('colspan="6"', 'colspan="5"');
+    if (ukensListe) ukensListe.innerHTML = errorMessage;
+    if (uferdigeListe) uferdigeListe.innerHTML = errorMessage;
 }
 
 // Auto-refresh hver 5. minutt

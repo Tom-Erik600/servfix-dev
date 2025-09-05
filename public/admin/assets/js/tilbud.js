@@ -1,443 +1,681 @@
-// air-tech-adminweb/assets/js/tilbud.js - Forbedret versjon med bedre design
-document.addEventListener('DOMContentLoaded', async () => {
-    const quotesContainer = document.getElementById('quotes-container');
-    const statusFilter = document.getElementById('status-filter');
+// public/admin/assets/js/tilbud.js
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🔄 Tilbud.js laster...');
+    
     let allQuotes = [];
     let selectedQuoteId = null;
+    const statusFilter = document.getElementById('status-filter');
 
-    await loadData();
+    loadData();
     setupEventListeners();
 
     async function loadData() {
         try {
-            const [quotes, customers, orders] = await Promise.all([
-                fetch('/api/quotes').then(res => res.json()),
-                fetch('/api/customers').then(res => res.json()),
-                fetch('/api/orders').then(res => res.json())
-            ]);
-
-            allQuotes = quotes.map(quote => {
-                const order = orders.find(o => o.id === quote.orderId);
-                const customer = order ? customers.find(c => c.id === order.customerId) : null;
-                return { ...quote, order, customer };
-            });
-
+            const response = await fetch('/api/quotes', { credentials: 'include' });
+            if (!response.ok) throw new Error('Kunne ikke laste tilbud');
+            
+            allQuotes = await response.json();
+            console.log('📋 Tilbud lastet:', allQuotes.length);
+            
             renderQuotes(allQuotes);
         } catch (error) {
-            console.error('Feil ved lasting av data:', error);
-            quotesContainer.innerHTML = '<div class="empty-state"><p style="color: red;">Kunne ikke laste tilbud</p></div>';
+            console.error('Feil ved lasting av tilbud:', error);
+            showToast('Kunne ikke laste tilbud', 'error');
         }
     }
 
     function renderQuotes(quotes) {
-        if (quotes.length === 0) {
-            quotesContainer.innerHTML = '<div class="empty-state"><p>Ingen tilbud funnet</p></div>';
+        const quotesListContainer = document.getElementById('quotes-container');
+        
+        if (!quotesListContainer) {
+            console.error('Quotes list container ikke funnet');
             return;
         }
 
-        quotesContainer.innerHTML = quotes.map(quote => `
+        if (quotes.length === 0) {
+            quotesListContainer.innerHTML = '<div class="empty-state">Ingen tilbud funnet</div>';
+            return;
+        }
+
+        quotesListContainer.innerHTML = quotes.map(quote => `
             <div class="quote-item ${selectedQuoteId === quote.id ? 'selected' : ''}" 
                  data-quote-id="${quote.id}">
                 <div class="quote-header">
-                    <span class="quote-title">${quote.description.substring(0, 40)}${quote.description.length > 40 ? '...' : ''}</span>
+                    <span class="quote-title">${(quote.description || 'Uten beskrivelse').substring(0, 40)}${(quote.description || '').length > 40 ? '...' : ''}</span>
                     <span class="quote-status status-${quote.status}">${getStatusText(quote.status)}</span>
                 </div>
                 <div class="quote-meta">
                     <strong>Kunde:</strong> ${quote.customer?.name || 'Ukjent'} | 
-                    <strong>Ordre:</strong> ${quote.order?.orderNumber || quote.orderId}
+                    <strong>Ordre:</strong> ${quote.order?.order_number || quote.order_id}
                 </div>
                 <div class="quote-description">
-                    ${quote.description.length > 80 ? quote.description.substring(0, 80) + '...' : quote.description}
+                    ${(quote.description || 'Ingen beskrivelse').length > 80 ? (quote.description || '').substring(0, 80) + '...' : (quote.description || 'Ingen beskrivelse')}
                 </div>
-                <div class="quote-pricing">
-                    <span>Estimat: ${quote.estimatedPrice} kr</span>
-                    <span>${quote.estimatedHours} timer</span>
+                <div class="quote-price">
+                    <strong>${quote.estimatedHours || 0} timer</strong>
+                    ${quote.products && quote.products.length > 0 ? `<span class="materials-indicator">• materialer</span>` : ''}
+                    • <strong>${formatCurrency(
+        ((parseFloat(quote.total_amount) || 0) + 
+        ((quote.products || []).reduce((sum, p) => sum + ((p.quantity || 1) * (p.price || 0)), 0))) * 1.25
+    )}</strong>
                 </div>
             </div>
         `).join('');
+
+        setupQuoteClickHandlers();
+    }
+
+    function setupQuoteClickHandlers() {
+        document.querySelectorAll('.quote-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const quoteId = item.dataset.quoteId;
+                selectQuote(quoteId);
+            });
+        });
+    }
+
+    function selectQuote(quoteId) {
+        selectedQuoteId = quoteId;
+        const quote = allQuotes.find(q => q.id === quoteId);
+        
+        // Update selection styling
+        document.querySelectorAll('.quote-item').forEach(item => {
+            item.classList.toggle('selected', item.dataset.quoteId === quoteId);
+        });
+
+        if (quote) {
+            displayQuoteDetails(quote);
+        }
+    }
+
+    function displayQuoteDetails(quote) {
+    const detailsContent = document.getElementById('quote-details-content');
+    const detailsPlaceholder = document.getElementById('quote-details-placeholder');
+    
+    if (!detailsContent || !detailsPlaceholder) return;
+    
+    detailsPlaceholder.style.display = 'none';
+    detailsContent.style.display = 'block';
+    
+    // Parse items data safely
+    let itemsData = {};
+    try {
+        if (typeof quote.items === 'string') {
+            itemsData = JSON.parse(quote.items);
+        } else if (quote.items && typeof quote.items === 'object') {
+            itemsData = quote.items;
+        }
+    } catch (e) {
+        console.warn('Could not parse quote items:', e);
+    }
+
+    const hours = quote.estimatedHours || itemsData.estimatedHours || 0;
+    const products = quote.products || itemsData.products || [];
+
+    // KORREKT LOGIKK: total_amount er KUN arbeidskostnaden
+    const arbeidsBelop = parseFloat(quote.total_amount) || 0;
+
+    // Beregn materialkostnad separat
+    const materialCost = products.reduce((sum, p) => sum + ((p.quantity || 1) * (p.price || 0)), 0);
+
+    // Total eks MVA = arbeid + materialer
+    const totalEksMva = arbeidsBelop + materialCost;
+
+    // MVA og totalt inkl MVA
+    const mvaAmount = totalEksMva * 0.25;
+    const totalInklMva = totalEksMva + mvaAmount;
+
+    console.log('Prisberegning (Frontend):', {
+        arbeid: arbeidsBelop,
+        materialer: materialCost,
+        totalEksMva: totalEksMva,
+        mva: mvaAmount,
+        totalInklMva: totalInklMva
+    });
+
+    detailsContent.innerHTML = `
+        <div class="quote-details-header-modern">
+            <div class="quote-title-section">
+                <h2 class="quote-title-main">Tilbud #${quote.id}</h2>
+                ${quote.status === 'sent' && quote.sent_date ? `
+                    <div class="sent-status-badge">
+                        <span class="sent-icon">✉️</span>
+                        <span>Sendt ${new Date(quote.sent_date).toLocaleDateString('no-NO', { 
+                            day: 'numeric', month: 'short', year: 'numeric' 
+                        })}</span>
+                    </div>
+                ` : ''}
+            </div>
+            
+            <div class="action-buttons-modern">
+                <button class="btn-modern btn-preview" onclick="generateQuotePDF('${quote.id}')">
+                    📄 Forhåndsvisning
+                </button>
+                <button class="btn-modern btn-edit" onclick="editQuote('${quote.id}')">
+                    ✏️ Rediger
+                </button>
+                ${quote.status === 'pending' || quote.status === 'rejected' ? `
+                    <button class="btn-modern btn-send" onclick="sendQuoteToCustomer('${quote.id}')">
+                        ✉️ Send til kunde
+                    </button>
+                ` : ''}
+                ${quote.status !== 'accepted' && quote.status !== 'rejected_customer' ? `
+                    <button class="btn-modern btn-reject" onclick="rejectQuote('${quote.id}')">
+                        ❌ Avvis
+                    </button>
+                ` : ''}
+            </div>
+        </div>
+
+        <div style="margin-top: 24px;"></div>
+
+        <div class="detail-section customer-section">
+            <span class="detail-label">Kunde</span>
+            <div class="detail-value customer-info">
+                ${quote.customer?.customerNumber ? `<div class="customer-number">Kundenr: ${quote.customer.customerNumber}</div>` : ''}
+                <div class="customer-name">${quote.customer?.name || 'Ukjent kunde'}</div>
+            </div>
+        </div>
+        
+        <div class="detail-section">
+            <span class="detail-label">Ordre</span>
+            <div class="detail-value">${quote.order?.order_number || `Ordre #${quote.order_id}`}</div>
+        </div>
+        
+        <div class="detail-section">
+            <span class="detail-label">Beskrivelse</span>
+            <div class="detail-value">${quote.description || 'Ingen beskrivelse'}</div>
+        </div>
+        
+        <div class="detail-section estimate-summary">
+            <span class="detail-label">Estimat</span>
+            <div class="estimate-details">
+    ${hours > 0 ? `
+        <div class="estimate-row">
+            <span class="estimate-label">Arbeid (${hours} timer)</span>
+            <span class="estimate-value">${formatCurrency(arbeidsBelop)}</span>
+        </div>
+    ` : ''}
+    
+    <div class="estimate-row materials-header">
+        <span class="estimate-label">Materialer</span>
+        <span class="estimate-value">${formatCurrency(materialCost)}</span>
+    </div>
+    
+    ${products.length > 0 ? 
+        products.map(product => `
+            <div class="estimate-row material-item">
+                <span class="material-name">${product.name || 'Ukjent produkt'}</span>
+                <span class="material-price">${formatCurrency((product.quantity || 1) * (product.price || 0))}</span>
+            </div>
+        `).join('')
+    : '<div class="estimate-row material-item"><span class="material-name">Ingen materialer</span></div>'}
+    
+    <div class="estimate-row total-row">
+        <span class="estimate-label"><strong>Totalt eks. mva</strong></span>
+        <span class="estimate-value"><strong>${formatCurrency(totalEksMva)}</strong></span>
+    </div>
+    <div class="estimate-row">
+        <span class="estimate-label">MVA (25%)</span>
+        <span class="estimate-value">${formatCurrency(mvaAmount)}</span>
+    </div>
+    <div class="estimate-row total-row final">
+        <span class="estimate-label"><strong>Totalt ink. mva</strong></span>
+        <span class="estimate-value"><strong>${formatCurrency(totalInklMva)}</strong></span>
+    </div>
+</div>
+        </div>
+    `;
+}
+
+    function setupEventListeners() {
+        statusFilter?.addEventListener('change', (e) => {
+            const filterValue = e.target.value;
+            const filteredQuotes = filterValue === 'all' 
+                ? allQuotes 
+                : allQuotes.filter(quote => quote.status === filterValue);
+            renderQuotes(filteredQuotes);
+        });
+    }
+
+    function formatCurrency(amount) {
+        return new Intl.NumberFormat('no-NO', {
+            style: 'currency',
+            currency: 'NOK',
+            minimumFractionDigits: 0
+        }).format(amount || 0);
     }
 
     function getStatusText(status) {
         const statusMap = {
             'pending': 'Venter',
             'sent': 'Sendt',
-            'rejected': 'Avvist'
+            'accepted': 'Godkjent',
+            'rejected': 'Avvist',
+            'rejected_customer': 'Avvist av kunde',
+            'rejected_admin': 'Avvist av admin'
         };
         return statusMap[status] || status;
     }
 
-    function displayQuoteDetails(quote) {
-        const placeholder = document.getElementById('quote-details-placeholder');
-        const content = document.getElementById('quote-details-content');
-        
-        placeholder.style.display = 'none';
-        content.classList.add('active');
-        
-        content.innerHTML = `
-            <div class="detail-section">
-                <div class="detail-label">Kunde</div>
-                <div class="detail-value">${quote.customer?.name || 'Ukjent kunde'}</div>
-            </div>
-            
-            <div class="detail-section">
-                <div class="detail-label">Ordre</div>
-                <div class="detail-value">${quote.order?.orderNumber || quote.orderId}</div>
-            </div>
-            
-            <div class="detail-section">
-                <div class="detail-label">Beskrivelse</div>
-                <div class="detail-value" style="white-space: pre-wrap;">${quote.description}</div>
-            </div>
-            
-            <div class="detail-section">
-                <div class="detail-label">Estimat</div>
-                <div class="detail-value">
-                    <strong>${quote.estimatedPrice} kr</strong> (${quote.estimatedHours} timer)
-                </div>
-            </div>
-            
-            ${quote.products && quote.products.length > 0 ? `
-                <div class="detail-section">
-                    <div class="detail-label">Produkter/Materialer</div>
-                    <ul class="products-list">
-                        ${quote.products.map(product => `
-                            <li class="product-item">
-                                <span>${product.name}</span>
-                                <span>${product.price} kr</span>
-                            </li>
-                        `).join('')}
-                    </ul>
-                </div>
-            ` : ''}
-            
-            <div class="detail-section">
-                <div class="detail-label">Status</div>
-                <div class="detail-value">
-                    <span class="quote-status status-${quote.status}">${getStatusText(quote.status)}</span>
-                </div>
-            </div>
-            
-            <div class="detail-section">
-                <div class="detail-label">Opprettet</div>
-                <div class="detail-value">${new Date(quote.createdAt).toLocaleString('no-NO')}</div>
-            </div>
-            
-            <div class="action-buttons">
-                ${quote.status === 'pending' ? `
-                    <button class="btn btn-approve" onclick="updateQuoteStatus('${quote.id}', 'sent')">
-                        Send til kunde
-                    </button>
-                    <button class="btn btn-reject" onclick="updateQuoteStatus('${quote.id}', 'rejected')">
-                        Avvis
-                    </button>
-                ` : ''}
-                
-                <button class="btn btn-edit" onclick="openEditModal('${quote.id}')">
-                    Rediger tilbud
-                </button>
-                
-                <button class="btn" onclick="deleteQuote('${quote.id}')" style="background: #6c757d; color: white;">
-                    Slett tilbud
-                </button>
-            </div>
-        `;
-    }
+    // Global quote action functions
+    window.generateQuotePDF = async function(quoteId) {
+        try {
+            console.log('Opening quote preview for:', quoteId);
+            const modal = document.getElementById('quote-preview-modal');
+            const iframe = document.getElementById('quote-preview-iframe');
+            const viewPdfBtn = document.getElementById('view-pdf-btn');
 
-    // Global funksjoner som kan kalles fra HTML
-    window.updateQuoteStatus = async function(quoteId, newStatus) {
+            if (!modal || !iframe || !viewPdfBtn) {
+                throw new Error('Modal elements not found');
+            }
+
+            // Load HTML preview
+            iframe.src = `/api/quotes/${quoteId}/html-preview`;
+            
+            // Setup PDF download button
+            viewPdfBtn.onclick = async () => {
+                try {
+                    const response = await fetch(`/api/quotes/${quoteId}/pdf`, {
+                        credentials: 'include'
+                    });
+                    
+                    if (!response.ok) throw new Error('PDF generation failed');
+                    
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `tilbud-${quoteId}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                } catch (error) {
+                    console.error('PDF download error:', error);
+                    showToast('Kunne ikke laste ned PDF', 'error');
+                }
+            };
+
+            modal.classList.add('show');
+        } catch (error) {
+            console.error('Error opening quote preview:', error);
+            showToast('Kunne ikke åpne forhåndsvisning', 'error');
+        }
+    };
+
+    window.closeQuotePreview = function() {
+        const modal = document.getElementById('quote-preview-modal');
+        if (modal) {
+            modal.classList.remove('show');
+        }
+    };
+
+    window.sendQuoteToCustomer = async function(quoteId) {
+    const quote = allQuotes.find(q => q.id === quoteId);
+    if (!quote) return; 
+    
+    const confirmMessage = `Send tilbud til ${quote.customer?.name || 'kunde'}?\n\nTilbudet vil bli sendt til kundens registrerte e-postadresse.`;
+    
+    if (!confirm(confirmMessage)) return; 
+    
+    try {
+        console.log('Sending quote to customer:', quoteId);
+        
+        const response = await fetch(`/api/quotes/${quoteId}/send-to-customer`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            showToast(`Tilbud sendt til ${result.sentTo}`, 'success');
+            
+            // Oppdater lokal status til 'sent' for umiddelbar UI oppdatering
+            const quoteIndex = allQuotes.findIndex(q => q.id === quoteId);
+            if (quoteIndex !== -1) {
+                allQuotes[quoteIndex].status = 'sent';
+                allQuotes[quoteIndex].sent_date = new Date().toISOString();
+                selectQuote(quoteId); // Refresh display
+            }
+            
+            await loadData(); // Full reload for å få server data
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'Kunne ikke sende tilbud');
+        }
+    } catch (error) {
+        console.error('Error sending quote:', error);
+        showToast('Feil ved sending: ' + error.message, 'error');
+    }
+};
+
+    window.rejectQuote = async function(quoteId) {
+        const quote = allQuotes.find(q => q.id === quoteId);
+        if (!quote) return; 
+        
+        if (!confirm(`Avvis tilbud for ${quote.customer?.name || 'kunde'}?`)) return; 
+        
         try {
             const response = await fetch(`/api/quotes/${quoteId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: newStatus })
+                credentials: 'include',
+                body: JSON.stringify({ status: 'rejected_admin' })
             });
 
             if (!response.ok) throw new Error('Oppdatering feilet');
 
-            const quoteIndex = allQuotes.findIndex(q => q.id === quoteId);
-            if (quoteIndex !== -1) {
-                allQuotes[quoteIndex].status = newStatus;
-                renderQuotes(allQuotes);
-                
-                if (selectedQuoteId === quoteId) {
-                    displayQuoteDetails(allQuotes[quoteIndex]);
-                }
-            }
-
-            showToast(`Tilbud ${getStatusText(newStatus).toLowerCase()}`, 'success');
+            await loadData();
+            showToast('Tilbud avvist av admin', 'success');
         } catch (error) {
             console.error('Feil ved oppdatering:', error);
             showToast('Kunne ikke oppdatere tilbud', 'error');
         }
     };
 
-    window.openEditModal = function(quoteId) {
+    // Edit Quote Functions
+    window.editQuote = function(quoteId) {
         const quote = allQuotes.find(q => q.id === quoteId);
-        if (!quote) return;
+        if (quote) {
+            openEditModal(quote);
+        } else {
+            showToast('Fant ikke tilbudet som skal redigeres.', 'error');
+        }
+    };
+
+    function openEditModal(quote) {
+        const formContainer = document.getElementById('edit-quote-form-container');
+        const modal = document.getElementById('edit-quote-modal');
+        const saveBtn = document.getElementById('save-quote-btn');
+
+        if (!formContainer || !modal || !saveBtn) {
+            showToast('Modal elementer ikke funnet', 'error');
+            return;
+        }
+
+        // Parse items data safely
+        let itemsData = {};
+        try {
+            itemsData = typeof quote.items === 'string' ? JSON.parse(quote.items) : (quote.items || {});
+        } catch (e) {
+            console.warn('Could not parse quote items for editing:', e);
+        }
 
         const products = quote.products || [];
-        const productsHTML = products.map((product, index) => `
-            <div class="product-row" data-index="${index}">
-                <div class="product-inputs">
-                    <input type="text" value="${product.name}" placeholder="Produktnavn" class="product-name-input" data-field="name" data-index="${index}">
-                    <input type="text" value="${product.price}" placeholder="0" class="product-price-input" data-field="price" data-index="${index}">
+
+        formContainer.innerHTML = `
+            <form id="edit-quote-form">
+                <div class="form-group">
+                    <label for="edit-description">Beskrivelse</label>
+                    <textarea id="edit-description" class="form-control" rows="3" required>${quote.description || ''}</textarea>
                 </div>
-                <button type="button" class="remove-product-btn" onclick="removeProduct(${index})">
-                    <span>×</span>
-                </button>
-            </div>
-        `).join('');
-
-        // Beregn total
-        const totalProducts = products.reduce((sum, p) => sum + (parseFloat(p.price) || 0), 0);
-        const totalWork = (parseFloat(quote.estimatedPrice) || 0);
-        const grandTotal = totalProducts + totalWork;
-
-        const modalHTML = `
-            <div class="modal-overlay-custom" id="edit-modal">
-                <div class="modal-content-custom">
-                    <div class="modal-header-custom">
-                        <h3>Rediger tilbud</h3>
-                        <button type="button" class="close-btn-custom" onclick="closeEditModal()">×</button>
-                    </div>
-                    
-                    <div class="modal-body-custom">
-                        <div class="form-section">
-                            <label class="form-label">Beskrivelse av arbeid</label>
-                            <textarea id="edit-description" class="form-textarea" placeholder="Beskriv arbeidsoppgaven som trenger tilbud..." rows="4">${quote.description}</textarea>
-                        </div>
-                        
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-label">Estimerte timer</label>
-                                <input type="text" id="edit-hours" value="${quote.estimatedHours}" class="form-input" placeholder="0">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Totalpris for arbeid (kr)</label>
-                                <input type="text" id="edit-price" value="${quote.estimatedPrice}" class="form-input" placeholder="0">
-                            </div>
-                        </div>
-                        
-                        <div class="form-section">
-                            <div class="products-header">
-                                <label class="form-label">Produkter/materialer</label>
-                                <button type="button" class="add-product-btn-custom" onclick="addProduct()">
-                                    + Legg til produkt
-                                </button>
-                            </div>
-                            <div id="products-container" class="products-container">
-                                ${productsHTML}
-                            </div>
-                        </div>
-                        
-                        <div class="totals-section">
-                            <div class="total-row">
-                                <span>Produkter:</span>
-                                <span id="products-total">${totalProducts.toLocaleString('no-NO')} kr</span>
-                            </div>
-                            <div class="total-row">
-                                <span>Arbeid:</span>
-                                <span id="work-total">${totalWork.toLocaleString('no-NO')} kr</span>
-                            </div>
-                            <div class="total-row grand-total">
-                                <span>Totalt:</span>
-                                <span id="grand-total">${grandTotal.toLocaleString('no-NO')} kr</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="modal-footer-custom">
-                        <button type="button" class="btn-secondary-custom" onclick="closeEditModal()">Avbryt</button>
-                        <button type="button" class="btn-preview-custom" disabled title="Kommer snart">Forhåndsvisning</button>
-                        <button type="button" class="btn-primary-custom" onclick="saveQuoteChanges('${quote.id}')">Lagre endringer</button>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
-        setupModalEventListeners();
-    };
-
-    function setupModalEventListeners() {
-        // Event listeners for sum-beregning
-        document.addEventListener('input', function(e) {
-            if (e.target.matches('.product-price-input') || e.target.matches('#edit-price')) {
-                updateTotals();
-            }
-        });
-    }
-
-    function updateTotals() {
-        const productInputs = document.querySelectorAll('.product-price-input');
-        const workPriceInput = document.getElementById('edit-price');
-        
-        let productsTotal = 0;
-        productInputs.forEach(input => {
-            const price = parseFloat(input.value) || 0;
-            productsTotal += price;
-        });
-        
-        const workTotal = parseFloat(workPriceInput?.value) || 0;
-        const grandTotal = productsTotal + workTotal;
-        
-        // Oppdater visning
-        const productsSpan = document.getElementById('products-total');
-        const workSpan = document.getElementById('work-total');
-        const grandSpan = document.getElementById('grand-total');
-        
-        if (productsSpan) productsSpan.textContent = `${productsTotal.toLocaleString('no-NO')} kr`;
-        if (workSpan) workSpan.textContent = `${workTotal.toLocaleString('no-NO')} kr`;
-        if (grandSpan) grandSpan.textContent = `${grandTotal.toLocaleString('no-NO')} kr`;
-    }
-
-    window.addProduct = function() {
-        const container = document.getElementById('products-container');
-        const index = container.children.length;
-        const productHTML = `
-            <div class="product-row" data-index="${index}">
-                <div class="product-inputs">
-                    <input type="text" placeholder="Produktnavn" class="product-name-input" data-field="name" data-index="${index}">
-                    <input type="text" placeholder="0" class="product-price-input" data-field="price" data-index="${index}">
-                </div>
-                <button type="button" class="remove-product-btn" onclick="removeProduct(${index})">
-                    <span>×</span>
-                </button>
-            </div>
-        `;
-        container.insertAdjacentHTML('beforeend', productHTML);
-        updateTotals();
-    };
-
-    window.removeProduct = function(index) {
-        const productRow = document.querySelector(`[data-index="${index}"]`);
-        if (productRow) {
-            productRow.remove();
-            updateTotals();
-        }
-    };
-
-    window.saveQuoteChanges = async function(quoteId) {
-        const description = document.getElementById('edit-description').value;
-        const hours = document.getElementById('edit-hours').value;
-        const price = document.getElementById('edit-price').value;
-
-        // Samle produkter
-        const productInputs = document.querySelectorAll('#products-container .product-row');
-        const products = Array.from(productInputs).map(row => {
-            const nameInput = row.querySelector('.product-name-input');
-            const priceInput = row.querySelector('.product-price-input');
-            return {
-                name: nameInput ? nameInput.value.trim() : '',
-                price: priceInput ? parseFloat(priceInput.value) || 0 : 0
-            };
-        }).filter(p => p.name !== '');
-
-        try {
-            const response = await fetch(`/api/quotes/${quoteId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    description,
-                    estimatedHours: parseFloat(hours) || 0,
-                    estimatedPrice: parseFloat(price) || 0,
-                    products
-                })
-            });
-
-            if (!response.ok) throw new Error('Lagring feilet');
-
-            // Oppdater lokal data
-            const quoteIndex = allQuotes.findIndex(q => q.id === quoteId);
-            if (quoteIndex !== -1) {
-                allQuotes[quoteIndex] = { 
-                    ...allQuotes[quoteIndex], 
-                    description, 
-                    estimatedHours: parseFloat(hours) || 0, 
-                    estimatedPrice: parseFloat(price) || 0, 
-                    products 
-                };
                 
-                renderQuotes(allQuotes);
-                if (selectedQuoteId === quoteId) {
-                    displayQuoteDetails(allQuotes[quoteIndex]);
-                }
-            }
+                <div class="form-group">
+                    <label for="edit-estimated-hours">Estimerte timer</label>
+                    <input type="number" id="edit-estimated-hours" class="form-control" min="0" step="0.5" value="${quote.estimatedHours || 0}">
+                </div>
 
-            closeEditModal();
-            showToast('Tilbud oppdatert', 'success');
-        } catch (error) {
-            console.error('Feil ved lagring:', error);
-            showToast('Kunne ikke lagre endringer', 'error');
-        }
-    };
+                <div class="form-group">
+                    <label for="edit-total-amount">Total pris eks. MVA (kr)</label>
+                    <input type="number" id="edit-total-amount" class="form-control" min="0" step="0.01" value="${quote.total_amount || 0}">
+                    <small style="color: #6b7280;">Dette er total pris eks. MVA (inkluderer både arbeid og materialer)</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="edit-status">Status</label>
+                    <select id="edit-status" class="form-control">
+                        <option value="pending" ${quote.status === 'pending' ? 'selected' : ''}>Venter</option>
+                        <option value="sent" ${quote.status === 'sent' ? 'selected' : ''}>Sendt</option>
+                        <option value="accepted" ${quote.status === 'accepted' ? 'selected' : ''}>Godkjent</option>
+                        <option value="rejected" ${quote.status === 'rejected' ? 'selected' : ''}>Avvist</option>
+                        <option value="rejected_admin" ${quote.status === 'rejected_admin' ? 'selected' : ''}>Avvist av admin</option>
+                        <option value="rejected_customer" ${quote.status === 'rejected_customer' ? 'selected' : ''}>Avvist av kunde</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Produkter/Materialer</label>
+                    <div id="products-container">
+                        ${products.map(product => `
+                            <div class="product-item">
+                                <input type="text" placeholder="Produktnavn" class="product-name" value="${product.name || ''}">
+                                <input type="number" placeholder="Antall" class="product-quantity" min="1" value="${product.quantity || 1}">
+                                <input type="number" placeholder="Pris" class="product-price" min="0" step="0.01" value="${product.price || 0}">
+                                <button type="button" class="remove-product-btn" onclick="this.parentElement.remove(); calculateTotal()">×</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="addProductLine()">+ Legg til produkt</button>
+                </div>
+                
+                <div class="form-group">
+                    <div class="total-display">
+                        <strong>Total estimert pris: <span id="total-estimate">kr 0</span></strong>
+                    </div>
+                </div>
+            </form>
+        `;
+
+        // Add product line function
+        window.addProductLine = function() {
+            const container = document.getElementById('products-container');
+            const newLine = document.createElement('div');
+            newLine.className = 'product-item';
+            newLine.innerHTML = `
+                <input type="text" placeholder="Produktnavn" class="product-name">
+                <input type="number" placeholder="Antall" class="product-quantity" min="1" value="1">
+                <input type="number" placeholder="Pris" class="product-price" min="0" step="0.01">
+                <button type="button" class="remove-product-btn" onclick="this.parentElement.remove(); calculateTotal()">×</button>
+            `;
+            container.appendChild(newLine);
+            
+            // Add event listeners to new inputs
+            newLine.querySelectorAll('input').forEach(input => {
+                input.addEventListener('input', calculateTotal);
+            });
+        };
+
+        // Calculate total function
+        window.calculateTotal = function() {
+            const hours = parseFloat(document.getElementById('edit-estimated-hours')?.value) || 0;
+            
+            let materialCost = 0;
+            document.querySelectorAll('.product-item').forEach(item => {
+                const quantity = parseFloat(item.querySelector('.product-quantity')?.value) || 0;
+                const price = parseFloat(item.querySelector('.product-price')?.value) || 0;
+                materialCost += quantity * price;
+            });
+            
+            // Vis bare materialcost siden total_amount settes manuelt av bruker
+            const totalDisplay = document.getElementById('total-estimate');
+            if (totalDisplay) {
+                totalDisplay.innerHTML = `
+                    <div style="margin-bottom: 8px;">
+                        <strong>Materialer:</strong> ${formatCurrency(materialCost)}
+                    </div>
+                    <div style="font-size: 12px; color: #6b7280;">
+                        Total pris eks. MVA må oppgis manuelt
+                    </div>
+                `;
+            }
+        };
+
+        // Add event listeners
+        document.getElementById('edit-estimated-hours')?.addEventListener('input', calculateTotal);
+        document.querySelectorAll('.product-item input').forEach(input => {
+            input.addEventListener('input', calculateTotal);
+        });
+
+        // Initial calculation
+        calculateTotal();
+
+        // Add event listener for total amount field
+        document.getElementById('edit-total-amount')?.addEventListener('input', function() {
+            const totalAmount = parseFloat(this.value) || 0;
+            const materialCost = Array.from(document.querySelectorAll('.product-item')).reduce((sum, item) => {
+                const quantity = parseFloat(item.querySelector('.product-quantity')?.value) || 0;
+                const price = parseFloat(item.querySelector('.product-price')?.value) || 0;
+                return sum + (quantity * price);
+            }, 0);
+            
+            const totalDisplay = document.getElementById('total-estimate');
+            if (totalDisplay) {
+                totalDisplay.innerHTML = `
+                    <div style="margin-bottom: 8px;">
+                        <strong>Materialer:</strong> ${formatCurrency(materialCost)}
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <strong>Total eks. MVA:</strong> ${formatCurrency(totalAmount)}
+                    </div>
+                    <div style="font-weight: 600; color: #059669;">
+                        <strong>Total ink. MVA:</strong> ${formatCurrency(totalAmount * 1.25)}
+                    </div>
+                `;
+            }
+        });
+
+        // Save function
+        saveBtn.onclick = async function(e) {
+            e.preventDefault(); // Forhindre form submission
+            
+            const originalBtnText = saveBtn.innerHTML;
+            saveBtn.innerHTML = '💾 Lagrer...';
+            saveBtn.disabled = true;
+
+            try {
+                const description = document.getElementById('edit-description')?.value?.trim();
+                const estimatedHours = parseFloat(document.getElementById('edit-estimated-hours')?.value) || 0;
+                const status = document.getElementById('edit-status')?.value;
+                
+                const products = [];
+                document.querySelectorAll('.product-item').forEach(item => {
+                    const name = item.querySelector('.product-name')?.value?.trim();
+                    const quantity = parseInt(item.querySelector('.product-quantity')?.value) || 1;
+                    const price = parseFloat(item.querySelector('.product-price')?.value) || 0;
+                    
+                    if (name) {
+                        products.push({ name, quantity, price });
+                    }
+                });
+
+                if (!description) {
+                    throw new Error('Beskrivelse er påkrevd');
+                }
+
+                // Fjern automatisk beregning av totalAmount
+                // const timeCost = estimatedHours * 950;
+                // const materialCost = products.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+                // const totalAmount = (timeCost + materialCost) * 1.25; // Include MVA
+
+                // Legg til et nytt input felt for total amount eller bruk eksisterende verdi
+                const totalAmount = parseFloat(document.getElementById('edit-total-amount')?.value) || quote.total_amount || 0;
+
+                const updateData = {
+                    description: description,
+                    estimatedHours: estimatedHours,
+                    products: products,
+                    total_amount: totalAmount, // EKS MVA
+                    status: status,
+                    items: {
+                        description: description,
+                        estimatedHours: estimatedHours,
+                        products: products
+                    }
+                };
+
+                console.log('Updating quote with data:', updateData);
+
+                const response = await fetch(`/api/quotes/${quote.id}`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(updateData)
+                });
+
+                if (!response.ok) {
+                    let errorMessage = `Serverfeil: ${response.status}`;
+                    try {
+                        const error = await response.json();
+                        errorMessage = error.error || errorMessage;
+                    } catch (e) {
+                        // Kunne ikke parse JSON error response
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                showToast('Tilbudet ble oppdatert!', 'success');
+                closeEditModal();
+                await loadData();
+
+            } catch (error) {
+                console.error('Feil ved lagring av tilbud:', error);
+                showToast(`Lagring feilet: ${error.message}`, 'error');
+            } finally {
+                saveBtn.innerHTML = originalBtnText;
+                saveBtn.disabled = false;
+            }
+        };
+
+        modal.classList.add('show');
+    }
 
     window.closeEditModal = function() {
-        const modal = document.getElementById('edit-modal');
-        if (modal) modal.remove();
-    };
-
-    window.deleteQuote = async function(quoteId) {
-        if (!confirm('Er du sikker på at du vil slette dette tilbudet?')) return;
-
-        try {
-            const response = await fetch(`/api/quotes/${quoteId}`, { method: 'DELETE' });
-            if (!response.ok) throw new Error('Sletting feilet');
-
-            allQuotes = allQuotes.filter(q => q.id !== quoteId);
-            renderQuotes(allQuotes);
-            
-            if (selectedQuoteId === quoteId) {
-                document.getElementById('quote-details-placeholder').style.display = 'block';
-                document.getElementById('quote-details-content').classList.remove('active');
-                selectedQuoteId = null;
-            }
-
-            showToast('Tilbud slettet', 'success');
-        } catch (error) {
-            console.error('Feil ved sletting:', error);
-            showToast('Kunne ikke slette tilbud', 'error');
+        const modal = document.getElementById('edit-quote-modal');
+        if (modal) {
+            modal.classList.remove('show');
         }
+        
+        setTimeout(() => {
+            const container = document.getElementById('edit-quote-form-container');
+            if (container) {
+                container.innerHTML = '';
+            }
+        }, 300);
     };
 
-    function setupEventListeners() {
-        // Quote selection
-        quotesContainer.addEventListener('click', (e) => {
-            const quoteItem = e.target.closest('.quote-item');
-            if (!quoteItem) return;
-
-            document.querySelectorAll('.quote-item').forEach(item => item.classList.remove('selected'));
-            quoteItem.classList.add('selected');
-            
-            const quoteId = quoteItem.dataset.quoteId;
-            selectedQuoteId = quoteId;
-            
-            const quote = allQuotes.find(q => q.id === quoteId);
-            if (quote) {
-                displayQuoteDetails(quote);
-            }
-        });
-
-        // Status filter
-        statusFilter.addEventListener('change', (e) => {
-            const filterValue = e.target.value;
-            const filteredQuotes = filterValue 
-                ? allQuotes.filter(quote => quote.status === filterValue)
-                : allQuotes;
-            renderQuotes(filteredQuotes);
-        });
-    }
-
-    function showToast(message, type = 'info') {
+    // Toast function
+    window.showToast = function(message, type = 'info') {
+        // Remove existing toasts
+        document.querySelectorAll('.toast').forEach(toast => toast.remove());
+        
         const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
         toast.textContent = message;
-        toast.style.cssText = `
-            position: fixed; top: 20px; right: 20px; padding: 12px 20px;
-            background: ${type === 'error' ? '#dc3545' : '#28a745'};
-            color: white; border-radius: 6px; z-index: 1001;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        `;
+        
+        // Styles for toast
+        Object.assign(toast.style, {
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            padding: '12px 20px',
+            borderRadius: '8px',
+            color: 'white',
+            zIndex: '1001',
+            opacity: '0',
+            transform: 'translateX(100%)',
+            transition: 'all 0.3s ease',
+            background: type === 'error' ? '#d9534f' : type === 'success' ? '#5cb85c' : '#5bc0de'
+        });
+        
         document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
-    }
+        
+        // Animate in
+        setTimeout(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(0)';
+        }, 10);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(100%)';
+            setTimeout(() => document.body.removeChild(toast), 300);
+        }, 3000);
+    };
+
+    console.log('✅ Tilbud.js fullstendig lastet');
 });

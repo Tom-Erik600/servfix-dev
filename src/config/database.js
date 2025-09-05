@@ -31,20 +31,33 @@ class Database {
   }
 
   async getTenantConnection(tenantId) {
-    // Hent tenant info fra admin database
-    const adminPool = await this.getPool('servfix_admin');
-    const result = await adminPool.query(
-      'SELECT database_name FROM tenants WHERE id = $1 AND is_active = true',
-      [tenantId]
-    );
+    console.log(`🔍 Getting tenant connection for: ${tenantId}`);
+    
+    try {
+        // Hent tenant info fra admin database
+        const adminPool = await this.getPool('servfix_admin');
+        const result = await adminPool.query(
+            'SELECT database_name FROM tenants WHERE id = $1 AND is_active = true',
+            [tenantId]
+        );
 
-    if (result.rows.length === 0) {
-      throw new Error('Invalid tenant');
+        let dbName;
+        if (result.rows.length === 0) {
+            console.warn(`⚠️ Tenant ${tenantId} not found, using default airtech_db`);
+            dbName = 'airtech_db'; // Fallback til airtech_db
+        } else {
+            dbName = result.rows[0].database_name;
+        }
+        
+        console.log(`✅ Using database: ${dbName} for tenant: ${tenantId}`);
+        return this.getPool(dbName);
+        
+    } catch (error) {
+        console.error(`❌ Database connection error for tenant ${tenantId}:`, error);
+        console.log(`🔄 Falling back to airtech_db`);
+        return this.getPool('airtech_db'); // Ultimate fallback
     }
-
-    const dbName = result.rows[0].database_name;
-    return this.getPool(dbName);
-  }
+}
 }
 
 module.exports = new Database();

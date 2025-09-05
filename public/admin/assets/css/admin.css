@@ -517,116 +517,6 @@ input[type="text"][placeholder*="Søk"] {
     margin: 0;
 }
 
-/* Quotes Specific Styles */
-.quotes-layout {
-    display: grid;
-    grid-template-columns: 350px 1fr;
-    gap: 24px;
-    align-items: start;
-}
-
-.quote-item {
-    background: white;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 12px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.quote-item:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.quote-item.selected {
-    border-color: var(--primary-color);
-    box-shadow: 0 2px 12px rgba(59, 130, 246, 0.15);
-}
-
-.quote-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-
-.quote-title {
-    font-weight: 600;
-    color: #343a40;
-}
-
-.quote-status {
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-}
-
-.status-pending { background: #fff3cd; color: #856404; }
-.status-sent { background: #d4edda; color: #155724; }
-.status-rejected { background: #f8d7da; color: #721c24; }
-
-.quote-meta {
-    font-size: 12px;
-    color: #6c757d;
-    margin-bottom: 8px;
-}
-
-.quote-description {
-    font-size: 13px;
-    color: #495057;
-    margin-bottom: 8px;
-}
-
-.quote-pricing {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    font-weight: 600;
-}
-
-.quote-details-panel {
-    position: sticky;
-    top: 24px;
-}
-
-.quote-details-content {
-    display: none;
-}
-
-.quote-details-content.active {
-    display: block;
-}
-
-.detail-section {
-    margin-bottom: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.detail-section:last-child {
-    border-bottom: none;
-}
-
-.products-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.product-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid #f1f3f4;
-}
-
-.product-item:last-child {
-    border-bottom: none;
-}
-
 .action-buttons {
     display: flex;
     gap: 8px;
@@ -1026,10 +916,6 @@ input[type="text"][placeholder*="Søk"] {
         grid-template-columns: 1fr;
     }
     
-    .quotes-layout {
-        grid-template-columns: 1fr;
-    }
-    
     .main-grid {
         grid-template-columns: 1fr;
     }
@@ -1080,94 +966,6 @@ input[type="text"][placeholder*="Søk"] {
         padding: 6px 8px;
         font-size: 13px;
     }
-}
-/* Hamburger dropdown styles */
-.header-right {
-    position: relative;
-}
-
-.user-menu {
-    cursor: pointer;
-    padding: 8px;
-    border-radius: 8px;
-    transition: background-color 0.2s;
-}
-
-.user-menu:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.hamburger-indicator {
-    position: absolute;
-    bottom: -2px;
-    right: -2px;
-    width: 12px;
-    height: 12px;
-    background-color: #94a3b8;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.hamburger-icon {
-    width: 8px;
-    height: 6px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-}
-
-.hamburger-icon span {
-    width: 100%;
-    height: 1px;
-    background-color: white;
-}
-
-.dropdown-menu {
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
-    min-width: 240px;
-    opacity: 0;
-    transform: translateY(-10px);
-    pointer-events: none;
-    transition: all 0.2s ease;
-    z-index: 1000;
-}
-
-.dropdown-menu.show {
-    opacity: 1;
-    transform: translateY(0);
-    pointer-events: all;
-}
-
-.dropdown-item {
-    padding: 12px 20px;
-    color: #374151;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    border-bottom: 1px solid #e5e7eb;
-}
-
-.dropdown-item:last-child {
-    border-bottom: none;
-    color: #ef4444;
-}
-
-.dropdown-item:hover {
-    background-color: #f8fafc;
-}
-
-.dropdown-icon {
-    width: 20px;
-    text-align: center;
 }
 
 /* Specific styles for serviceoppsett.html */
@@ -1452,4 +1250,43 @@ input[type="text"][placeholder*="Søk"] {
 }
 #system-fields-modal-body .form-grid-modal input[type="checkbox"] {
     margin-top: 0; /* Adjust checkbox alignment */
+}
+
+.btn-warning {
+    background: #f59e0b;
+    color: white;
+}
+
+.btn-warning:hover {
+    background: #d97706;
+}
+
+.btn-success {
+    background: #10b981;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #059669;
+}
+
+.btn-secondary {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+}
+
+.btn-secondary:hover {
+    background: #e5e7eb;
+}
+
+/* Loading states */
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.btn:disabled:hover {
+    transform: none !important;
 }

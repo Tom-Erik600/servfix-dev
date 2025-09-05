@@ -44,6 +44,7 @@
                 </div>
             </div>
 
+            <!-- DAGENS SERVICEOPPDRAG - OPPDATERTE KOLONNER -->
             <div class="card main-card" id="dagens-oppdrag">
                 <h2>Dagens serviceoppdrag</h2>
                 <table>
@@ -53,7 +54,7 @@
                             <th>Tekniker</th>
                             <th>Kunde</th>
                             <th>Type</th>
-                            <th>Tid</th>
+                            <th>Dato</th>  <!-- ENDRET FRA "TID" TIL "DATO" -->
                             <th>Status</th>
                         </tr>
                     </thead>
@@ -61,6 +62,7 @@
                 </table>
             </div>
 
+            <!-- DENNE UKENS OPPDRAG - OPPDATERTE KOLONNER -->
             <div class="card main-card" id="ukens-oppdrag" style="margin-top: 24px;">
                 <h2>Denne ukens oppdrag</h2>
                 <table>
@@ -69,11 +71,33 @@
                             <th>Ordrenr</th>
                             <th>Tekniker</th>
                             <th>Kunde</th>
+                            <th>Type</th>  <!-- LAGT TIL TYPE-KOLONNE -->
                             <th>Dato</th>
                             <th>Status</th>
                         </tr>
                     </thead>
                     <tbody id="ukens-oppdrag-liste"></tbody>
+                </table>
+            </div>
+
+            <!-- NY: UFERDIGE OPPDRAG SEKSJON -->
+            <div class="card main-card" id="uferdige-oppdrag" style="margin-top: 24px;">
+                <h2>Uferdige oppdrag</h2>
+                <p style="color: #6B7280; font-size: 14px; margin-bottom: 15px;">
+                    Oppdrag som er startet på men ikke ferdigstilt, eller som skulle vært utført men ikke er påbegynt
+                </p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ordrenr</th>
+                            <th>Tekniker</th>
+                            <th>Kunde</th>
+                            <th>Type</th>
+                            <th>Dato</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="uferdige-oppdrag-liste"></tbody>
                 </table>
             </div>
 

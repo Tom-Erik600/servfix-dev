@@ -24,8 +24,12 @@ router.use((req, res, next) => {
 // GET all orders
 router.get('/', async (req, res) => {
   try {
-    const pool = await db.getTenantConnection(req.adminTenantId);
-    const result = await pool.query('SELECT * FROM orders');
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    
+    const result = await pool.query(
+      `SELECT * FROM orders 
+       ORDER BY scheduled_date DESC, scheduled_time DESC`
+    );
     
     // Legg til orderNumber for frontend
     const ordersWithNumber = result.rows.map(order => ({
@@ -33,10 +37,44 @@ router.get('/', async (req, res) => {
       orderNumber: `SO-${order.id.split('-')[1]}-${order.id.split('-')[2].slice(-6)}`
     }));
     
-    res.json(ordersWithNumber);
+    // === LEGG TIL: Berik ordre med equipment status (samme som tekniker API) ===
+    const ordersWithEquipment = await Promise.all(ordersWithNumber.map(async (order) => {
+        let equipment = []; // Initialize equipment
+        try {
+            // Hent equipment for denne ordren
+            const equipmentResult = await pool.query(
+                `SELECT 
+                    e.id, 
+                    COALESCE(sr.status, 'not_started') as service_status,
+                    COALESCE(sr.status, 'not_started') as service_report_status
+                FROM equipment e
+                LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
+                WHERE e.customer_id = $1`,
+                [order.customer_id, order.id]
+            );
+
+            equipment = equipmentResult.rows.map(eq => ({
+                id: eq.id,
+                serviceStatus: eq.service_status || 'not_started',
+                serviceReportStatus: eq.service_report_status || 'not_started'
+            }));
+            
+        } catch (error) {
+            console.log('Could not fetch equipment for order:', order.id);
+            // equipment remains empty array
+        }
+        
+        return { // Return the modified order object
+            ...order,
+            equipment: equipment // Assign the fetched or empty equipment
+        };
+    }));
+
+    res.json(ordersWithEquipment);
+    
   } catch (error) {
-    console.error(`Error fetching orders:`, error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Error fetching orders:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
