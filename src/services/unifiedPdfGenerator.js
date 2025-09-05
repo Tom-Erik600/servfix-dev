@@ -790,7 +790,7 @@ class UnifiedPDFGenerator {
     
     try {
       // Try to load settings from GCS
-      const settingsFile = this.bucket.file(`tenants/${tenantId}/settings.json`);
+      const settingsFile = this.bucket.file(`tenants/${tenantId}/assets/settings.json`);
       const [exists] = await settingsFile.exists();
       if (exists) {
         const [content] = await settingsFile.download();

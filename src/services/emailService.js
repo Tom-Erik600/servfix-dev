@@ -170,36 +170,17 @@ class EmailService {
             items = {};
         }
         
-        const products = items.products || [];
+        // Hent samme data som PDF bruker
         const hours = parseFloat(items.estimatedHours) || 0;
-        
-        // RIKTIG BEREGNING basert på din forklaring:
-        // 1. Timepris = total_amount fra database (allerede beregnet)
-        const timePris = parseFloat(quote.total_amount) || 0;
-        
-        // 2. Materialpris = sum av alle produkter
-        const materialPris = products.reduce((sum, product) => {
-            return sum + ((parseFloat(product.quantity) || 1) * (parseFloat(product.price) || 0));
+        const products = items.products || [];
+        const arbeidsBelop = parseFloat(quote.total_amount) || 0;
+        const materialCost = products.reduce((sum, product) => {
+            return sum + (parseFloat(product.quantity || 1) * parseFloat(product.price || 0));
         }, 0);
-        
-        // 3. Totalpris eks. mva = timepris + materialpris
-        const totalEksMva = timePris + materialPris;
-        
-        // 4. MVA = 25%
+        const totalEksMva = arbeidsBelop + materialCost;
         const mvaAmount = totalEksMva * 0.25;
-        
-        // 5. Totalt inkl. mva
         const totalInklMva = totalEksMva + mvaAmount;
-        
-        console.log(`📧 Price calculation:`, {
-            hours,
-            timePris,
-            materialPris,
-            totalEksMva,
-            mvaAmount,
-            totalInklMva
-        });
-        
+
         // Email innhold med korrekt formatering
         const mailOptions = {
             from: fromEmail,
@@ -211,12 +192,50 @@ class EmailService {
                 <p>Vedlagt finner du tilbud for serviceoppdrag.</p>
                 
                 <div style="background: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px;">
-                    <h3>Tilbudssammendrag:</h3>
-                    <p><strong>Kunde:</strong> ${quote.customer_name}</p>
-                    <p><strong>Beskrivelse:</strong> ${items.description || 'Serviceoppdrag'}</p>
-                    ${hours > 0 ? `<p><strong>Estimerte timer:</strong> ${hours} = ${timePris.toLocaleString('nb-NO')} kr</p>` : ''}
-                    ${materialPris > 0 ? `<p><strong>Materialer:</strong> ${materialPris.toLocaleString('nb-NO')} kr</p>` : ''}
-                    <p style="background: #e7f3ff; padding: 8px; border-radius: 3px; margin-top: 10px;"><strong>Totalt inkl. mva: ${totalInklMva.toLocaleString('nb-NO')} kr</strong></p>
+                    <h3>Tilbudssammendrag</h3>
+                    <table style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif;">
+                        <thead>
+                            <tr style="background-color: #f2f2f2;">
+                                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Beskrivelse</th>
+                                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Pris</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${hours > 0 ? `
+                                <tr>
+                                    <td style="border: 1px solid #ddd; padding: 8px;">Arbeidskostnad, ${hours} timer</td>
+                                    <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${arbeidsBelop.toLocaleString('nb-NO')} kr</td>
+                                </tr>
+                            ` : ''}
+                            
+                            ${products.length > 0 ? `
+                                <tr>
+                                    <td style="border: 1px solid #ddd; padding: 8px;"><strong>Materialer</strong></td>
+                                    <td style="border: 1px solid #ddd; padding: 8px; text-align: right;"><strong>${materialCost.toLocaleString('nb-NO')} kr</strong></td>
+                                </tr>
+                                ${products.map(product => `
+                                    <tr>
+                                        <td style="border: 1px solid #ddd; padding: 8px; padding-left: 20px;">• ${product.name} (${product.quantity} stk)</td>
+                                        <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${(product.quantity * product.price).toLocaleString('nb-NO')} kr</td>
+                                    </tr>
+                                `).join('')}
+                            ` : ''}
+                        </tbody>
+                        <tfoot>
+                            <tr style="background-color: #f9f9f9; font-weight: bold;">
+                                <td style="border: 1px solid #ddd; padding: 8px;">Totalt eks. MVA</td>
+                                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${totalEksMva.toLocaleString('nb-NO')} kr</td>
+                            </tr>
+                            <tr style="background-color: #f9f9f9; font-weight: bold;">
+                                <td style="border: 1px solid #ddd; padding: 8px;">MVA (25%)</td>
+                                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${mvaAmount.toLocaleString('nb-NO')} kr</td>
+                            </tr>
+                            <tr style="background-color: #f9f9f9; font-weight: bold;">
+                                <td style="border: 1px solid #ddd; padding: 8px;">Totalt inkl. MVA</td>
+                                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${totalInklMva.toLocaleString('nb-NO')} kr</td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
                 
                 <p>Dette tilbudet er gyldig i 30 dager fra dagens dato.</p>

@@ -202,41 +202,29 @@ class QuotePDFGenerator {
             }
         }
         
-        // Return i forventet format
-        return {
-            companyInfo: settings.companyInfo || {
-                name: 'Air-Tech AS',
-                address: 'Adresse ikke satt',
-                email: 'post@airtech.no',
-                phone: 'Telefon ikke satt',
-                cvr: 'Org.nr ikke satt'
-            },
-            quoteSettings: {
-                includeForbehold: true,
-                forbeholdText: settings.quoteSettings?.forbeholdText || 
-                               settings.forbeholdText || 
-                               companySettings?.quoteSettings?.forbeholdText ||
-                               'Standard forbehold tekst ikke funnet i innstillinger.'
-            },
+        // KRITISK FIX: Return innstillingene (KUN DYNAMISKE VERDIER)
+        const result = {
+            companyInfo: settings.companyInfo || {},
+            quoteSettings: settings.quoteSettings || {},
             logo_base64: logoBase64
         };
+        
+        console.log('🔍 [DEBUG] Company settings loaded:', {
+            hasCompanyInfo: Object.keys(result.companyInfo).length > 0,
+            companyName: result.companyInfo?.name,
+            companyAddress: result.companyInfo?.address,
+            hasLogo: !!result.logo_base64
+        });
+        
+        return result;
         
     } catch (error) {
         console.error('❌ Error loading settings from JSON:', error);
         
-        // Fallback til hardkodede verdier
+        // Ved feil: return tomme objekter (IKKE hardkodede verdier)
         return {
-            companyInfo: {
-                name: 'Air-Tech AS',
-                address: 'Adresse ikke satt',
-                email: 'post@airtech.no', 
-                phone: 'Telefon ikke satt',
-                cvr: 'Org.nr ikke satt'
-            },
-            quoteSettings: {
-                forbeholdText: 'Vi forbeholder oss rett til prisendringer ved endringer hos underleverandører eller store valutaendringer.',
-                includeForbehold: true
-            },
+            companyInfo: {},
+            quoteSettings: {},
             logo_base64: null
         };
     }
