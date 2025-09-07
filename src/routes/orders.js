@@ -411,6 +411,7 @@ const UnifiedPDFGenerator = require('../services/unifiedPdfGenerator');
 // Ferdigstill ordre med ny PDF-generering
 router.post('/:orderId/complete', async (req, res) => {
   const { orderId } = req.params;
+  const { includedEquipmentIds } = req.body;
   const tenantId = req.tenantId || req.session.tenantId;
   
   if (!req.session.technicianId) {
@@ -418,7 +419,7 @@ router.post('/:orderId/complete', async (req, res) => {
   }
 
   let pool;
-  let serviceReportsResult;
+  let serviceReports;
   const generatedPDFs = [];
   let pdfGenerator = null;
 
@@ -430,9 +431,9 @@ router.post('/:orderId/complete', async (req, res) => {
     
     console.log(`🚀 Ferdigstiller ordre ${orderId}...`);
     
-    // Hent ordre med included_equipment_ids
+    // Sjekk at ordren finnes
     const orderResult = await pool.query(
-      'SELECT included_equipment_ids FROM orders WHERE id = $1',
+      'SELECT id FROM orders WHERE id = $1',
       [orderId]
     );
     
@@ -440,52 +441,40 @@ router.post('/:orderId/complete', async (req, res) => {
       throw new Error('Ordre ikke funnet');
     }
     
-    const includedEquipmentIds = orderResult.rows[0].included_equipment_ids;
-    console.log('Inkluderte anlegg:', includedEquipmentIds);
-    
     // Oppdater ordre status til completed
     await pool.query(
       'UPDATE orders SET status = $1 WHERE id = $2',
       ['completed', orderId]
     );
    
-    // Hent service_reports - FILTRER på included_equipment_ids hvis spesifisert
-    let query;
-    let params;
-    
-    if (includedEquipmentIds && includedEquipmentIds.length > 0) {
-      // Kun generer PDF for valgte anlegg
-      query = `
-        SELECT sr.*, e.type as equipment_type, e.name as equipment_name
-        FROM service_reports sr
-        JOIN equipment e ON sr.equipment_id = e.id
-        WHERE sr.order_id = $1 
-        AND sr.status = 'completed'
-        AND sr.equipment_id = ANY($2)
-      `;
-      params = [orderId, includedEquipmentIds];
-    } else {
-      // Bakoverkompatibel: Generer for alle anlegg hvis ingen er spesifikt valgt
-      query = `
-        SELECT sr.*, e.type as equipment_type, e.name as equipment_name
-        FROM service_reports sr
-        JOIN equipment e ON sr.equipment_id = e.id
-        WHERE sr.order_id = $1 
-        AND sr.status = 'completed'
-      `;
-      params = [orderId];
+    // Hent service rapporter - filtrer på inkluderte anlegg hvis spesifisert
+    let serviceReportsQuery = `
+      SELECT sr.*, e.name as equipment_name, e.type as equipment_type
+      FROM service_reports sr
+      JOIN equipment e ON sr.equipment_id = e.id
+      WHERE sr.order_id = $1
+    `;
+
+    let queryParams = [orderId];
+
+    // Filtrer på inkluderte anlegg hvis spesifisert
+    if (includedEquipmentIds && Array.isArray(includedEquipmentIds) && includedEquipmentIds.length > 0) {
+      serviceReportsQuery += ` AND sr.equipment_id = ANY($2)`;
+      queryParams.push(includedEquipmentIds);
     }
+
+    serviceReportsQuery += ` ORDER BY sr.created_at ASC`;
+
+    serviceReports = await pool.query(serviceReportsQuery, queryParams);
     
-    serviceReportsResult = await pool.query(query, params);
-    
-    console.log(`📋 Fant ${serviceReportsResult.rows.length} rapporter å generere PDF-er for (av ${includedEquipmentIds?.length || 'alle'} valgte anlegg)`);
+    console.log(`📋 Fant ${serviceReports.rows.length} rapporter å generere PDF-er for (av ${includedEquipmentIds?.length || 'alle'} valgte anlegg)`);
     
     // Generer PDF-er for filtrerte rapporter
-    if (serviceReportsResult.rows.length > 0) {
+    if (serviceReports.rows.length > 0) {
       try {
         pdfGenerator = new UnifiedPDFGenerator();
         
-        for (const report of serviceReportsResult.rows) {
+        for (const report of serviceReports.rows) {
           try {
             console.log(`📄 Genererer PDF for rapport ${report.id} (${report.equipment_type})...`);
             
@@ -755,6 +744,150 @@ router.post('/', async (req, res) => {
     res.status(500).json({ 
       error: error.message,
       detail: 'Se server logs for detaljer'
+    });
+  }
+});
+
+// POST regenerate reports for completed order
+router.post('/:id/regenerate-reports', async (req, res) => {
+  let pool;
+  try {
+    const { id: orderId } = req.params;
+    const { includedEquipmentIds } = req.body;
+    const tenantId = req.session.tenantId;
+    
+    console.log(`🔄 Regenerating reports for order ${orderId}`);
+    console.log('Included equipment IDs:', includedEquipmentIds);
+    
+    pool = await db.getTenantConnection(tenantId);
+    
+    // Sjekk at ordren eksisterer og er ferdigstilt
+    const orderCheck = await pool.query(
+      'SELECT id, status, customer_name FROM orders WHERE id = $1',
+      [orderId]
+    );
+    
+    if (orderCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Ordre ikke funnet' });
+    }
+    
+    const order = orderCheck.rows[0];
+    if (order.status !== 'completed') {
+      return res.status(400).json({ error: 'Kan kun regenerere rapporter for ferdigstilte ordre' });
+    }
+    
+    await pool.query('BEGIN');
+    
+    // Hent eksisterende service rapporter for de inkluderte anleggene
+    let serviceReportsQuery = `
+      SELECT sr.*, e.name as equipment_name, e.type as equipment_type
+      FROM service_reports sr
+      JOIN equipment e ON sr.equipment_id = e.id
+      WHERE sr.order_id = $1
+    `;
+    
+    let queryParams = [orderId];
+    
+    // Hvis spesifikke anlegg er spesifisert, filtrer på de
+    if (includedEquipmentIds && Array.isArray(includedEquipmentIds) && includedEquipmentIds.length > 0) {
+      serviceReportsQuery += ` AND sr.equipment_id = ANY($2)`;
+      queryParams.push(includedEquipmentIds);
+    }
+    
+    serviceReportsQuery += ` ORDER BY sr.created_at ASC`;
+    
+    const serviceReports = await pool.query(serviceReportsQuery, queryParams);
+    
+    if (serviceReports.rows.length === 0) {
+      await pool.query('ROLLBACK');
+      return res.status(400).json({ error: 'Ingen servicerapporter funnet for regenerering' });
+    }
+    
+    console.log(`📋 Found ${serviceReports.rows.length} service reports to regenerate`);
+    
+    // Generer PDF for hver servicerapport
+    const generatedPDFs = [];
+    const UnifiedPDFGenerator = require('../services/unifiedPdfGenerator');
+    const pdfGenerator = new UnifiedPDFGenerator();
+    
+    for (const report of serviceReports.rows) {
+      try {
+        console.log(`📄 Regenerating PDF for equipment ${report.equipment_id}: ${report.equipment_name}`);
+        
+        const pdfPath = await pdfGenerator.generateReport(report.id, tenantId);
+        
+        // Oppdater service_reports tabellen med ny PDF-status og timestamp
+        await pool.query(
+          `UPDATE service_reports 
+           SET pdf_path = $1, 
+               pdf_generated = true, 
+               pdf_sent_timestamp = NOW(),
+               updated_at = NOW()
+           WHERE id = $2`,
+          [pdfPath, report.id]
+        );
+        
+        generatedPDFs.push({
+          equipmentId: report.equipment_id,
+          equipmentName: report.equipment_name,
+          reportId: report.id,
+          pdfGenerated: true,
+          pdfPath: pdfPath
+        });
+        
+        console.log(`✅ PDF regenerated for equipment ${report.equipment_id}`);
+        
+      } catch (pdfError) {
+        console.error(`❌ Failed to regenerate PDF for equipment ${report.equipment_id}:`, pdfError);
+        
+        // Mark as failed but don't rollback the whole transaction
+        await pool.query(
+          `UPDATE service_reports 
+           SET pdf_generated = false, 
+               updated_at = NOW()
+           WHERE id = $1`,
+          [report.id]
+        );
+        
+        generatedPDFs.push({
+          equipmentId: report.equipment_id,
+          equipmentName: report.equipment_name,
+          reportId: report.id,
+          pdfGenerated: false,
+          error: pdfError.message
+        });
+      }
+    }
+    
+    await pool.query('COMMIT');
+    
+    // Beregn antall suksessfulle regenereringer
+    const successfulRegens = generatedPDFs.filter(pdf => pdf.pdfGenerated).length;
+    const failedRegens = generatedPDFs.filter(pdf => !pdf.pdfGenerated).length;
+    
+    console.log(`🎯 Report regeneration completed: ${successfulRegens} successful, ${failedRegens} failed`);
+    
+    res.json({
+      success: true,
+      message: failedRegens > 0 
+        ? `${successfulRegens} rapporter regenerert, ${failedRegens} feilet`
+        : `${successfulRegens} servicerapporter regenerert`,
+      generatedPDFs: generatedPDFs,
+      stats: {
+        total: generatedPDFs.length,
+        successful: successfulRegens,
+        failed: failedRegens
+      }
+    });
+    
+  } catch (error) {
+    if (pool) {
+      await pool.query('ROLLBACK');
+    }
+    console.error('❌ Feil ved regenerering av rapporter:', error);
+    res.status(500).json({ 
+      error: 'Kunne ikke regenerere rapporter',
+      details: error.message 
     });
   }
 });

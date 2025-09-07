@@ -196,17 +196,20 @@ class UnifiedPDFGenerator {
     }
 
     // Prosesser checklist_data til Air-Tech checkpoint format
-    if (data.checklist_data && data.checklist_data.components) {
-      data.checklist_data.components = data.checklist_data.components.map(component => {
-        // Set komponent navn basert på details
-        if (!component.name && component.details) {
-          const details = component.details;
-          if (details.etasje && details.leilighet_nr && details.aggregat_type && details.system_nummer) {
-            component.name = `${details.etasje} - ${details.leilighet_nr} - ${details.aggregat_type} - ${details.system_nummer}`;
-          } else {
-            component.name = Object.values(details).filter(v => v).join(' - ') || 'Sjekkliste';
-          }
-        }
+        if (data.checklist_data && data.checklist_data.components) {
+          data.checklist_data.components = data.checklist_data.components.map(component => {
+            // BEVAR ORIGINAL DATA
+            component.originalChecklist = component.checklist;
+
+            // Set komponent navn basert på details
+            if (!component.name && component.details) {
+              const details = component.details;
+              if (details.etasje && details.leilighet_nr && details.aggregat_type && details.system_nummer) {
+                component.name = `${details.etasje} - ${details.leilighet_nr} - ${details.aggregat_type} - ${details.system_nummer}`;
+              } else {
+                component.name = Object.values(details).filter(v => v).join(' - ') || 'Sjekkliste';
+              }
+            }
 
         // KRITISK: Konverter checklist til Air-Tech checkpoint format
         if (component.checklist && checklistTemplate) {
@@ -322,6 +325,119 @@ class UnifiedPDFGenerator {
       return '';
     }
 
+    const rows = component.checkpoints.map(checkpoint => {
+      const avvikId = (checkpoint.status === 'avvik') ? this.avvikMap.get(`${checkpoint.componentName}#${checkpoint.name}`) : '';
+      let statusHtml = '';
+      switch (checkpoint.status) {
+        case 'ok':
+          statusHtml = `<span class="status status-ok">OK</span>`;
+          break;
+        case 'byttet':
+          statusHtml = `<span class="status status-byttet">BYTTET</span>`;
+          break;
+        case 'avvik':
+          statusHtml = `<span class="status status-avvik">AVVIK</span> ${avvikId ? `<span class="avvik-id-ref">(ID: ${avvikId})</span>` : ''}`;
+          break;
+        default:
+          statusHtml = `<span class="status status-na">Ikke relevant</span>`;
+          break;
+      }
+
+      let result = checkpoint.comment || '';
+
+      // SPESIALBEHANDLING for ulike inputTypes
+      if (checkpoint.inputType) {
+        switch (checkpoint.inputType) {
+          case 'virkningsgrad':
+            if (checkpoint.efficiency !== undefined) {
+              result = `${checkpoint.efficiency}%`;
+            } else {
+              const virkningsgradData = this.findVirkningsgradData(component, checkpoint.id);
+              if (virkningsgradData && virkningsgradData.virkningsgrad !== undefined) {
+                result = `${virkningsgradData.virkningsgrad}%`;
+              } else {
+                result = 'Ikke målt';
+              }
+            }
+            break;
+            
+          case 'tilstandsgrad_dropdown':
+            if (checkpoint.value) {
+              result = checkpoint.value;
+            } else {
+              const tilstandData = this.findTilstandData(component, checkpoint.id);
+              if (tilstandData) {
+                result = tilstandData;
+              } else {
+                result = 'Ikke angitt';
+              }
+            }
+            break;
+            
+          case 'konsekvensgrad_dropdown':
+            if (checkpoint.value) {
+              result = checkpoint.value;
+            } else {
+              const konsekvensData = this.findKonsekvensData(component, checkpoint.id);
+              if (konsekvensData) {
+                result = konsekvensData;
+              } else {
+                result = 'Ikke angitt';
+              }
+            }
+            break;
+            
+          case 'temperature':
+            if (checkpoint.temperature !== undefined && checkpoint.temperature !== null) {
+              result = `${checkpoint.temperature}°C`;
+            } else {
+              result = 'Ikke målt';
+            }
+            break;
+            
+          case 'dropdown_ok_avvik':
+          case 'dropdown_ok_avvik_comment':
+            if (checkpoint.value) {
+              result = checkpoint.value;
+              if (checkpoint.comment) {
+                result += ` (${checkpoint.comment})`;
+              }
+            }
+            break;
+            
+          default:
+            result = checkpoint.comment || checkpoint.value || '';
+        }
+      } else {
+        // Fallback for when inputType is not defined
+        result = checkpoint.comment || checkpoint.value || '';
+      }
+
+      const mainRow = `
+        <tr>
+          <td>${checkpoint.name}</td>
+          <td class="center">${statusHtml}</td>
+          <td>${result}</td>
+        </tr>
+      `;
+
+      let imageRow = '';
+      if (checkpoint.images && checkpoint.images.length > 0) {
+        imageRow = `
+          <tr class="image-row">
+            <td></td>
+            <td colspan="2">
+              <div class="checklist-images">
+                ${checkpoint.images.map(img => `<img src="${img}" alt="Bilde for ${checkpoint.name}" class="checklist-image">`).join('')}
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+      
+      return mainRow + imageRow;
+    }).join('');
+
     return `
       <div class="component-checklist">
         <h3 class="component-name">${component.name || 'Sjekkliste'}</h3>
@@ -334,57 +450,7 @@ class UnifiedPDFGenerator {
             </tr>
           </thead>
           <tbody>
-            ${component.checkpoints.map(item => {
-              let statusHtml = '';
-              const avvikId = (item.status === 'avvik') ? this.avvikMap.get(`${item.componentName}#${item.name}`) : '';
-
-              switch (item.status) {
-                case 'ok':
-                  statusHtml = `<span class="status status-ok">OK</span>`;
-                  break;
-                case 'byttet':
-                  statusHtml = `<span class="status status-byttet">BYTTET</span>`;
-                  break;
-                case 'avvik':
-                  statusHtml = `<span class="status status-avvik">AVVIK</span> ${avvikId ? `<span class="avvik-id-ref">(ID: ${avvikId})</span>` : ''}`;
-                  break;
-                default:
-                  statusHtml = `<span class="status status-na">Ikke relevant</span>`;
-                  break;
-              }
-              
-              // KRITISK: Vis kommentar for BYTTET, ikke for AVVIK
-              let resultText = '';
-              if (item.status === 'byttet' && item.comment) {
-                resultText = item.comment;
-              } else if (item.status !== 'avvik' && item.comment) {
-                resultText = item.comment;
-              }
-
-              const mainRow = `
-                <tr>
-                  <td>${item.name}</td>
-                  <td class="center">${statusHtml}</td>
-                  <td>${resultText}</td>
-                </tr>
-              `;
-
-              let imageRow = '';
-              if (item.images && item.images.length > 0) {
-                imageRow = `
-                  <tr class="image-row">
-                    <td></td>
-                    <td colspan="2">
-                      <div class="checklist-images">
-                        ${item.images.map(img => `<img src="${img}" alt="Bilde for ${item.name}" class="checklist-image">`).join('')}
-                      </div>
-                    </td>
-                  </tr>
-                `;
-              }
-              
-              return mainRow + imageRow;
-            }).join('')}
+            ${rows}
           </tbody>
         </table>
       </div>
@@ -972,6 +1038,46 @@ class UnifiedPDFGenerator {
         console.warn('Could not save debug HTML:', error.message);
       }
     }
+  }
+
+  findVirkningsgradData(component, checkpointId) {
+    // Søk i original checklist-data for virkningsgrad
+    const originalData = component.originalChecklist || component.checklist;
+    if (!originalData) return null;
+    
+    // Sjekk for virkn1, virkn2, etc.
+    for (const [key, value] of Object.entries(originalData)) {
+      if (key.startsWith('virkn') && typeof value === 'object' && value.virkningsgrad !== undefined) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  findTilstandData(component, checkpointId) {
+    // Søk etter tilstand1, tilstand2, etc.
+    const originalData = component.originalChecklist || component.checklist;
+    if (!originalData) return null;
+    
+    for (const [key, value] of Object.entries(originalData)) {
+      if (key.startsWith('tilstand') && typeof value === 'string') {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  findKonsekvensData(component, checkpointId) {
+    // Søk etter konsekvens1, konsekvens2, etc.  
+    const originalData = component.originalChecklist || component.checklist;
+    if (!originalData) return null;
+    
+    for (const [key, value] of Object.entries(originalData)) {
+      if (key.startsWith('konsekvens') && typeof value === 'string') {
+        return value;
+      }
+    }
+    return null;
   }
 
   async close() {

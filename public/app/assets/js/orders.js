@@ -313,76 +313,76 @@ function createEquipmentCardHTML(eq) {
 }
 
     function renderActionButtons() {
-        const footer = document.querySelector('.action-buttons');
-        if (!footer || !pageState.order) return;
-        
-        // Finn kun valgte anlegg (de som har checkbox avkrysset)
-        const selectedEquipment = pageState.equipment.filter(eq => 
-            pageState.selectedEquipmentIds.includes(eq.id)
-        );
-        
-        // Sjekk om alle VALGTE anlegg er ferdigstilt
-        const allSelectedCompleted = selectedEquipment.length > 0 && 
-            selectedEquipment.every(eq => eq.serviceStatus === 'completed');
-        
-        // Sjekk om ordren allerede er ferdigstilt
-        const isOrderCompleted = pageState.order.status === 'completed';
-        
-        console.log('Action button status:', {
-            totalEquipment: pageState.equipment.length,
-            selectedCount: selectedEquipment.length,
-            allSelectedCompleted,
-            isOrderCompleted,
-            selectedIds: pageState.selectedEquipmentIds
-        });
-        
-        // Hvis ordre er ferdigstilt, vis kun status med knapp tilbake
-        if (isOrderCompleted) {
-            footer.innerHTML = `
+    const footer = document.querySelector('.action-buttons');
+    if (!footer || !pageState.order) return;
+    
+    // Finn kun valgte anlegg (de som har checkbox avkrysset)
+    const selectedEquipment = pageState.equipment.filter(eq => 
+        pageState.selectedEquipmentIds.includes(eq.id)
+    );
+    
+    // Sjekk om alle VALGTE anlegg er ferdigstilt
+    const allSelectedCompleted = selectedEquipment.length > 0 && 
+        selectedEquipment.every(eq => eq.serviceStatus === 'completed');
+    
+    // Sjekk om ordren allerede er ferdigstilt
+    const isOrderCompleted = pageState.order.status === 'completed';
+    
+    console.log('Action button status:', {
+        totalEquipment: pageState.equipment.length,
+        selectedCount: selectedEquipment.length,
+        allSelectedCompleted,
+        isOrderCompleted,
+        selectedIds: pageState.selectedEquipmentIds
+    });
+    
+    // Hvis ordre er ferdigstilt, vis kun klikbar status for rapport-regenerering
+    if (isOrderCompleted) {
+        footer.innerHTML = `
+            <button class="order-completed-button" onclick="handleRegenerateReport()">
                 <div class="order-completed-message">
                     <i data-lucide="check-circle" style="color: #10b981;"></i>
                     <span>Ordre er fullført</span>
                 </div>
-                <button class="btn btn-secondary" onclick="window.location.href='index.html'">
-                    <i data-lucide="list"></i> Tilbake til oversikt
-                </button>
-            `;
+            </button>
+        `;
+    } else {
+        // Ordre ikke ferdigstilt - vis ferdigstill-knappen
+        let buttonClass = 'btn-disabled';
+        let buttonText = 'Fullfør alle valgte anlegg først';
+        let disabled = true;
+        
+        if (selectedEquipment.length === 0) {
+            // Ingen anlegg valgt
+            buttonText = 'Velg anlegg som skal inkluderes i rapporten';
+        } else if (allSelectedCompleted) {
+            // Alle valgte anlegg er ferdigstilt
+            buttonClass = 'btn-success';
+            buttonText = `Ferdigstill ordre (${selectedEquipment.length} anlegg)`;
+            disabled = false;
         } else {
-            // Ordre ikke ferdigstilt - vis ferdigstill-knappen
-            let buttonClass = 'btn-disabled';
-            let buttonText = 'Fullfør alle valgte anlegg først';
-            let disabled = true;
-            
-            if (selectedEquipment.length === 0) {
-                // Ingen anlegg valgt
-                buttonText = 'Ingen anlegg valgt for ferdigstilling';
-            } else if (allSelectedCompleted) {
-                // Alle valgte anlegg er ferdigstilt
-                buttonClass = 'btn-success';
-                buttonText = 'Ferdigstill ordre';
-                disabled = false;
-            } else {
-                // Noen valgte anlegg er ikke ferdigstilt ennå
-                const notCompleted = selectedEquipment.filter(eq => eq.serviceStatus !== 'completed').length;
-                buttonText = `${notCompleted} av ${selectedEquipment.length} valgte anlegg ikke ferdig`;
-            }
-            
-            footer.innerHTML = `
-                <button 
-                    class="btn ${buttonClass}" 
-                    onclick="handleCompleteOrder()"
-                    ${disabled ? 'disabled' : ''}>
-                    <i data-lucide="check-circle"></i>
-                    ${buttonText}
-                </button>
-            `;
+            // Noen valgte anlegg er ikke ferdigstilt ennå
+            const notCompleted = selectedEquipment.filter(eq => eq.serviceStatus !== 'completed').length;
+            buttonText = `${notCompleted} av ${selectedEquipment.length} valgte anlegg ikke ferdig`;
         }
         
-        // Re-initialize lucide icons
-        if (window.lucide) {
-            lucide.createIcons();
-        }
+        footer.innerHTML = `
+            <button 
+                class="btn ${buttonClass}" 
+                onclick="handleCompleteOrder()"
+                ${disabled ? 'disabled' : ''}
+            >
+                <i data-lucide="check-circle"></i>
+                ${buttonText}
+            </button>
+        `;
     }
+    
+    // Re-initialize lucide icons
+    if (window.lucide) {
+        lucide.createIcons();
+    }
+}
 
 function setupEventListeners() {
     // Eksisterende kode...
@@ -590,26 +590,30 @@ async function handleCompleteOrder() {
         return;
     }
     
-    // Bekreft med bruker
+    // Bekreft med bruker og vis hvilke anlegg som inkluderes
     const confirmMessage = `Er du sikker på at du vil ferdigstille denne ordren?
 
-` +
-        `${selectedEquipment.length} anlegg vil inkluderes i rapporten.
-` +
-        `${pageState.equipment.length - selectedEquipment.length} anlegg er ikke valgt og vil ikke inkluderes.`;
+${selectedEquipment.length} anlegg vil inkluderes i rapporten:
+${selectedEquipment.map(eq => `• ${eq.name || eq.type}`).join('\n')}
+
+${pageState.equipment.length - selectedEquipment.length > 0 ? `
+${pageState.equipment.length - selectedEquipment.length} anlegg er ikke valgt og vil ikke inkluderes.` : ''}`;
     
     if (!confirm(confirmMessage)) {
         return;
     }
     
-    setLoading(true);
+    setLoading(true, 'Ferdigstiller ordre og genererer rapporter...');
     try {
         const response = await fetch(`/api/orders/${pageState.order.id}/complete`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            credentials: 'include'
+            credentials: 'include',
+            body: JSON.stringify({
+                includedEquipmentIds: pageState.selectedEquipmentIds
+            })
         });
         
         if (!response.ok) {
@@ -626,16 +630,13 @@ async function handleCompleteOrder() {
         // Re-render action buttons
         renderActionButtons();
         
-        showToast('Ordre ferdigstilt!', 'success');
-        
-        // Vent litt før redirect slik at bruker ser meldingen
-        setTimeout(() => {
-            window.location.href = 'index.html';
-        }, 1500);
+        // Vis suksessmelding med rapport-info
+        const reportCount = result.generatedPDFs ? result.generatedPDFs.length : selectedEquipment.length;
+        showToast(`Ordre ferdigstilt! ${reportCount} servicerapporter generert.`, 'success');
         
     } catch (error) {
-        console.error('Complete order error:', error);
-        showToast(error.message, 'error');
+        console.error('Error completing order:', error);
+        showToast(`Feil ved ferdigstilling: ${error.message}`, 'error');
     } finally {
         setLoading(false);
     }
@@ -960,8 +961,31 @@ function hideModal() {
     modal.removeEventListener('click', handleModalClicks);
 }
 
-function setLoading(isLoading) { 
-    document.getElementById('loading-indicator').style.display = isLoading ? 'flex' : 'none'; 
+function setLoading(isLoading, customMessage = null) {
+    const loadingEl = document.getElementById('loading-indicator');
+    if (!loadingEl) return;
+    
+    if (isLoading) {
+        // Oppdater melding hvis spesifisert
+        const messageEl = loadingEl.querySelector('.loading-spinner p');
+        if (messageEl && customMessage) {
+            messageEl.textContent = customMessage;
+        } else if (messageEl) {
+            messageEl.textContent = 'Laster...';
+        }
+        
+        loadingEl.style.display = 'flex';
+        document.body.style.overflow = 'hidden'; // Forhindre scrolling
+    } else {
+        loadingEl.style.display = 'none';
+        document.body.style.overflow = ''; // Gjenopprett scrolling
+        
+        // Reset til standard melding
+        const messageEl = loadingEl.querySelector('.loading-spinner p');
+        if (messageEl) {
+            messageEl.textContent = 'Laster ordre...';
+        }
+    }
 }
 
 function showToast(message, type = 'info') {
@@ -1357,4 +1381,109 @@ if (!document.getElementById('service-css-styles')) {
     styleElement.id = 'service-css-styles';
     styleElement.innerHTML = serviceCSS;
     document.head.appendChild(styleElement);
+}
+
+// Ny funksjon for rapport-regenerering
+async function handleRegenerateReport() {
+    // Finn anlegg som er inkludert i ordren (de som har rapporter)
+    const selectedEquipment = pageState.equipment.filter(eq => 
+        pageState.selectedEquipmentIds.includes(eq.id) && eq.serviceStatus === 'completed'
+    );
+    
+    if (selectedEquipment.length === 0) {
+        showToast('Ingen ferdigstilte anlegg å generere rapport for', 'error');
+        return;
+    }
+    
+    // Vis bekreftelses-dialog
+    showRegenerateConfirmation(selectedEquipment);
+}
+
+function showRegenerateConfirmation(selectedEquipment) {
+    // Fjern eksisterende modal hvis den finnes
+    const existingModal = document.querySelector('.simple-confirm-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    const equipmentNames = selectedEquipment.map(eq => eq.name || eq.type).join(', ');
+    
+    // Opprett enkel modal
+    const modal = document.createElement('div');
+    modal.className = 'simple-confirm-modal';
+    modal.innerHTML = `
+        <div class="simple-confirm-content">
+            <p>Er du sikker på at du vil generere rapport på nytt?</p>
+            <p><strong>${selectedEquipment.length} anlegg:</strong> ${equipmentNames}</p>
+            <p>Dette vil erstatte den eksisterende PDF-rapporten.</p>
+            <div class="simple-confirm-buttons">
+                <button class="simple-btn simple-btn-cancel" onclick="closeSimpleModal()">Nei</button>
+                <button class="simple-btn simple-btn-confirm" onclick="confirmAndCloseModal()">Ja</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Lukk ved klikk utenfor
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeSimpleModal();
+        }
+    });
+}
+
+function closeSimpleModal() {
+    const modal = document.querySelector('.simple-confirm-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function confirmAndCloseModal() {
+    closeSimpleModal();
+    confirmRegenerateReport();
+}
+
+
+
+// Funksjon for å bekrefte rapport-regenerering
+async function confirmRegenerateReport() {
+    
+    setLoading(true, 'Regenererer servicerapporter...');
+    try {
+        const response = await fetch(`/api/orders/${pageState.order.id}/regenerate-reports`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+                includedEquipmentIds: pageState.selectedEquipmentIds
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Kunne ikke regenerere rapporter');
+        }
+        
+        const result = await response.json();
+        console.log('Reports regenerated:', result);
+        
+        // Vis suksessmelding
+        const reportCount = result.generatedPDFs ? result.generatedPDFs.length : pageState.selectedEquipmentIds.length;
+        showToast(`${reportCount} servicerapporter regenerert!`, 'success');
+
+        // Naviger tilbake til hovedsiden etter 1.5 sekunder
+        setTimeout(() => {
+            window.location.href = 'index.html';
+        }, 1500);
+        
+    } catch (error) {
+        console.error('Error regenerating reports:', error);
+        showToast(`Feil ved regenerering: ${error.message}`, 'error');
+    } finally {
+        setLoading(false);
+    }
 }
