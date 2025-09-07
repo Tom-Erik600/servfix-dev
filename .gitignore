@@ -1,6 +1,10 @@
-
 .vscode/claudesync.json
 
+# Local file storage
+servfix-files/
+uploads/
+test-output/
 
 # Google Cloud credentials
 config/gcp/*.json
+dev/

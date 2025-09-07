@@ -1,3 +1,4 @@
+// src/routes/admin/reports.js - FIX: Legg til orderId filtering
 const express = require('express');
 const router = express.Router();
 const db = require('../../config/database');
@@ -11,62 +12,32 @@ router.use((req, res, next) => {
   next();
 });
 
-// GET all reports - BUILD UP GRADUALLY
+// GET all reports - MED orderId filtering
 router.get('/', async (req, res) => {
   const debugSteps = [];
   
   try {
-    // Step 1: Get connection
+    // Hent orderId fra query parameters
+    const { orderId } = req.query;
+    
     debugSteps.push('Getting DB connection...');
     const pool = await db.getTenantConnection(req.adminTenantId);
     debugSteps.push('✅ DB connection OK');
     
-    // Step 2: Basic query
-    debugSteps.push('Testing basic query...');
-    const basicResult = await pool.query('SELECT id FROM service_reports LIMIT 1');
-    debugSteps.push(`✅ Basic query OK - found ${basicResult.rows.length} rows`);
+    // Build query med conditional WHERE clause
+    let whereClause = "WHERE sr.status = 'completed'";
+    let queryParams = [];
     
-    // Step 3: Query with orders join
-    debugSteps.push('Adding orders join...');
-    let query = `
+    if (orderId) {
+      whereClause += " AND sr.order_id = $1";
+      queryParams.push(orderId);
+      debugSteps.push(`🔍 Filtering by orderId: ${orderId}`);
+    } else {
+      debugSteps.push('📋 Getting all completed reports');
+    }
+    
+    const query = `
       SELECT 
-        sr.*,
-        o.customer_name,
-        o.customer_id,
-        o.scheduled_date
-      FROM service_reports sr
-      LEFT JOIN orders o ON sr.order_id = o.id
-      WHERE sr.status = 'completed'
-      LIMIT 5
-    `;
-    
-    const withOrdersResult = await pool.query(query);
-    debugSteps.push(`✅ Orders join OK - ${withOrdersResult.rows.length} rows`);
-    
-    // Step 4: Add equipment join
-    debugSteps.push('Adding equipment join...');
-    query = `
-      SELECT 
-        sr.*,
-        o.customer_name,
-        o.customer_id,
-        o.scheduled_date,
-        e.name as equipment_name,
-        e.type as equipment_type
-      FROM service_reports sr
-      LEFT JOIN orders o ON sr.order_id = o.id
-      LEFT JOIN equipment e ON sr.equipment_id = e.id
-      WHERE sr.status = 'completed'
-      LIMIT 5
-    `;
-    
-    const withEquipmentResult = await pool.query(query);
-    debugSteps.push(`✅ Equipment join OK - ${withEquipmentResult.rows.length} rows`);
-    
-    // Step 5: Add technicians join (THIS IS PROBABLY WHERE IT FAILS)
-    debugSteps.push('Adding technicians join...');
-    query = `
-            SELECT 
         sr.*,
         o.customer_name,
         o.customer_id,
@@ -79,12 +50,13 @@ router.get('/', async (req, res) => {
       LEFT JOIN orders o ON sr.order_id = o.id
       LEFT JOIN equipment e ON sr.equipment_id = e.id
       LEFT JOIN technicians t ON o.technician_id = t.id
-      WHERE sr.status = 'completed'
+      ${whereClause}
       ORDER BY sr.created_at DESC
     `;
     
-    const finalResult = await pool.query(query);
-    debugSteps.push(`✅ Full query OK - ${finalResult.rows.length} rows`);
+    debugSteps.push('Executing query...');
+    const finalResult = await pool.query(query, queryParams);
+    debugSteps.push(`✅ Query OK - ${finalResult.rows.length} rows`);
     
     // Calculate stats
     const stats = {
@@ -99,7 +71,9 @@ router.get('/', async (req, res) => {
       stats: stats,
       debug: {
         steps: debugSteps,
-        success: true
+        success: true,
+        filtered: !!orderId,
+        orderId: orderId || null
       }
     });
     
@@ -118,7 +92,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// PDF endpoint
+// PDF endpoint - miljø-aware versjon
 router.get('/:reportId/pdf', async (req, res) => {
   try {
     const pool = await db.getTenantConnection(req.adminTenantId);
@@ -136,17 +110,52 @@ router.get('/:reportId/pdf', async (req, res) => {
       return res.status(404).json({ error: 'PDF ikke generert' });
     }
     
-    const bucketName = process.env.GCS_BUCKET_NAME || 'servfix-files';
-    const publicUrl = `https://storage.googleapis.com/${bucketName}/tenants/${req.adminTenantId}/${report.pdf_path}`;
-    res.redirect(publicUrl);
+    // MILJØ-SPESIFIKK HÅNDTERING  
+    const isCloudRun = !!process.env.K_SERVICE;  // Google Cloud Run setter denne automatisk
+    const useCloudStorage = isCloudRun || process.env.USE_CLOUD_STORAGE === 'true';
+    
+    console.log(`📄 Serving PDF: ${report.pdf_path}`);
+    console.log(`🔧 Environment: ${isCloudRun ? 'GOOGLE CLOUD RUN' : 'LOCAL DEVELOPMENT'}`);
+    console.log(`☁️ Cloud Storage: ${useCloudStorage ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`🔧 K_SERVICE: ${process.env.K_SERVICE || 'not set'}`);
+    
+    if (useCloudStorage) {
+      // PRODUKSJON: Redirect til Google Cloud Storage
+      const bucketName = process.env.GCS_BUCKET_NAME || 'servfix-files';
+      const publicUrl = `https://storage.googleapis.com/${bucketName}/tenants/${req.adminTenantId}/${report.pdf_path}`;
+      console.log(`🌐 Redirecting to GCS: ${publicUrl}`);
+      res.redirect(publicUrl);
+    } else {
+      // DEVELOPMENT: Serve fra lokal fil
+      const path = require('path');
+      const localPath = path.join(__dirname, `../../servfix-files/tenants/${req.adminTenantId}/${report.pdf_path}`);
+      
+      console.log(`💾 Serving local file: ${localPath}`);
+      
+      // Sjekk om fil eksisterer
+      const fs = require('fs');
+      if (!fs.existsSync(localPath)) {
+        console.error(`❌ Local PDF file not found: ${localPath}`);
+        return res.status(404).json({ 
+          error: 'PDF-fil ikke funnet lokalt',
+          path: report.pdf_path,
+          localPath: localPath
+        });
+      }
+      
+      // Serve lokal fil
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${path.basename(localPath)}"`);
+      res.sendFile(path.resolve(localPath));
+    }
     
   } catch (error) {
-    console.error('PDF error:', error);
+    console.error('❌ PDF endpoint error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Mark as invoiced
+// Mark as invoiced (unchanged)
 router.post('/:reportId/mark-invoiced', async (req, res) => {
   try {
     const pool = await db.getTenantConnection(req.adminTenantId);

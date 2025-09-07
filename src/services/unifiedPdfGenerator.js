@@ -37,23 +37,61 @@ class UnifiedPDFGenerator {
 
   async init() {
     try {
+      // MILJØ-SPESIFIKKE INNSTILLINGER
+      const isProduction = process.env.NODE_ENV === 'production';
+      const isWindows = process.platform === 'win32';
+
+      console.log(`🔧 Environment: ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
+      console.log(`🔧 Platform: ${process.platform}`);
+
       const options = {
-        headless: true,
+        headless: isProduction ? true : 'new',
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
-          '--disable-gpu',
+          '--disable-gpu'
+        ]
+      };
+
+      // PRODUKSJON (Google Cloud Run)
+      if (process.env.K_SERVICE) {
+        options.executablePath = '/usr/bin/chromium';
+        options.args.push(
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
           '--no-first-run',
           '--no-zygote',
           '--single-process'
-        ]
-      };
-      if (process.env.K_SERVICE) {
-        options.executablePath = '/usr/bin/chromium';
-      } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-        options.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+        );
+      } 
+      // DEVELOPMENT (Windows)
+      else if (!isProduction && isWindows) {
+        console.log('🚀 Configuring for Windows development...');
+        options.args.push(
+          '--disable-web-security',
+          '--disable-features=TranslateUI',
+          '--disable-extensions',
+          '--disable-plugins',
+          '--run-all-compositor-stages-before-draw',
+          '--disable-background-timer-throttling',
+          '--disable-renderer-backgrounding',
+          '--disable-backgrounding-occluded-windows',
+          '--memory-pressure-off'
+        );
+        
+        if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+          options.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+        }
+      } 
+      // ANDRE MILJØER
+      else {
+        if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+          options.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+        }
       }
+
       this.browser = await puppeteer.launch(options);
     } catch (error) {
       console.error('❌ Failed to launch Puppeteer:', error.message);
@@ -847,18 +885,54 @@ class UnifiedPDFGenerator {
   }
 
   async generatePDF(html) {
-    const page = await this.browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    const pdfBuffer = await page.pdf({
+  const isWindows = process.platform === 'win32';
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  const page = await this.browser.newPage();
+  
+  try {
+    // MILJØ-SPESIFIKKE PDF-INNSTILLINGER
+    const contentOptions = { waitUntil: 'networkidle0' };
+    const pdfOptions = {
       format: 'A4',
       margin: { top: '15mm', right: '10mm', bottom: '15mm', left: '10mm' },
       printBackground: true,
       displayHeaderFooter: false,
       preferCSSPageSize: true
-    });
-    await page.close();
+    };
+    
+    // Windows development - legg til timeouts og pauser
+    if (!isProduction && isWindows) {
+      console.log('🔧 Using Windows-specific PDF settings...');
+      contentOptions.timeout = 30000;  // 30 sekunder timeout
+      pdfOptions.timeout = 30000;      // 30 sekunder PDF timeout
+      
+      await page.setContent(html, contentOptions);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 sekund pause før PDF
+      
+    // Produksjon - standard innstillinger
+    } else {
+      console.log('🔧 Using production PDF settings...');
+      await page.setContent(html, contentOptions);
+    }
+    
+    const pdfBuffer = await page.pdf(pdfOptions);
+    console.log(`✅ PDF generated successfully (${(pdfBuffer.length / 1024).toFixed(2)} KB)`);
+    
     return pdfBuffer;
+    
+  } catch (error) {
+    console.error('❌ PDF generation error:', error.message);
+    throw error;
+  } finally {
+    // Sikre at page lukkes
+    try {
+      await page.close();
+    } catch (closeError) {
+      console.warn('⚠️ Could not close page:', closeError.message);
+    }
   }
+}
 
   async savePDF(pdfBuffer, data, tenantId) {
     const timestamp = Date.now();
