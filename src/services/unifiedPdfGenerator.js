@@ -1,7 +1,7 @@
 // src/services/unifiedPdfGenerator.js - Air-Tech PDF Generator med riktig mal, logo og avvik
 const puppeteer = require('puppeteer');
 const db = require('../config/database');
-const fs = require('fs').promises;
+const fs = require('fs');
 const path = require('path');
 const { Storage } = require('@google-cloud/storage');
 
@@ -107,7 +107,8 @@ class UnifiedPDFGenerator {
     console.log(`📄 Starting PDF generation for report ${serviceReportId}`);
     try {
       await this.init();
-      const reportData = await this.fetchReportData(serviceReportId, tenantId);
+      let reportData = await this.fetchReportData(serviceReportId, tenantId);
+      
       const companySettings = await this.loadCompanySettings(tenantId);
       const html = await this.generateHTML(reportData, companySettings);
       
@@ -126,7 +127,6 @@ class UnifiedPDFGenerator {
     }
   }
 
-  // KRITISK FIX: Komplett revidert fetchReportData som følger Air-Tech templates
   async fetchReportData(serviceReportId, tenantId) {
     const pool = await db.getTenantConnection(tenantId);
     const query = `
@@ -159,123 +159,373 @@ class UnifiedPDFGenerator {
     data.products_used = this.safeJsonParse(data.products_used, []);
     data.additional_work = this.safeJsonParse(data.additional_work, []);
     data.photos = data.photos || [];
+    data.tenant_id = tenantId;
 
     const customerData = this.safeJsonParse(data.customer_data, {});
     data.contact_person = data.contact_person || customerData?.contact_person || '';
 
-    const systemNumber = data.equipment_data?.system_nummer || data.equipment_data?.systemNumber || data.equipment_serial || '-';
-    
-    data.all_equipment = [{
-      id: data.equipment_id,
-      type: data.equipment_type,
-      location: data.equipment_location,
-      name: data.equipment_name,
-      system_number: systemNumber,
-      betjener: data.equipment_data?.betjener || '-',
-      report_id: data.id
-    }];
-
-    // KRITISK: Load Air-Tech template basert på equipment type
-    let checklistTemplate = null;
-    try {
-      const templateResult = await pool.query(
-        'SELECT template_data FROM checklist_templates WHERE equipment_type = $1', 
-        [data.equipment_type]
-      );
-      if (templateResult.rows.length > 0) {
-        checklistTemplate = templateResult.rows[0].template_data;
-        console.log('✅ Loaded Air-Tech template for', data.equipment_type);
-      } else {
-        console.warn('⚠️ No Air-Tech template found for', data.equipment_type, '- using fallback');
-        // Use built-in Air-Tech template as fallback
-        checklistTemplate = this.getAirTechTemplate(data.equipment_type);
-      }
-    } catch (e) { 
-      console.error('❌ Could not fetch checklist template:', e.message);
-      checklistTemplate = this.getAirTechTemplate(data.equipment_type);
-    }
-
-    // Prosesser checklist_data til Air-Tech checkpoint format
-        if (data.checklist_data && data.checklist_data.components) {
-          data.checklist_data.components = data.checklist_data.components.map(component => {
-            // BEVAR ORIGINAL DATA
-            component.originalChecklist = component.checklist;
-
-            // Set komponent navn basert på details
-            if (!component.name && component.details) {
-              const details = component.details;
-              if (details.etasje && details.leilighet_nr && details.aggregat_type && details.system_nummer) {
-                component.name = `${details.etasje} - ${details.leilighet_nr} - ${details.aggregat_type} - ${details.system_nummer}`;
-              } else {
-                component.name = Object.values(details).filter(v => v).join(' - ') || 'Sjekkliste';
-              }
-            }
-
-        // KRITISK: Konverter checklist til Air-Tech checkpoint format
-        if (component.checklist && checklistTemplate) {
-          component.checkpoints = checklistTemplate.checklistItems.map(item => {
-            const value = component.checklist[item.id] || {};
-            return {
-              id: item.id,
-              name: item.label, // Use Air-Tech labels!
-              status: value.status || 'na',
-              comment: value.comment || value.avvikComment || value.byttetComment || '',
-              inputType: item.inputType,
-              value: value.value,
-              temperature: value.temperature,
-              efficiency: value.efficiency,
-              images: value.images || [], // KRITISK: Include images!
-              componentName: component.name
-            };
-          });
-        } else if (component.checklist) {
-          // Fallback hvis template mangler
-          component.checkpoints = Object.entries(component.checklist).map(([key, value]) => ({
-            id: key,
-            name: this.formatCheckpointName(key),
-            status: value?.status || 'na',
-            comment: value?.comment || value?.avvikComment || value?.byttetComment || '',
-            images: value?.images || [],
-            componentName: component.name
-          }));
-        }
-        
-        return component;
-      });
-    }
-
-    // KRITISK: Ekstrakterer avvik fra alle komponenter
-    data.avvik = [];
-    let avvikCounter = 1;
-    
-    if (data.checklist_data && data.checklist_data.components) {
-      data.checklist_data.components.forEach(component => {
-        if (component.checkpoints) {
-          component.checkpoints.forEach(checkpoint => {
-            if (checkpoint.status === 'avvik' && checkpoint.comment) {
-              data.avvik.push({
-                id: String(avvikCounter++).padStart(3, '0'),
-                systemnummer: systemNumber,
-                component: component.name || 'Ukjent komponent',
-                checkpoint: checkpoint.name,
-                description: checkpoint.comment,
-                images: checkpoint.images || []
-              });
-            }
-          });
-        }
-      });
-    }
-    
-    data.overall_comment = data.checklist_data?.overallComment || '';
-    
-    console.log(`✅ Air-Tech PDF Data processed: ${data.checklist_data.components?.length || 0} components, ${data.avvik.length} avvik found`);
-    if (data.avvik.length > 0) {
-      console.log('🚨 Avvik found:', data.avvik.map(a => `${a.id}: ${a.checkpoint} - ${a.description}`));
-    }
-    
     return data;
   }
+
+  async processAirTechData(data) {
+  console.log('🔧 Starting Air-Tech data processing...');
+  
+  // DEBUG: Log all available customer data
+  console.log('🔍 DEBUG Customer data:', {
+    customer_name: data.customer_name,
+    company_name: data.company_name,
+    customer_data: data.customer_data,
+    checklist_data_components: data.checklist_data?.components?.length || 0,
+    available_fields: Object.keys(data).filter(key => 
+      key.toLowerCase().includes('customer') || 
+      key.toLowerCase().includes('company')
+    )
+  });
+
+  // KRITISK FIX: Bygg equipment overview fra components
+  this.buildEquipmentOverviewFromComponents(data);
+
+  // Load checklist template (bevar eksisterende logikk)
+  let checklistTemplate = null;
+  try {
+    const pool = await db.getTenantConnection(data.tenant_id);
+    const templateResult = await pool.query(
+      'SELECT template_data FROM checklist_templates WHERE equipment_type = $1', 
+      [data.equipment_type]
+    );
+    if (templateResult.rows.length > 0) {
+      checklistTemplate = templateResult.rows[0].template_data;
+      console.log('✅ Loaded Air-Tech template for', data.equipment_type);
+    } else {
+      console.warn('⚠️ No Air-Tech template found for', data.equipment_type, '- using fallback');
+      checklistTemplate = this.getAirTechTemplate(data.equipment_type);
+    }
+  } catch (e) { 
+    console.error('❌ Could not fetch checklist template:', e.message);
+    checklistTemplate = this.getAirTechTemplate(data.equipment_type);
+  }
+
+  // Prosesser checklist_data til Air-Tech checkpoint format (bevar eksisterende)
+  if (data.checklist_data && data.checklist_data.components) {
+    data.checklist_data.components = data.checklist_data.components.map(component => {
+      component.originalChecklist = component.checklist;
+
+      if (!component.name && component.details) {
+        const details = component.details;
+        if (details.etasje && details.leilighet_nr && details.aggregat_type && details.system_nummer) {
+          component.name = `${details.etasje} - ${details.leilighet_nr} - ${details.aggregat_type} - ${details.system_nummer}`;
+        } else {
+          component.name = Object.values(details).filter(v => v).join(' - ') || 'Sjekkliste';
+        }
+      }
+
+      if (component.checklist && checklistTemplate) {
+        component.checkpoints = checklistTemplate.checklistItems.map(item => {
+          const value = component.checklist[item.id] || {};
+          return {
+            id: item.id,
+            name: item.label,
+            status: value.status || 'na',
+            comment: value.comment || value.avvikComment || value.byttetComment || '',
+            inputType: item.inputType,
+            value: value.value,
+            temperature: value.temperature,
+            efficiency: value.efficiency,
+            images: value.images || [],
+            componentName: component.name
+          };
+        });
+      } else if (component.checklist) {
+        component.checkpoints = Object.entries(component.checklist).map(([key, value]) => ({
+          id: key,
+          name: this.formatCheckpointName(key),
+          status: value?.status || 'na',
+          comment: value?.comment || value?.avvikComment || value?.byttetComment || '',
+          images: value?.images || [],
+          componentName: component.name
+        }));
+      }
+      
+      return component;
+    });
+  }
+
+  // KRITISK FIX: Ekstrakterer avvik med systemfelter
+  this.extractAvvikFromComponents(data);
+
+  data.overall_comment = data.checklist_data?.overallComment || '';
+  
+  console.log(`✅ Air-Tech PDF Data processed: ${data.checklist_data.components?.length || 0} components, ${data.avvik.length} avvik found`);
+  
+  return data;
+}
+// NY METODE: Bygg equipment overview fra checklist components
+buildEquipmentOverviewFromComponents(data) {
+  console.log('🔧 Building equipment overview from components...');
+  
+  if (data.checklist_data?.components?.length > 0) {
+    console.log('📋 Found components, extracting system fields...');
+    
+    data.all_equipment = data.checklist_data.components.map((component, index) => {
+      console.log(`🔍 Component ${index + 1} data:`, {
+        details: component.details,
+        detailsWithLabels: component.detailsWithLabels,
+        name: component.name
+      });
+      
+      // KRITISK FIX: Hent systemfelter fra riktig sted
+      const systemNumber = this.extractSystemField(component, 'system_nummer') ||
+                          this.extractSystemField(component, 'systemnummer') || '';
+      
+      const plassering = this.extractSystemField(component, 'plassering') ||
+                  this.extractSystemField(component, 'location') || 
+                  this.extractSystemField(component, 'leilighet_nr') ||  // LEGG TIL
+                  this.extractSystemField(component, 'etasje') ||        // LEGG TIL
+                  '';
+
+      const betjener = this.extractSystemField(component, 'betjener') ||
+                this.extractSystemField(component, 'operator') || 
+                this.extractSystemField(component, 'tekniker') ||        // LEGG TIL
+                'Air-Tech AS';                                           // LEGG TIL DEFAULT;
+      
+      const viftetype = this.extractSystemField(component, 'viftetype') ||
+                       this.extractSystemField(component, 'aggregat_type') || '';
+      
+      console.log(`📊 Extracted fields for component ${index + 1}:`, {
+        systemNumber, plassering, betjener, viftetype
+      });
+      
+      return {
+        type: viftetype || data.equipment_type || '',
+        system_number: systemNumber,
+        location: plassering,
+        betjener: betjener
+      };
+    });
+    
+    console.log('✅ Built all_equipment from components:', data.all_equipment);
+  } else {
+    console.log('⚠️ No components found, using fallback equipment data');
+    const systemNumber = data.equipment_data?.system_nummer || 
+                        data.equipment_data?.systemNumber || 
+                        data.equipment_serial || '';
+    
+    data.all_equipment = [{
+      type: data.equipment_type || '',
+      system_number: systemNumber,
+      location: data.equipment_location || '',
+      betjener: data.equipment_data?.betjener || ''
+    }];
+  }
+}
+
+// HJELPEMETODE: Ekstrakterer systemfelt fra component
+extractSystemField(component, fieldName) {
+  // Prøv først detailsWithLabels (ny struktur med labels)
+  if (component.detailsWithLabels && component.detailsWithLabels[fieldName]) {
+    return component.detailsWithLabels[fieldName].value || '';
+  }
+  
+  // Fallback til details (gammel struktur)
+  if (component.details && component.details[fieldName]) {
+    return component.details[fieldName];
+  }
+  
+  return '';
+}
+
+// NY METODE: Ekstrakterer avvik med systemfelter og bilder
+extractAvvikFromComponents(data) {
+  console.log('🚨 Extracting avvik from components...');
+  
+  data.avvik = [];
+  let avvikCounter = 1;
+
+  if (data.checklist_data?.components) {
+    data.checklist_data.components.forEach((component, componentIndex) => {
+      const systemNumber = this.extractSystemField(component, 'system_nummer') ||
+                          this.extractSystemField(component, 'systemnummer') || 
+                          `Komponent ${componentIndex + 1}`;
+      
+      if (component.checkpoints) {
+        component.checkpoints.forEach(checkpoint => {
+          if (checkpoint.status === 'avvik' && checkpoint.comment) {
+            const avvikData = {
+              avvik_id: String(avvikCounter++).padStart(3, '0'),    // ✅ RIKTIG
+              systemnummer: systemNumber,
+              komponent: checkpoint.name,                           // ✅ RIKTIG - sjekkpunkt-navn
+              kommentar: checkpoint.comment,                        // ✅ RIKTIG
+              images: checkpoint.images || []
+            };
+            
+            data.avvik.push(avvikData);
+            
+            console.log(`🚨 Found avvik ${avvikData.id}:`, {
+              system: systemNumber,
+              checkpoint: checkpoint.name,
+              hasImages: avvikData.images.length > 0
+            });
+          }
+        });
+      }
+    });
+  }
+  
+  console.log(`✅ Extracted ${data.avvik.length} total avvik`);
+}
+
+// HJELPEMETODE: Forbedret kundenavn-ekstraksjons
+extractCustomerName(data) {
+  console.log('🔍 DEBUG All available customer data:', {
+    customer_name: data.customer_name,
+    company_name: data.company_name,
+    customer_data: data.customer_data,
+    available_customer_fields: Object.keys(data).filter(key => 
+      key.toLowerCase().includes('customer') || 
+      key.toLowerCase().includes('company') ||
+      key.toLowerCase().includes('name')
+    )
+  });
+
+  const customerName = data.customer_name || 
+                      data.company_name ||
+                      data.customer_data?.name || 
+                      data.customer_data?.company_name ||
+                      data.customerName ||
+                      data.name ||
+                      'Kunde ikke funnet';
+
+  console.log('✅ Resolved customer name:', customerName);
+  return customerName;
+}
+
+  getReportTheme(equipmentType) {
+    const themes = {
+      'boligventilasjon': {
+        title: 'SERVICERAPPORT BOLIGVENTILASJON',
+        table: {
+          equipmentOverviewHeadings: ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'],
+          checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat']
+        },
+        show: { equipmentOverview: true, checklistResults: true, avvik: true, summary: true },
+        cssMods: { rowDensity: 'compact', tableHeaderWeight: '600', headerUppercase: true }
+      },
+      'ventilasjon': {
+        title: 'SERVICERAPPORT VENTILASJON',
+        table: {
+          equipmentOverviewHeadings: ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'],
+          checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat']
+        },
+        show: { equipmentOverview: true, checklistResults: true, avvik: true, summary: true },
+        cssMods: { rowDensity: 'normal', tableHeaderWeight: '600', headerUppercase: true }
+      },
+      'vifter': {
+        title: 'SERVICERAPPORT VIFTER',
+        table: {
+          equipmentOverviewHeadings: ['Viftetype', 'Systemnummer', 'Plassering', 'Betjener'],
+          checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat']
+        },
+        show: { equipmentOverview: true, checklistResults: true, avvik: true, summary: true },
+        cssMods: { rowDensity: 'normal', tableHeaderWeight: '600', headerUppercase: true }
+      },
+      'custom': {
+        title: 'SERVICERAPPORT (TILPASSET)',
+        table: {
+          equipmentOverviewHeadings: ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'],
+          checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat']
+        },
+        show: { equipmentOverview: false, checklistResults: false, avvik: false, summary: true },
+        cssMods: { rowDensity: 'normal', tableHeaderWeight: '600', headerUppercase: true }
+      }
+    };
+
+    return themes[equipmentType] || themes['ventilasjon'];
+  }
+
+  renderEquipmentOverviewTable(data, theme) {
+    if (!data.all_equipment || data.all_equipment.length === 0) {
+      return '';
+    }
+
+    const headings = theme.table.equipmentOverviewHeadings;
+    
+    return `
+    <section class="section equipment-overview">
+        <h2 class="section-header">Oversikt over kontrollerte systemer</h2>
+        <table class="styled-table">
+            <thead>
+                <tr>
+                    <th style="width: 25%">${headings[0]}</th>
+                    <th style="width: 20%">${headings[1]}</th>
+                    <th style="width: 35%">${headings[2]}</th>
+                    <th style="width: 20%">${headings[3]}</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${data.all_equipment.map(eq => `
+                    <tr>
+                        <td>${eq.type || ''}</td>
+                        <td>${eq.system_number || ''}</td>
+                        <td>${eq.location || ''}</td>
+                        <td>${eq.betjener || ''}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    </section>
+  `;
+  }
+
+// HJELPEMETODE: Rendrer avvikstabell (ERSTATTER gamle avvik-seksjoner)
+renderAvvikTable(data) {
+  if (!data.avvik || data.avvik.length === 0) {
+    return '';
+  }
+
+  return `
+    <section class="avvik-section">
+        <h2 class="section-header avvik-header">Registrerte avvik</h2>
+        <div class="avvik-notice">
+            <p><strong>VIKTIG:</strong> Følgende avvik ble registrert under servicen og krever oppmerksomhet:</p>
+        </div>
+        
+        <table class="styled-table avvik-table">
+            <thead>
+                <tr>
+                    <th style="width: 12%">Avvik ID</th>
+                    <th style="width: 18%">Systemnummer</th>
+                    <th style="width: 25%">Komponent</th>
+                    <th style="width: 45%">Kommentar/Tiltak</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${data.avvik.map(avvik => `
+                    <tr>
+                        <td><strong>${avvik.avvik_id}</strong></td>
+                        <td>${avvik.systemnummer}</td>
+                        <td>${avvik.komponent}</td>
+                        <td>${avvik.kommentar}</td>
+                    </tr>
+                    ${avvik.images && avvik.images.length > 0 ? `
+                    <tr class="avvik-images-row">
+                        <td colspan="4">
+                            <div class="avvik-images">
+                                <strong>Avviksbilder:</strong>
+                                <div class="images-grid">
+                                    ${avvik.images.map((image, index) => `
+                                        <img src="${image}" alt="Avviksbilde ${index + 1}" class="avvik-image">
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    ` : ''}
+                `).join('')}
+            </tbody>
+        </table>
+    </section>
+  `;
+}
 
   // Air-Tech template fallbacks
   getAirTechTemplate(equipmentType) {
@@ -319,143 +569,76 @@ class UnifiedPDFGenerator {
     return nameMap[id] || id.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/^./, str => str.toUpperCase()).trim();
   }
 
-  // Air-Tech style komponenter
-  generateComponentChecklist(component) {
-    if (!component.checkpoints || component.checkpoints.length === 0) {
-      return '';
-    }
-
-    const rows = component.checkpoints.map(checkpoint => {
-      const avvikId = (checkpoint.status === 'avvik') ? this.avvikMap.get(`${checkpoint.componentName}#${checkpoint.name}`) : '';
-      let statusHtml = '';
-      switch (checkpoint.status) {
-        case 'ok':
-          statusHtml = `<span class="status status-ok">OK</span>`;
-          break;
-        case 'byttet':
-          statusHtml = `<span class="status status-byttet">BYTTET</span>`;
-          break;
-        case 'avvik':
-          statusHtml = `<span class="status status-avvik">AVVIK</span> ${avvikId ? `<span class="avvik-id-ref">(ID: ${avvikId})</span>` : ''}`;
-          break;
-        default:
-          statusHtml = `<span class="status status-na">Ikke relevant</span>`;
-          break;
-      }
-
-      let result = checkpoint.comment || '';
-
-      // SPESIALBEHANDLING for ulike inputTypes
-      if (checkpoint.inputType) {
-        switch (checkpoint.inputType) {
-          case 'virkningsgrad':
-            if (checkpoint.efficiency !== undefined) {
-              result = `${checkpoint.efficiency}%`;
-            } else {
-              const virkningsgradData = this.findVirkningsgradData(component, checkpoint.id);
-              if (virkningsgradData && virkningsgradData.virkningsgrad !== undefined) {
-                result = `${virkningsgradData.virkningsgrad}%`;
-              } else {
-                result = 'Ikke målt';
-              }
-            }
-            break;
-            
-          case 'tilstandsgrad_dropdown':
-            if (checkpoint.value) {
-              result = checkpoint.value;
-            } else {
-              const tilstandData = this.findTilstandData(component, checkpoint.id);
-              if (tilstandData) {
-                result = tilstandData;
-              } else {
-                result = 'Ikke angitt';
-              }
-            }
-            break;
-            
-          case 'konsekvensgrad_dropdown':
-            if (checkpoint.value) {
-              result = checkpoint.value;
-            } else {
-              const konsekvensData = this.findKonsekvensData(component, checkpoint.id);
-              if (konsekvensData) {
-                result = konsekvensData;
-              } else {
-                result = 'Ikke angitt';
-              }
-            }
-            break;
-            
-          case 'temperature':
-            if (checkpoint.temperature !== undefined && checkpoint.temperature !== null) {
-              result = `${checkpoint.temperature}°C`;
-            } else {
-              result = 'Ikke målt';
-            }
-            break;
-            
-          case 'dropdown_ok_avvik':
-          case 'dropdown_ok_avvik_comment':
-            if (checkpoint.value) {
-              result = checkpoint.value;
-              if (checkpoint.comment) {
-                result += ` (${checkpoint.comment})`;
-              }
-            }
-            break;
-            
-          default:
-            result = checkpoint.comment || checkpoint.value || '';
-        }
-      } else {
-        // Fallback for when inputType is not defined
-        result = checkpoint.comment || checkpoint.value || '';
-      }
-
-      const mainRow = `
-        <tr>
-          <td>${checkpoint.name}</td>
-          <td class="center">${statusHtml}</td>
-          <td>${result}</td>
-        </tr>
-      `;
-
-      let imageRow = '';
-      if (checkpoint.images && checkpoint.images.length > 0) {
-        imageRow = `
-          <tr class="image-row">
-            <td></td>
-            <td colspan="2">
-              <div class="checklist-images">
-                ${checkpoint.images.map(img => `<img src="${img}" alt="Bilde for ${checkpoint.name}" class="checklist-image">`).join('')}
-              </div>
-            </td>
-          </tr>
-        `;
-      }
-      
-      return mainRow + imageRow;
-    }).join('');
-
-    return `
-      <div class="component-checklist">
-        <h3 class="component-name">${component.name || 'Sjekkliste'}</h3>
-        <table class="styled-table">
-          <thead>
-            <tr>
-              <th style="width: 45%;">Sjekkpunkt</th>
-              <th style="width: 15%; text-align: center;">Status</th>
-              <th>Merknad / Resultat</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>
-      </div>
-    `;
+  generateComponentChecklist(component, theme) {
+  if (!component.checkpoints || component.checkpoints.length === 0) {
+    return '';
   }
+
+  const headers = theme?.table?.checklistHeadings || ['Sjekkpunkt', 'Status', 'Merknad / Resultat'];
+
+  return `
+    <div class="component-checklist page-break-avoid" style="break-inside: avoid;">
+        <div class="component-name">${component.name || 'Ukjent komponent'}</div>
+        <table class="styled-table">
+            <thead>
+                <tr>
+                    <th style="width: 45%">${headers[0]}</th>
+                    <th style="width: 15%; text-align: center">${headers[1]}</th>
+                    <th style="width: 40%">${headers[2]}</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${component.checkpoints.map(checkpoint => {
+                  let statusText = '';
+                  let statusClass = 'status-na';
+                  
+                  switch(checkpoint.status) {
+                    case 'ok':
+                      statusText = 'OK';
+                      statusClass = 'status-ok';
+                      break;
+                    case 'byttet':
+                      statusText = 'BYTTET';
+                      statusClass = 'status-byttet';
+                      break;
+                    case 'avvik':
+                      statusText = 'AVVIK';
+                      statusClass = 'status-avvik';
+                      break;
+                    default:
+                      statusText = 'Ikke relevant';
+                      statusClass = 'status-na';
+                  }
+
+                  const comment = checkpoint.comment || '';
+                  const hasImages = checkpoint.images && checkpoint.images.length > 0;
+
+                  return `
+                    <tr>
+                        <td>${checkpoint.name}</td>
+                        <td class="center">
+                            <span class="status ${statusClass}">${statusText}</span>
+                        </td>
+                        <td>${comment}</td>
+                    </tr>
+                    ${hasImages ? `
+                    <tr class="image-row">
+                        <td colspan="3">
+                            <div class="checklist-images">
+                                ${checkpoint.images.map(img => `
+                                    <img src="${img.url}" alt="${img.description || 'Bilde'}" class="checklist-image" />
+                                `).join('')}
+                            </div>
+                        </td>
+                    </tr>
+                    ` : ''}
+                  `;
+                }).join('')}
+            </tbody>
+        </table>
+    </div>
+  `;
+}
 
   // KRITISK: Air-Tech style avvik-seksjon som ALLTID vises når avvik finnes
   generateAvvikSection(avviks) {
@@ -509,351 +692,543 @@ class UnifiedPDFGenerator {
     `;
   }
 
-  // KRITISK FIX: Air-Tech HTML med riktig logo-håndtering og avvik
   async generateHTML(data, settings) {
-    this.avvikMap = new Map();
-    if (data.avvik && data.avvik.length > 0) {
-      data.avvik.forEach(avvik => {
-        const key = `${avvik.component}#${avvik.checkpoint}`;
-        this.avvikMap.set(key, avvik.id);
-      });
-    }
+    // KRITISK FIX: Forbedret kundenavn-ekstraksjons
+    const customerName = this.extractCustomerName(data);
 
-    const css = this.getAirTechCSS();
-    const company = settings.company || {};
+    // KRITISK FIX: Prosesser data først for å bygge equipment overview
+    data = await this.processAirTechData(data);
+
+    // Logoet kommer allerede fra loadCompanySettings() eller lignende
+    // Sjekk først settings.logoBase64, deretter settings.logo_base64
+    const logoBase64 = settings?.logoBase64 || settings?.logo_base64 || null;
+    const theme = this.getReportTheme(data.equipment_type);
+    const equipmentTypeClass = (data.equipment_type || 'generic').toLowerCase();
     
-    // KRITISK FIX: Riktig logo-håndtering
-    let logoHtml = '';
-    if (settings.logoBase64) {
-      logoHtml = `<img src="${settings.logoBase64}" alt="${company.name} Logo" class="company-logo">`;
-    } else {
-      logoHtml = `
-        <div class="logo-placeholder">
-          <div class="logo-text">Air-Tech<br>AS</div>
-        </div>`;
-    }
-    
-    const technician = data.technician_name || 'Tekniker';
-    const reportDate = new Date(data.service_date || data.created_at).toLocaleDateString('nb-NO');
-    
+    const reportDate = new Date(data.created_at).toLocaleDateString('nb-NO');
+    const technician = data.technician_name || 'Ukjent tekniker';
+    const companyName = settings?.companyName || 'Air-Tech AS';
+  
     return `
-      <!DOCTYPE html>
-      <html lang="no">
-      <head>
+    <!DOCTYPE html>
+    <html lang="no">
+    <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Servicerapport ${data.id}</title>
-        <style>${css}</style>
-      </head>
-      <body>
-          <div class="pdf-container">
-              <header class="header-section">
-                  <div class="header-content">
-                      <div class="company-info">
-                          ${logoHtml}
-                          <div class="company-details">
-                              <h1 class="company-name">Air-Tech AS</h1>
-                              <p class="company-address">${company.address || 'Stanseveien 18, 0975 Oslo'}</p>
-                          </div>
-                      </div>
-                      <div class="report-info">
-                          <h2 class="report-title">SERVICERAPPORT</h2>
-                          <p class="report-number">SR-${data.id}</p>
-                          <p class="report-date">${reportDate}</p>
-                      </div>
-                  </div>
-              </header>
-
-              <main class="main-content">
-                  <section class="section customer-info">
-                      <div class="info-grid">
-                          <div class="info-block">
-                              <h3>Kundeopplysninger</h3>
-                              <p><strong>BEDRIFT:</strong> ${data.company_name || ''}</p>
-                              <p><strong>KONTAKTPERSON:</strong> ${data.contact_person || '-'}</p>
-                              <p><strong>ADRESSE:</strong> ${data.company_address || '-'}</p>
-                              <p><strong>TELEFON:</strong> ${data.company_phone || '-'}</p>
-                          </div>
-                          <div class="info-block">
-                              <h3>Serviceopplysninger</h3>
-                              <p><strong>SERVICEDATO:</strong> ${reportDate}</p>
-                              <p><strong>TEKNIKER:</strong> ${technician}</p>
-                              <p><strong>ANLEGG:</strong> ${data.equipment_name || ''}</p>
-                              <p><strong>TYPE:</strong> ${data.equipment_type || ''}</p>
-                              <p><strong>PLASSERING:</strong> ${data.equipment_location || ''}</p>
-                          </div>
-                      </div>
-                  </section>
-
-                  <section class="section equipment-overview">
-                      <h2 class="section-header">Oversikt over kontrollerte systemer</h2>
-                      <table class="styled-table">
-                          <thead>
-                              <tr>
-                                  <th>Systemtype</th>
-                                  <th>Systemnummer</th>
-                                  <th>Plassering</th>
-                                  <th>Betjener</th>
-                              </tr>
-                          </thead>
-                          <tbody>
-                              ${data.all_equipment.map(eq => `
-                                  <tr>
-                                      <td>${eq.type || ''}</td>
-                                      <td>${eq.system_number || ''}</td>
-                                      <td>${eq.location || ''}</td>
-                                      <td>${eq.betjener || ''}</td>
-                                  </tr>
-                              `).join('')}
-                          </tbody>
-                      </table>
-                  </section>
-
-                  ${data.avvik && data.avvik.length > 0 ? this.generateAvvikSection(data.avvik) : ''}
-
-                  <section class="section page-break-before-auto">
-                      <h2 class="section-header">Resultat fra sjekklister</h2>
-                      ${data.checklist_data.components.map(component => this.generateComponentChecklist(component)).join('')}
-                  </section>
-                  
-                  ${(data.overall_comment || (data.photos && data.photos.length > 0)) ? this.generateSummarySection(data) : ''}
-              </main>
-
-              <footer class="footer-section">
-                  <div class="signature-area">
-                      <p>Med vennlig hilsen,</p>
-                      <p><strong>Air-Tech AS</strong></p>
-                      <div class="signature-line"></div>
-                      <p>${technician}</p>
-                  </div>
-                  <div class="footer-grid">
-                      <div class="footer-company-info">
-                          <p><strong>Air-Tech AS</strong></p>
-                          <p>Stanseveien 18, 0975 Oslo</p>
-                      </div>
-                      <div class="footer-contact-info">
-                           <p>Telefon: +47 91 52 40 40</p>
-                           <p>Epost: post@air-tech.no</p>
-                           <p>Org.nr: 889 558 652</p>
-                      </div>
-                  </div>
-              </footer>
-          </div>
-      </body>
-      </html>`;
+        <title>${theme.title} ${data.id}</title>
+        <style>
+            ${this.getAirTechCSS(theme)}
+        </style>
+    </head>
+    <body class="type-${equipmentTypeClass}">
+        <div class="pdf-container">
+            <header class="header-section">
+                <div class="header-content">
+                    <div class="header-left">
+                        <h1 class="main-title">Servicerapport: ${customerName}</h1>
+                    </div>
+                    <div class="header-right">
+                        ${logoBase64 ? 
+                          `<img src="${logoBase64}" alt="Air-Tech AS" class="company-logo">` :
+                          `<div class="logo-placeholder">Air-Tech AS</div>`
+                        }
+                    </div>
+                </div>
+                <div class="header-divider"></div>
+            </header>
+            <section class="customer-info-table">
+                <table class="info-table">
+                    <tr>
+                        <td class="info-label">Avtalenummer:</td>
+                        <td class="info-value"></td>
+                        <td class="info-label">Besøk nr:</td>
+                        <td class="info-value"></td>
+                        <td class="info-label">Årstall</td>
+                        <td class="info-value">${new Date(data.created_at).getFullYear()}</td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Kundenummer</td>
+                        <td class="info-value">${data.customer_data?.id || data.customer_id || ''}</td>
+                        <td class="info-label">Kundenavn</td>
+                        <td class="info-value">${data.customer_name || data.customer_data?.name || ''}</td>
+                        <td class="info-label">Mottaker av rapport</td>
+                        <td class="info-value">${data.customer_data?.contactPerson || data.contact_person || ''}</td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Byggnavn</td>
+                        <td class="info-value">${data.equipment_location || data.location || data.equipment_name || ''}</td>
+                        <td class="info-label">Adresse</td>
+                        <td class="info-value">${data.customer_address || data.address || data.customer_data?.address || ''}</td>
+                        <td class="info-label">Post nr.</td>
+                        <td class="info-value">${data.customer_data?.postalCode || data.postal_code || ''}</td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Rapport dato:</td>
+                        <td class="info-value">${new Date(data.created_at).toLocaleDateString('nb-NO')}</td>
+                        <td class="info-label">Utført av:</td>
+                        <td class="info-value">${data.technician_name || ''}</td>
+                        <td class="info-label">Vår kontaktperson</td>
+                        <td class="info-value">${data.technician_name || ''}</td>
+                    </tr>
+                </table>
+            </section>
+            <section class="service-agreement-text">
+                <p>Servicearbeidet som ble avtalt for de angitte anleggene er nå fullført i tråd med avtalen. I henhold til vår serviceavtale oversender vi en servicerapport etter fullført servicebesøk.</p>
+            </section>
+            <section class="equipment-overview">
+                <h2 class="section-header">Anlegg- og systemoversikt</h2>
+                <table class="styled-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 25%">Systemtype</th>
+                            <th style="width: 25%">Systemnummer</th>
+                            <th style="width: 25%">Plassering</th>
+                            <th style="width: 25%">Betjener</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.all_equipment.map(eq => `
+                            <tr>
+                                <td>${eq.type || ''}</td>
+                                <td>${eq.system_number || ''}</td>
+                                <td>${eq.location || ''}</td>
+                                <td>${eq.betjener || ''}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </section>
+            
+  
+            <main>
+                
+                ${this.renderAvvikTable(data)}
+  
+                
+  
+                ${theme.show.checklistResults && data.checklist_data?.components?.length ? `
+                <section class="section page-break-before page-break-avoid">
+                    <h2 class="section-header">Resultat fra sjekklister</h2>
+                    ${data.checklist_data.components.map(component => this.generateComponentChecklist(component, theme)).join('')}
+                </section>
+                ` : ''}
+                
+                ${theme.show.summary && (data.overall_comment || (data.photos && data.photos.length > 0)) ? this.generateSummarySection(data) : ''}
+            </main>
+  
+            <footer class="footer-section">
+    <div class="signature-section">
+        <p>Med vennlig hilsen,</p>
+        <p><strong>${companyName}</strong></p>
+        <div class="signature-placeholder">
+            <span>[Navn ansatt]</span>
+            <span style="text-align: center;">[Stilling ansatt]</span>
+            <span style="text-align: right;">[Dato]</span>
+        </div>
+    </div>
+    
+    <div class="page-footer">
+        <div class="footer-content">
+            <div class="footer-left">
+                <p><strong>${companyName}</strong></p>
+                <p>Stanseveien 18, 0975 Oslo</p>
+                <p><a href="www.air-tech.no">www.air-tech.no</a></p>
+            </div>
+            <div class="footer-center">
+                <p>Telefon: +47 91 52 40 40</p>
+                <p>Epost: post@air-tech.no</p>
+                <p>Org.nr: 889 558 652</p>
+            </div>
+            <div class="footer-right">
+                <p>Side 4 av 4</p>
+            </div>
+        </div>
+    </div>
+</footer>
+        </div>
+    </body>
+    </html>`;
   }
 
-  // Air-Tech CSS styling
-  getAirTechCSS() {
+  getAirTechCSS(theme) {
+    const density = theme?.cssMods?.rowDensity || 'normal';
+    const cellPadding = density === 'compact' ? '8px 10px' : '10px 12px';
+    
     return `
-      :root {
-        --brand-blue: #3b5998;
-        --dark-blue: #1e3a8a;
-        --light-blue: #3b82f6;
-        --success-green: #10b981;
-        --warning-orange: #f59e0b;
-        --error-red: #ef4444;
-        --text-dark: #1f2937;
-        --text-light: #6b7280;
-        --border-color: #d1d5db;
-        --light-gray: #f9fafb;
-        --status-ok: #059669;
-        --status-byttet: #0891b2;
-        --status-avvik: #dc2626;
-      }
-
-      * { box-sizing: border-box; margin: 0; padding: 0; }
+      @page { 
+        size: A4; 
+        margin: 14mm 16mm; 
+      } 
       
       body {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        line-height: 1.6;
-        color: var(--text-dark);
-        background: white;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 10pt;
+        line-height: 1.45;
+        color: #222;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        margin: 0;
+        padding: 0;
       }
-
-      .pdf-container { max-width: 210mm; margin: 0 auto; background: white; }
-
+  
+      :root {
+        --brand-blue: #0B5FAE;        /* Hovedfarge */
+        --brand-blue-2: #094E90;      /* Mørkere variant */
+        --border-color: #D9E1EA;      /* Tabellborder */
+        --row-alt: #F6F8FB;           /* Alternerende rader */
+        --text-color: #222222;        /* Primær tekst */
+        --muted-text: #555555;        /* Sekundær tekst */
+        --status-ok: #28A745;         /* OK status */
+        --status-byttet: #FD7E14;     /* Byttet status */
+        --status-avvik: #DC3545;      /* Avvik status */
+        --status-na: #6C757D;         /* Ikke relevant */
+        --info-table-bg: #F8F9FA;     /* Grå bakgrunn for info-tabell */
+        --info-table-border: #DEE2E6; /* Mørkere grå rammer */
+      }
+  
+      .pdf-container { 
+        max-width: 210mm; 
+        margin: 0 auto; 
+        background: white; 
+      }
+  
+      /* HEADER - Hvit bakgrunn som ønsket */
       .header-section {
-        background: linear-gradient(135deg, var(--brand-blue), var(--dark-blue));
-        color: white;
-        padding: 30px 30px 25px;
-        margin-bottom: 25px;
+        background: white;
+        color: var(--text-color);
+        padding: 20px 22px 10px;
+        margin-bottom: 20px;
       }
-
-      .header-content { display: flex; justify-content: space-between; align-items: flex-start; }
-
-      .company-info { display: flex; align-items: center; gap: 20px; }
-
+  
+      .header-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+  
+      .header-left {
+        flex: 1;
+      }
+  
+      .main-title {
+        font-size: 24pt;
+        font-weight: 700;
+        color: var(--brand-blue);
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+  
+      .header-right {
+        display: flex;
+        align-items: flex-start;
+      }
+  
       .company-logo {
         height: 80px;
         width: auto;
-        max-width: 120px;
+        max-width: 150px;
         object-fit: contain;
-        background: white;
-        padding: 10px;
-        border-radius: 8px;
       }
-
+  
       .logo-placeholder {
         height: 80px;
-        width: 120px;
-        background: white;
-        color: var(--brand-blue);
+        width: 150px;
+        background: var(--brand-blue);
+        color: white;
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 8px;
-        border: 2px solid white;
-      }
-
-      .logo-text {
+        border-radius: 4px;
         font-weight: bold;
         font-size: 16px;
-        text-align: center;
-        line-height: 1.2;
+      }
+  
+      .header-divider {
+        border-bottom: 2px solid var(--brand-blue);
+        margin-top: 15px;
       }
 
-      .company-name { font-size: 28px; font-weight: 700; margin-bottom: 5px; }
-      .company-address { font-size: 14px; opacity: 0.9; }
+      /* KUNDE INFO-TABELL */
+        .customer-info-table {
+        margin-bottom: 20px;
+        }
 
-      .report-info { text-align: right; }
-      .report-title { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
-      .report-number { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
-      .report-date { font-size: 14px; opacity: 0.9; }
+        .info-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--info-table-bg);
+        border: 1px solid var(--info-table-border);
+        }
 
-      .section { margin-bottom: 25px; }
-      .section-header {
-        font-size: 18px;
+        .info-table td {
+        padding: 8px 12px;
+        border: 1px solid var(--info-table-border);
+        font-size: 10pt;
+        font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .info-label {
         font-weight: 700;
-        color: var(--dark-blue);
-        margin-bottom: 15px;
-        padding-bottom: 8px;
+        color: var(--text-color);
+        background: var(--info-table-bg);
+        width: 16.66%; /* 6 kolonner */
+        }
+
+        .info-value {
+        color: var(--text-color);
+        background: var(--info-table-bg);
+        width: 16.66%;
+        }
+  
+      /* SEKSJONER */
+      .section { margin-bottom: 18px; }
+      .section-header {
+        font-size: 14pt;
+        font-weight: 700;
+        color: var(--brand-blue);
+        margin: 20px 0 10px 0;
+        padding-bottom: 6px;
         border-bottom: 2px solid var(--brand-blue);
       }
-
+  
       .avvik-header {
-        color: var(--error-red) !important;
-        border-bottom-color: var(--error-red) !important;
+        color: var(--status-avvik) !important;
+        border-bottom-color: var(--status-avvik) !important;
       }
-
-      .avvik-section {
-        background: #fef2f2;
-        padding: 20px;
-        border-radius: 8px;
-        border: 2px solid #fecaca;
-        margin-bottom: 30px;
-      }
-
-      .avvik-notice {
-        background: #fee2e2;
-        padding: 12px;
-        border-radius: 6px;
-        margin-bottom: 20px;
-        border-left: 4px solid var(--error-red);
-      }
-
-      .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
-      .info-block h3 { font-size: 14px; font-weight: 700; color: var(--dark-blue); margin-bottom: 12px; }
-      .info-block p { font-size: 12px; margin-bottom: 6px; }
-
+  
+      /* TABELLER */
       .styled-table {
         width: 100%;
         border-collapse: collapse;
-        margin-bottom: 15px;
+        margin-bottom: 20px;
         border: 1px solid var(--border-color);
       }
-
+  
       .styled-table th {
-        background-color: var(--brand-blue);
+        background: var(--brand-blue);
         color: white;
-        padding: 12px;
+        padding: 10px 12px;
         text-align: left;
         font-weight: 600;
         font-size: 11pt;
+        border-bottom: 1px solid var(--border-color);
       }
-
+  
       .styled-table td {
         padding: 10px 12px;
         border-bottom: 1px solid var(--border-color);
         font-size: 10pt;
       }
+  
+      .styled-table tbody tr:nth-child(even) {
+        background: var(--row-alt);
+      }
+  
+      /* KOMPONENT NAVN - Ren tekst som referanse */
+      .component-name {
+        font-size: 11.5pt;
+        font-weight: 700;
+        color: var(--brand-blue);
+        margin: 10px 0 6px;
+        /* INGEN bakgrunn eller border */
+      }
+  
+      /* STATUS */
+      .status { 
+        font-size: 8pt; 
+        font-weight: 700; 
+        text-transform: uppercase; 
+        letter-spacing: 0.2px; 
+      }
+      .status-ok { color: #28A745; }
+      .status-byttet { color: #FD7E14; }
+      .status-avvik { color: #DC3545; }
+      .status-na { color: #6C757D; font-weight: 400; }
+  
+      /* AVVIK STYLING */
+      .avvik-section {
+          background: #fef2f2;
+          padding: 20px;
+          border-radius: 8px;
+          border: 2px solid #fecaca;
+          margin-bottom: 30px;
+      }
 
-      .styled-table tr:nth-child(even) { background-color: #f8fafc; }
+      .avvik-header {
+          color: #dc2626 !important;
+          border-bottom-color: #dc2626 !important;
+      }
+
+      .avvik-notice {
+          background: #fee2e2;
+          padding: 12px;
+          border-radius: 6px;
+          margin-bottom: 20px;
+          border-left: 4px solid #dc2626;
+      }
 
       .avvik-item {
-        background-color: white;
-        border: 1px solid #fecaca;
-        border-left: 4px solid var(--error-red);
-        padding: 15px;
-        margin-bottom: 15px;
-        border-radius: 6px;
+          background-color: white;
+          border: 1px solid #fecaca;
+          border-left: 4px solid #dc2626;
+          padding: 15px;
+          margin-bottom: 15px;
+          border-radius: 6px;
       }
 
       .avvik-header-info {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 8px;
+          margin-bottom: 8px;
       }
 
       .avvik-id {
-        font-weight: 700;
-        color: var(--error-red);
-        font-size: 12px;
+          font-weight: 700;
+          color: #dc2626;
+          font-size: 12px;
       }
 
       .component-info {
-        font-size: 11px;
-        color: var(--text-light);
+          font-size: 11px;
+          color: #6b7280;
+          margin-left: 10px;
       }
 
       .avvik-comment {
-        font-size: 11pt;
-        color: var(--text-dark);
-        margin-bottom: 10px;
+          font-size: 11pt;
+          color: #1f2937;
+          margin-bottom: 10px;
       }
 
       .avvik-images {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-top: 10px;
       }
 
-      .avvik-image { width: 120px; height: 90px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border-color); }
+      .avvik-image {
+          width: 120px;
+          height: 90px;
+          object-fit: cover;
+          border-radius: 4px;
+          border: 1px solid #d1d5db;
+      }
 
-      .component-checklist { margin-bottom: 20px; }
-      .component-name { font-size: 12pt; font-weight: 600; color: var(--dark-blue); padding: 8px; background-color: var(--light-gray); border-radius: 4px; margin-bottom: 10px; }
-      
-      .status { font-weight: 600; text-transform: uppercase; font-size: 8.5pt; }
-      .status-ok { color: var(--status-ok); }
-      .status-byttet { color: var(--status-byttet); }
-      .status-avvik { color: var(--status-avvik); }
-      .status-na { color: var(--text-light); font-weight: 400; }
-      .avvik-id-ref { font-size: 8pt; color: var(--text-light); margin-left: 5px; }
+/* AVVIKSTABELL STYLING */
+.avvik-table {
+  border: 2px solid var(--status-avvik);
+}
 
-      .image-row td { padding: 5px 12px; border-bottom: 1px solid var(--border-color); background-color: #fafafa; }
-      .checklist-images { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-      .checklist-image { height: 70px; width: 70px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border-color); }
+.avvik-table th {
+  background: var(--status-avvik) !important;
+  color: white;
+  font-weight: 700;
+}
 
-      .summary-section { margin-top: 30px; }
-      .summary-content { padding: 15px; background-color: #f9f9f9; border-radius: 4px; border: 1px solid var(--border-color); }
-      .summary-comment { white-space: pre-wrap; margin-bottom: 20px; }
-      .documentation-photos h3 { font-size: 11pt; color: var(--dark-blue); margin-bottom: 10px; }
-      .photos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-      .photo-container { text-align: center; }
-      .photo { width: 100%; height: 120px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border-color); }
-      .photo-caption { font-size: 8pt; color: var(--text-light); margin-top: 4px; }
+.avvik-images-row td {
+  background: #fef2f2;
+  border-top: 1px dashed var(--status-avvik);
+}
 
-      .footer-section { margin-top: 40px; padding-top: 20px; border-top: 2px solid var(--brand-blue); font-size: 8pt; color: var(--text-light); }
-      .signature-area { margin-bottom: 30px; }
-      .signature-area p { margin-bottom: 5px; }
-      .signature-line { border-bottom: 1px solid var(--border-color); margin: 20px 0 10px 0; width: 300px; }
+.avvik-images {
+  padding: 10px 0;
+}
 
-      .footer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+.images-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
 
+.avvik-image {
+  max-width: 120px;
+  max-height: 80px;
+  object-fit: cover;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+  
+      /* SIDEBRUDD */
+      .page-break-before { 
+        page-break-before: always; 
+        break-before: page; 
+      }
+      .page-break-avoid { 
+        page-break-inside: avoid; 
+        break-inside: avoid; 
+      }
+  
+      /* FOOTER */
+/* SIGNATUR OG FOOTER STYLING */
+.signature-section {
+  margin: 40px 0;
+  page-break-inside: avoid;
+}
+
+.signature-placeholder {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 60px;
+  padding-top: 20px;
+  border-top: 1px solid #333;
+  font-size: 12px;
+  color: #666;
+}
+
+.page-footer {
+  margin-top: 40px;
+  padding: 20px 0;
+  border-top: 2px solid var(--brand-blue);
+  font-size: 10px;
+}
+
+.footer-content {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.footer-left,
+.footer-center,
+.footer-right {
+  flex: 1;
+}
+
+.footer-right {
+  text-align: right;
+}
+
+/* OPPDATER AVVIK CSS - HVIT BAKGRUNN */
+.avvik-section {
+  background: white !important;  /* Overstyr rosa bakgrunn */
+  padding: 0 !important;         /* Fjern ekstra padding */
+  border: none !important;       /* Fjern rosa grense */
+  border-radius: 0 !important;   /* Fjern rundede hjørner */
+  margin-bottom: 30px;
+}
+
+.avvik-notice {
+  background: white !important;  /* Hvit bakgrunn */
+  border: 2px solid var(--status-avvik);
+  padding: 15px;
+  margin-bottom: 15px;
+  border-radius: 6px;
+}
+  
       .center { text-align: center; }
-      .page-break-before-auto { page-break-before: auto; }
 
+      .service-agreement-text {
+        margin: 20px 0;
+      }
+
+      .service-agreement-text p {
+        font-size: 11pt;
+        line-height: 1.4;
+        color: var(--text-color);
+        font-family: Arial, Helvetica, sans-serif;
+        margin: 0;
+      }
+  
       @media print {
         .pdf-container { margin: 0; max-width: none; }
         .header-section { margin-bottom: 20px; }
@@ -911,7 +1286,7 @@ class UnifiedPDFGenerator {
       }
     } catch (error) { 
       console.error('❌ Error loading company settings:', error.message); 
-    }
+    } 
     
     return settings;
   }
