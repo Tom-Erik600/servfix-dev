@@ -25,7 +25,7 @@ router.use((req, res, next) => {
 router.get('/', async (req, res) => {
   try {
     const pool = await db.getTenantConnection(req.adminTenantId);
-    const result = await pool.query('SELECT id, name, initials, is_active FROM technicians');
+    const result = await pool.query('SELECT id, name, initials, stilling, is_active FROM technicians');
     res.json(result.rows);
   } catch (error) {
     console.error(`[${req.adminTenantId}] Error fetching technicians:`, error);
@@ -36,7 +36,7 @@ router.get('/', async (req, res) => {
 // POST new technician
 router.post('/', async (req, res) => {
   try {
-    const { name, initials, password } = req.body;
+    const { name, initials, password, stilling } = req.body;
 
     if (!name || !initials || !password) {
       return res.status(400).json({ error: 'Navn, initialer og passord er påkrevd.' });
@@ -50,11 +50,11 @@ router.post('/', async (req, res) => {
     const technicianId = `TECH-${initials.toUpperCase()}`;
 
     const result = await pool.query(
-      `INSERT INTO technicians (id, name, initials, password_hash, is_active)
-       VALUES ($1, $2, $3, $4, TRUE)
-       ON CONFLICT (id) DO UPDATE SET name = $2, password_hash = $4, is_active = TRUE
-       RETURNING id, name, initials, is_active`,
-      [technicianId, name, initials.toUpperCase(), hashedPassword]
+      `INSERT INTO technicians (id, name, initials, stilling, password_hash, is_active)
+     VALUES ($1, $2, $3, $4, $5, TRUE)
+     ON CONFLICT (id) DO UPDATE SET name = $2, stilling = $4, password_hash = $5, is_active = TRUE
+     RETURNING id, name, initials, stilling, is_active`,
+      [technicianId, name, initials.toUpperCase(), stilling, hashedPassword]
     );
 
     res.status(201).json(result.rows[0]);
@@ -84,6 +84,51 @@ router.delete('/:id', async (req, res) => {
   } catch (error) {
     console.error(`[${req.adminTenantId}] Error deleting technician:`, error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT update technician
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, initials, stilling, password } = req.body;
+
+    if (!name || !initials) {
+      return res.status(400).json({ error: 'Navn og initialer er påkrevd.' });
+    }
+
+    const pool = await db.getTenantConnection(req.adminTenantId);
+    
+    let query, params;
+    
+    if (password && password.trim() !== '') {
+      // Oppdater med nytt passord
+      const hashedPassword = await bcrypt.hash(password, 10);
+      query = `UPDATE technicians 
+               SET name = $2, initials = $3, stilling = $4, password_hash = $5 
+               WHERE id = $1 
+               RETURNING id, name, initials, stilling, is_active`;
+      params = [id, name, initials.toUpperCase(), stilling, hashedPassword];
+    } else {
+      // Oppdater uten å endre passord
+      query = `UPDATE technicians 
+               SET name = $2, initials = $3, stilling = $4 
+               WHERE id = $1 
+               RETURNING id, name, initials, stilling, is_active`;
+      params = [id, name, initials.toUpperCase(), stilling];
+    }
+
+    const result = await pool.query(query, params);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Tekniker ikke funnet.' });
+    }
+
+    res.json(result.rows[0]);
+
+  } catch (error) {
+    console.error(`[${req.adminTenantId}] Error updating technician:`, error);
+    res.status(500).json({ error: 'Intern serverfeil' });
   }
 });
 

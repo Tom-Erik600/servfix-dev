@@ -1,7 +1,7 @@
 // src/services/unifiedPdfGenerator.js - Air-Tech PDF Generator med riktig mal, logo og avvik
 const puppeteer = require('puppeteer');
 const db = require('../config/database');
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const { Storage } = require('@google-cloud/storage');
 
@@ -279,9 +279,13 @@ buildEquipmentOverviewFromComponents(data) {
       
       const plassering = this.extractSystemField(component, 'plassering') ||
                   this.extractSystemField(component, 'location') || 
-                  this.extractSystemField(component, 'leilighet_nr') ||  // LEGG TIL
-                  this.extractSystemField(component, 'etasje') ||        // LEGG TIL
-                  '';
+                  this.extractSystemField(component, 'leilighet_nr') ||
+                  this.extractSystemField(component, 'etasje') ||
+                  this.extractSystemField(component, 'room') ||
+                  this.extractSystemField(component, 'rom') ||
+                  this.extractSystemField(component, 'bygning') ||
+                  this.extractSystemField(component, 'building') ||
+                  '';;
 
       const betjener = this.extractSystemField(component, 'betjener') ||
                 this.extractSystemField(component, 'operator') || 
@@ -292,7 +296,13 @@ buildEquipmentOverviewFromComponents(data) {
                        this.extractSystemField(component, 'aggregat_type') || '';
       
       console.log(`📊 Extracted fields for component ${index + 1}:`, {
-        systemNumber, plassering, betjener, viftetype
+        systemNumber, 
+        plassering, 
+        betjener, 
+        viftetype,
+        // DEBUG: Vis alle tilgjengelige felter
+        allDetailsFields: component.details ? Object.keys(component.details) : 'No details',
+        allDetailsWithLabelsFields: component.detailsWithLabels ? Object.keys(component.detailsWithLabels) : 'No detailsWithLabels'
       });
       
       return {
@@ -355,7 +365,13 @@ extractAvvikFromComponents(data) {
               systemnummer: systemNumber,
               komponent: checkpoint.name,                           // ✅ RIKTIG - sjekkpunkt-navn
               kommentar: checkpoint.comment,                        // ✅ RIKTIG
-              images: checkpoint.images || []
+              images: checkpoint.images || [],
+// DEBUG: Log bildetype
+_debug_images: checkpoint.images ? {
+  count: checkpoint.images.length,
+  types: checkpoint.images.map(img => typeof img),
+  firstImageStructure: checkpoint.images[0]
+} : 'No images'
             };
             
             data.avvik.push(avvikData);
@@ -485,9 +501,6 @@ renderAvvikTable(data) {
   return `
     <section class="avvik-section">
         <h2 class="section-header avvik-header">Registrerte avvik</h2>
-        <div class="avvik-notice">
-            <p><strong>VIKTIG:</strong> Følgende avvik ble registrert under servicen og krever oppmerksomhet:</p>
-        </div>
         
         <table class="styled-table avvik-table">
             <thead>
@@ -513,7 +526,7 @@ renderAvvikTable(data) {
                                 <strong>Avviksbilder:</strong>
                                 <div class="images-grid">
                                     ${avvik.images.map((image, index) => `
-                                        <img src="${image}" alt="Avviksbilde ${index + 1}" class="avvik-image">
+                                        <img src="${typeof image === 'object' ? image.url : image}" alt="Avviksbilde ${index + 1}" class="avvik-image">
                                     `).join('')}
                                 </div>
                             </div>
@@ -625,8 +638,8 @@ renderAvvikTable(data) {
                     <tr class="image-row">
                         <td colspan="3">
                             <div class="checklist-images">
-                                ${checkpoint.images.map(img => `
-                                    <img src="${img.url}" alt="${img.description || 'Bilde'}" class="checklist-image" />
+                                ${checkpoint.images.map((img, index) => `
+                                    <img src="${typeof img === 'object' ? img.url : img}" alt="${img.description || `Bilde ${index + 1}`}" class="checklist-image" />
                                 `).join('')}
                             </div>
                         </td>
@@ -1207,13 +1220,7 @@ renderAvvikTable(data) {
   margin-bottom: 30px;
 }
 
-.avvik-notice {
-  background: white !important;  /* Hvit bakgrunn */
-  border: 2px solid var(--status-avvik);
-  padding: 15px;
-  margin-bottom: 15px;
-  border-radius: 6px;
-}
+
   
       .center { text-align: center; }
 

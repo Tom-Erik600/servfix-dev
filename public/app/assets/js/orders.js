@@ -427,7 +427,7 @@ function setupEventListeners() {
     
     // Håndter checkbox endringer - VIKTIG: Stopp propagation
     document.addEventListener('change', async (e) => {
-        if (e.target.matches('.equipment-checkbox-input')) {
+        if (e.target.matches('.equipment-select-checkbox')) {
             const equipmentId = e.target.dataset.equipmentId;
             const isChecked = e.target.checked;
             await handleEquipmentSelectionChange(equipmentId, isChecked);
@@ -1387,7 +1387,8 @@ if (!document.getElementById('service-css-styles')) {
 async function handleRegenerateReport() {
     // Finn anlegg som er inkludert i ordren (de som har rapporter)
     const selectedEquipment = pageState.equipment.filter(eq => 
-        pageState.selectedEquipmentIds.includes(eq.id) && eq.serviceStatus === 'completed'
+        pageState.selectedEquipmentIds.includes(parseInt(eq.id)) ||
+        pageState.selectedEquipmentIds.includes(eq.id.toString())
     );
     
     if (selectedEquipment.length === 0) {
