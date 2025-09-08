@@ -1,5 +1,71 @@
 // air-tech-adminweb/assets/js/planlegger.js - Med equipment selection
 
+// ========== LEGG TIL DISSE VARIABLENE ØVERST I FILEN ==========
+let allCustomersForSearch = [];
+let customerSearchTimeout = null;
+
+// ========== LEGG TIL DISSE FUNKSJONENE (IKKE ERSTATT EKSISTERENDE) ==========
+
+// Last alle kunder for søk (kjøres parallelt med eksisterende loadData)
+async function loadAllCustomersForSearch() {
+    try {
+        console.log('📋 Loading customers for search functionality...');
+        
+        const response = await fetch('/api/admin/customers', {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        allCustomersForSearch = await response.json();
+        console.log(`✅ Loaded ${allCustomersForSearch.length} customers for search`);
+        
+    } catch (error) {
+        console.error('❌ Error loading customers for search:', error);
+    }
+}
+
+// Håndter søkeinput med debounce
+function handleCustomerSearchInput(e) {
+    clearTimeout(customerSearchTimeout);
+    
+    const query = e.target.value.trim().toLowerCase();
+    
+    customerSearchTimeout = setTimeout(() => {
+        filterCustomerCards(query);
+    }, 300);
+}
+
+// Filtrer kundekort basert på søk
+function filterCustomerCards(query) {
+    const customerCards = document.querySelectorAll('.project-card, .modern-customer-card');
+    let visibleCount = 0;
+    
+    customerCards.forEach(card => {
+        const customerName = card.dataset.customerName || 
+                           card.querySelector('.customer-name, h3')?.textContent || '';
+        const customerNumber = card.querySelector('.customer-number-badge')?.textContent || '';
+        
+        const nameMatch = customerName.toLowerCase().includes(query);
+        const numberMatch = customerNumber.toLowerCase().includes(query);
+        
+        if (!query || nameMatch || numberMatch) {
+            card.style.display = 'block';
+            visibleCount++;
+        } else {
+            card.style.display = 'none';
+        }
+    });
+    
+    // Oppdater telleren
+    const orderCountBadge = document.getElementById('order-count');
+    if (orderCountBadge) {
+        orderCountBadge.textContent = visibleCount;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     const technicianList = document.getElementById('technician-list');
     console.log('technicianList element ved initialisering:', technicianList);
@@ -18,6 +84,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Ny checkbox for å vise alle kunder
     const showAllCustomersCheckbox = document.getElementById('show-available-customers');
+    const customerSearchInput = document.getElementById('customer-search-input');
 
     let draggedTechnician = null;
     let targetCustomer = null;
@@ -97,55 +164,120 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function renderCustomers() {
-        projectList.innerHTML = '';
-        
-        // Velg hvilke kunder som skal vises
-        const customersToShow = showAllCustomersCheckbox && showAllCustomersCheckbox.checked 
-            ? allCustomers.filter(c => !c.isInactive)
-            : availableCustomers;
-        
-        const headerText = showAllCustomersCheckbox && showAllCustomersCheckbox.checked 
-            ? 'Alle Kunder' 
-            : 'Kunder uten oppdrag';
-        
-        // Oppdater header
-        const header = document.querySelector('#project-column h2');
-        if (header) {
-            header.innerHTML = `${headerText} <span class="order-count-badge">${customersToShow.length}</span>`;
-        }
-        
-        if (customersToShow.length === 0) {
-            projectList.innerHTML = '<div class="empty-state"><p>Ingen kunder funnet</p></div>';
-            return;
-        }
-        
-        customersToShow.forEach(customer => {
-            console.log(`Setter dataset for ${customer.name}: ${customer.id}`);
-            const customerCard = document.createElement('div');
-            customerCard.className = 'project-card';
-            customerCard.dataset.customerId = customer.id;
-            
-            console.log(`Dataset ble satt til: ${customerCard.dataset.customerId}`);
-            
-            customerCard.innerHTML = `
-                <div class="project-customer">${customer.name}</div>
-                <div class="project-name">${customer.contact} • ${customer.phone}</div>
-                <div class="project-meta">
-                    <span>Tripletex ID: ${customer.id} | Nr: ${customer.customerNumber || '-'}</span>
-                </div>
-            `;
-            
-            customerCard.addEventListener('dragover', handleDragOver);
-            customerCard.addEventListener('dragleave', handleDragLeave);
-            customerCard.addEventListener('drop', handleDrop);
-            
-            projectList.appendChild(customerCard);
-        });
+    projectList.innerHTML = '';
+    
+    // Velg hvilke kunder som skal vises
+    const customersToShow = showAllCustomersCheckbox && showAllCustomersCheckbox.checked 
+        ? allCustomers.filter(c => !c.isInactive)
+        : availableCustomers;
+    
+    const headerText = showAllCustomersCheckbox && showAllCustomersCheckbox.checked 
+        ? 'Alle Kunder' 
+        : 'Kunder uten oppdrag';
+    
+    // Oppdater header
+    const header = document.querySelector('#project-column h2');
+    if (header) {
+        header.innerHTML = `${headerText} <span class="order-count-badge" id="order-count">${customersToShow.length}</span>`;
     }
+    
+    if (customersToShow.length === 0) {
+        projectList.innerHTML = '<div class="empty-state"><p>Ingen kunder funnet</p></div>';
+        return;
+    }
+    
+    customersToShow.forEach(customer => {
+        console.log(`Setter dataset for ${customer.name}: ${customer.id}`);
+        const customerCard = document.createElement('div');
+        customerCard.className = 'modern-customer-card project-card';  // Bruker modern-customer-card class
+        customerCard.dataset.customerId = customer.id;
+        customerCard.dataset.customerName = customer.name;
+        customerCard.draggable = true;
+        
+        console.log(`Dataset ble satt til: ${customerCard.dataset.customerId}`);
+        
+        // MODERNE TRIPLETEX-INSPIRERT DESIGN
+        customerCard.innerHTML = `
+    <div class="customer-card-header">
+        <h3 class="customer-name">${escapeHtml(customer.name)}</h3>
+        ${customer.customerNumber ? 
+            `<span class="customer-number-badge">Nr. ${customer.customerNumber}</span>` : 
+            ''
+        }
+    </div>
+    
+    <div class="customer-main-content">
+        <div class="customer-left-section">
+            <div class="customer-info-item">
+                <span class="customer-info-label">Org.nr</span>
+                <span class="customer-info-value ${!customer.organizationNumber ? 'empty' : ''}">
+                    ${customer.organizationNumber || 'Ikke oppgitt'}
+                </span>
+            </div>
+            
+            <div class="customer-info-item">
+                <span class="customer-info-label">Kontaktperson</span>
+                <span class="customer-info-value ${!customer.contact ? 'empty' : ''}">
+                    ${customer.contact || 'Ikke oppgitt'}
+                </span>
+            </div>
+        </div>
+        
+        <div class="customer-right-section">
+            <div class="customer-info-item">
+                <span class="customer-info-label">Postadresse</span>
+                <span class="customer-info-value ${!customer.postalAddress ? 'empty' : ''}">
+                    ${customer.postalAddress || 'Ikke oppgitt'}
+                </span>
+            </div>
+            
+            <div class="customer-info-item">
+                <span class="customer-info-label">Forretningsadr.</span>
+                <span class="customer-info-value ${!customer.physicalAddress ? 'empty' : ''}">
+                    ${customer.physicalAddress || 'Ikke oppgitt'}
+                </span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="customer-contact-footer">
+        <div class="customer-contact-item">
+            <span class="contact-icon">📧</span>
+            <span>${customer.email || 'Ingen e-post'}</span>
+        </div>
+        <div class="customer-contact-item">
+            <span class="contact-icon">📞</span>
+            <span>${customer.phone || 'Ingen telefon'}</span>
+        </div>
+    </div>
+`;
+        
+        customerCard.addEventListener('dragover', handleDragOver);
+        customerCard.addEventListener('dragleave', handleDragLeave);
+        customerCard.addEventListener('drop', handleDrop);
+        
+        projectList.appendChild(customerCard);
+    });
+}
+
+// LEGG OGSÅ TIL denne escapeHtml funksjonen hvis den ikke finnes:
+function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe.toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 
     // Checkbox event
     if (showAllCustomersCheckbox) {
         showAllCustomersCheckbox.addEventListener('change', renderCustomers);
+    }
+
+    if (customerSearchInput) {
+        customerSearchInput.addEventListener('input', handleCustomerSearchInput);
     }
 
     function handleDragStart(e) {
@@ -795,4 +927,5 @@ function showEquipmentForm(customer, equipmentType) {
 
     // Initialiser
     await fetchData();
+    loadAllCustomersForSearch(); // Kjør parallelt med eksisterende loading
 });

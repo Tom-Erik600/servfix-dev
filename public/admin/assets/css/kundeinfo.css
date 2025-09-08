@@ -1,35 +1,27 @@
-/* 
- * Kundeinfo CSS - Air-Tech AdminWeb
- * Styling for utvidet kundeinfo-siden
- */
-
-/* Layout */
+/* Endre grid-layout for å gi mer plass til sidebar */
 .customer-layout {
     display: grid;
-    grid-template-columns: 400px 1fr 350px;
+    grid-template-columns: 480px 1fr 350px; /* Øk fra 400px til 480px */
     gap: 24px;
     align-items: flex-start;
 }
 
-/* Venstre sidebar */
-.customer-sidebar {
-    position: sticky;
-    top: 24px;
+/* Juster søkeikon posisjon */
+.search-icon {
+    position: absolute;
+    left: 12px; /* Reduser fra 15px til 12px */
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+    font-size: 14px; /* Reduser fra 16px til 14px */
+    pointer-events: none;
+    z-index: 2;
 }
 
-.customer-sidebar .card-header h2 {
-    margin-bottom: 0;
-    font-size: 18px;
-    font-weight: 600;
-}
-
-.search-container {
-    padding: 16px 16px 0;
-}
-
+/* Juster padding for søkefelt */
 .search-input {
     width: 100%;
-    padding: 12px 16px;
+    padding: 12px 16px 12px 35px; /* Reduser venstre padding fra 45px til 35px */
     border: 1px solid var(--border-color);
     border-radius: 8px;
     font-size: 14px;
@@ -37,561 +29,478 @@
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.search-input:focus {
-    outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.customer-list-container {
-    max-height: 600px;
-    overflow-y: auto;
-    margin-top: 16px;
-}
-
+/* Optimaliser kolonne-bredder i tabell */
 .customer-list-table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed; /* Legg til for bedre kontroll */
 }
 
-.customer-list-table th {
-    background-color: var(--background-light);
-    padding: 12px 16px;
-    text-align: left;
-    font-weight: 600;
-    font-size: 12px;
-    color: var(--text-light);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-bottom: 1px solid var(--border-color);
+.customer-list-table th:nth-child(1) { /* Kundenavn */
+    width: 60%; 
 }
 
-.customer-list-table td {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-light);
-    font-size: 14px;
+.customer-list-table th:nth-child(2) { /* Kontaktperson - FJERN DENNE */
+    display: none; 
 }
 
-.customer-list-table tbody tr {
-    cursor: pointer;
-    transition: background-color 0.2s ease;
+.customer-list-table th:nth-child(3) { /* Kundenummer */
+    width: 40%;
 }
 
-.customer-list-table tbody tr:hover {
-    background-color: #eff6ff;
+.customer-list-table td:nth-child(2) { /* Skjul kontaktperson-kolonne */
+    display: none;
 }
 
-.customer-list-table tbody tr.selected {
-    background-color: #dbeafe;
-    font-weight: 600;
+/* Responsive justeringer */
+@media (max-width: 1400px) {
+    .customer-layout {
+        grid-template-columns: 450px 1fr 300px; /* Juster også responsivt */
+    }
 }
 
-.customer-list-table .customer-number {
-    font-size: 12px;
-    color: var(--text-light);
-    font-weight: 500;
-}
-
-/* Hovedområde */
-.customer-details-container {
-    min-height: 600px;
-}
-
-.customer-details-container .card {
-    position: sticky;
-    top: 24px;
-}
-
-/* Høyre sidebar for servicehistorikk */
-.service-history-sidebar {
-    position: sticky;
-    top: 24px;
-}
-
-.service-history-sidebar .card-header h2 {
-    margin-bottom: 0;
-    font-size: 18px;
-    font-weight: 600;
-}
-
-.empty-history {
-    text-align: center;
-    padding: 40px 20px;
-    color: var(--text-light);
-    font-style: italic;
-}
-
-.service-history-list-sidebar {
-    list-style: none;
-    padding: 16px;
-    margin: 0;
+/* Moderne servicehistorikk layout */
+.service-history-list-modern {
+    padding: 8px;
     max-height: 500px;
     overflow-y: auto;
 }
 
-.service-history-list-sidebar .service-history-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px;
-    border-radius: 6px;
-    margin-bottom: 8px;
-    background-color: var(--background-light);
-    border: 1px solid var(--border-light);
-    transition: all 0.2s ease;
-    cursor: pointer;
-}
-
-.service-history-list-sidebar .service-history-item:hover {
-    background-color: #f3f4f6;
-    border-color: var(--border-color);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.service-history-list-sidebar .service-history-item .order-info {
+.service-history-order {
     display: flex;
     flex-direction: column;
-    flex: 1;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
 }
 
-.service-history-list-sidebar .service-history-item .order-number {
-    font-weight: 600;
-    color: var(--text-color);
+.service-history-order::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(135deg, var(--primary-color) 0%, #10b981 100%);
+    border-radius: 0 8px 8px 0;
+}
+
+.service-history-order:hover {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border-color: var(--primary-color);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.order-id {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--primary-color);
     margin-bottom: 4px;
+}
+
+.order-date {
     font-size: 13px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 2px;
 }
 
-.service-history-list-sidebar .service-history-item .order-description {
+.order-technician {
     font-size: 12px;
-    color: var(--text-light);
-    line-height: 1.4;
+    color: #64748b;
+    font-weight: 500;
 }
 
-/* Placeholder */
-.placeholder-content {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--text-light);
-    border: 2px dashed var(--border-color);
+/* Debug info styling */
+.debug-info {
+    margin-top: 12px;
+    padding: 8px;
+    background-color: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 4px;
+}
+
+.debug-info small {
+    display: block;
+    font-size: 10px;
+    color: #92400e;
+    margin-bottom: 2px;
+}
+
+/* MODERNE KUNDEKORT STYLING - INSPIRERT AV PLANLEGGER */
+
+.modern-customer-header {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 2px solid #e2e8f0;
     border-radius: 12px;
-    background-color: var(--background-light);
+    padding: 20px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
 }
 
-.placeholder-content p {
-    margin: 0;
-    font-size: 16px;
+.modern-customer-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary-color) 0%, #10b981 100%);
 }
 
-/* Kundedetaljer header */
-.customer-header {
+.customer-title-section {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    margin-bottom: 24px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--border-color);
+    align-items: center;
 }
 
-.customer-header h2 {
+.modern-customer-name {
     font-size: 24px;
     font-weight: 700;
-    color: var(--text-color);
+    color: #1e293b;
     margin: 0;
+    line-height: 1.2;
 }
 
-.customer-number-badge {
-    background-color: var(--background-light);
-    color: var(--text-light);
-    padding: 4px 12px;
-    border-radius: 16px;
+.modern-customer-number {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #1e40af 100%);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 20px;
     font-size: 12px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    white-space: nowrap;
 }
 
-/* Seksjonsstyling */
-.info-section {
-    margin-bottom: 32px;
+/* HOVEDINNHOLD TO-KOLONNE LAYOUT */
+.modern-customer-content {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 24px;
 }
 
-.section-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-color);
+.customer-left-section,
+.customer-right-section {
+    flex: 1;
+    min-width: 0;
+}
+
+/* INFO GRUPPER */
+.modern-info-group {
     margin-bottom: 16px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border-light);
-}
-
-/* Grid-layout for detaljgrupper */
-.detail-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px 32px;
-}
-
-.detail-grid.single-column {
-    grid-template-columns: 1fr;
-}
-
-/* Adresse-grid (2-kolonne side-om-side) */
-.address-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 32px;
-}
-
-.address-section {
+    padding: 12px;
     background-color: var(--background-light);
-    padding: 20px;
     border-radius: 8px;
     border: 1px solid var(--border-light);
 }
 
-.address-section .section-title {
-    font-size: 14px;
+.modern-info-label {
+    font-size: 10px;
     font-weight: 600;
-    color: var(--text-color);
-    margin-bottom: 12px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.address-content {
-    font-size: 14px;
-    color: var(--text-color);
-    line-height: 1.5;
-}
-
-/* Detaljgrupper */
-.detail-group {
-    margin-bottom: 20px;
-}
-
-.detail-label {
-    font-size: 12px;
-    color: var(--text-light);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 6px;
-    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 4px;
+    display: block;
 }
 
-.detail-value {
+.modern-info-value {
     font-size: 14px;
-    color: var(--text-color);
+    color: #334155;
     font-weight: 500;
+    line-height: 1.3;
+    word-break: break-word;
 }
 
-.detail-value.missing {
-    color: #ef4444;
+.modern-info-value.empty {
+    color: #94a3b8;
     font-style: italic;
 }
 
-.detail-value.highlight {
+.modern-info-value.highlight {
     color: var(--primary-color);
     font-weight: 600;
 }
 
-/* Servicehistorikk */
-.service-history-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
+/* ADRESSE-SEKSJON */
+.modern-address-section {
+    margin-top: 24px;
 }
 
-.service-history-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px;
+.modern-section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.modern-address-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.modern-address-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid #e2e8f0;
     border-radius: 8px;
-    margin-bottom: 8px;
-    background-color: var(--background-light);
-    border: 1px solid var(--border-light);
+    padding: 16px;
     transition: all 0.2s ease;
 }
 
-.service-history-item:hover {
-    background-color: #f3f4f6;
-    border-color: var(--border-color);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+.modern-address-card:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.service-history-item a {
-    text-decoration: none;
-    color: inherit;
+.address-card-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.address-card-content {
+    font-size: 14px;
+    color: #334155;
+    line-height: 1.5;
+    min-height: 40px;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+    .modern-customer-content {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .customer-title-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .modern-address-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+}
+
+/* MODERNE SERVICEORDE-MODAL */
+.modern-order-modal {
+    padding: 8px;
+}
+
+.order-modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    width: 100%;
+    margin-bottom: 24px;
+    padding: 16px;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
 }
 
-.service-history-item .order-info {
+.order-number-section {
     display: flex;
     flex-direction: column;
 }
 
-.service-history-item .order-number {
+.order-number-label {
+    font-size: 10px;
     font-weight: 600;
-    color: var(--text-color);
-    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
+    margin-bottom: 2px;
 }
 
-.service-history-item .order-description {
-    font-size: 12px;
-    color: var(--text-light);
+.order-number-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary-color);
 }
 
-/* Status-badges */
+.order-status-section {
+    text-align: right;
+}
+
 .status-badge {
-    padding: 4px 8px;
+    padding: 6px 12px;
     border-radius: 12px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
 .status-badge.status-scheduled {
-    background-color: #fef3c7;
-    color: #92400e;
+    background-color: #dbeafe;
+    color: #1d4ed8;
 }
 
 .status-badge.status-completed {
-    background-color: #d1fae5;
-    color: #065f46;
+    background-color: #dcfce7;
+    color: #16a34a;
 }
 
-.status-badge.status-cancelled {
-    background-color: #fee2e2;
-    color: #991b1b;
+.status-badge.status-in-progress {
+    background-color: #fef3c7;
+    color: #d97706;
 }
 
-.status-badge.status-planlagt {
-    background-color: #dbeafe;
-    color: #1e40af;
+.status-badge.status-pending {
+    background-color: #f3f4f6;
+    color: #6b7280;
 }
 
-/* Modal overlay og content */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    display: none;
+/* DETALJ-KORT GRID */
+.order-details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.detail-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.detail-card:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.detail-icon {
+    font-size: 20px;
+    width: 32px;
+    height: 32px;
+    display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
-    backdrop-filter: blur(4px);
+    background-color: var(--background-light);
+    border-radius: 6px;
+    flex-shrink: 0;
 }
 
-.modal-overlay.show {
+.detail-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.detail-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.detail-value {
+    font-size: 14px;
+    color: #1e293b;
+    font-weight: 500;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+/* UTSTYR-SEKSJON */
+.equipment-list {
     display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
 }
 
-.modal-content {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-    width: 90%;
-    max-width: 600px;
-    max-height: 90vh;
-    display: flex;
-    flex-direction: column;
-    animation: modalSlideIn 0.3s ease-out;
+.equipment-item {
+    background-color: var(--background-light);
+    border: 1px solid var(--border-light);
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
 }
 
-.modal-content.large {
-    max-width: 800px;
+/* META-INFO */
+.order-meta-info {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 24px;
 }
 
-@keyframes modalSlideIn {
-    from {
-        opacity: 0;
-        transform: translateY(-20px) scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
-.modal-header {
-    padding: 24px 24px 0;
+.meta-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 16px;
+    margin-bottom: 6px;
 }
 
-.modal-header h3 {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text-color);
-}
-
-.close-btn {
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    padding: 4px;
-    color: var(--text-light);
-    border-radius: 4px;
-    transition: all 0.2s ease;
-}
-
-.close-btn:hover {
-    background-color: var(--background-light);
-    color: var(--text-color);
-}
-
-.modal-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 24px;
-}
-
-.modal-footer {
-    padding: 16px 24px 24px;
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    border-top: 1px solid var(--border-light);
-}
-
-.btn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.btn-secondary {
-    background-color: var(--background-light);
-    color: var(--text-color);
-    border: 1px solid var(--border-color);
-}
-
-.btn-secondary:hover {
-    background-color: #f3f4f6;
-}
-
-.btn-primary {
-    background-color: var(--primary-color);
-    color: white;
-}
-
-.btn-primary:hover {
-    background-color: #2563eb;
-}
-
-.btn-icon {
-    font-size: 12px;
-}
-
-/* Modal report sections */
-.report-section {
-    margin-bottom: 24px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid var(--border-light);
-}
-
-.report-section:last-child {
-    border-bottom: none;
+.meta-item:last-child {
     margin-bottom: 0;
-    padding-bottom: 0;
 }
 
-.report-section h4 {
-    margin: 0 0 16px 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-color);
+.meta-label {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
 }
 
-/* Responsive design */
-@media (max-width: 1400px) {
-    .customer-layout {
-        grid-template-columns: 350px 1fr 300px;
-    }
+.meta-value {
+    font-size: 12px;
+    color: #1e293b;
+    font-weight: 500;
 }
 
-@media (max-width: 1200px) {
-    .customer-layout {
-        grid-template-columns: 320px 1fr 280px;
-    }
-}
-
-@media (max-width: 968px) {
-    .customer-layout {
-        grid-template-columns: 1fr;
-        gap: 16px;
-    }
-    
-    .customer-sidebar,
-    .service-history-sidebar {
-        position: static;
-    }
-    
-    /* Stack order på mobil */
-    .customer-sidebar {
-        order: 1;
-    }
-    
-    .customer-details-container {
-        order: 2;
-    }
-    
-    .service-history-sidebar {
-        order: 3;
-    }
-    
-    .address-grid {
-        grid-template-columns: 1fr;
-        gap: 16px;
-    }
-    
-    .detail-grid {
-        grid-template-columns: 1fr;
-        gap: 16px;
-    }
-}
-
-@media (max-width: 640px) {
-    .customer-header {
+/* RESPONSIVE */
+@media (max-width: 768px) {
+    .order-modal-header {
         flex-direction: column;
         align-items: flex-start;
         gap: 12px;
     }
     
-    .customer-list-table th:last-child,
-    .customer-list-table td:last-child {
-        display: none;
+    .order-status-section {
+        text-align: left;
     }
     
-    .modal-content {
-        width: 95%;
-        margin: 20px;
+    .order-details-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
     }
     
-    .modal-header,
-    .modal-body,
-    .modal-footer {
-        padding: 16px;
+    .detail-card {
+        padding: 12px;
+    }
+    
+    .detail-icon {
+        font-size: 16px;
+        width: 28px;
+        height: 28px;
     }
 }

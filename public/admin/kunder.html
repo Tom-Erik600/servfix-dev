@@ -28,15 +28,16 @@
                             <h2>Alle Kunder</h2>
                         </div>
                         <div class="search-container">
+                            <span class="search-icon">🔍</span>
                             <input type="text" id="customer-search" placeholder="Søk etter kundenavn eller kundenummer..." class="search-input">
                         </div>
                         <div class="customer-list-container">
                             <table class="customer-list-table">
+                                <!-- Endre tabell-header - fjern Kontaktperson -->
                                 <thead>
                                     <tr>
                                         <th>Kundenavn</th>
-                                        <th>Kontaktperson</th>
-                                        <th>Nr.</th>
+                                        <th>Nr.</th> <!-- Flytt kundenummer til andre kolonne -->
                                     </tr>
                                 </thead>
                                 <tbody id="customer-table-body">

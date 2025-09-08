@@ -40,6 +40,17 @@
                 </aside>
                 
                 <section class="planner-column" id="project-column">
+                    <!-- NYTT: Søkeseksjon - LEGG TIL DETTE -->
+                    <div class="customer-search-section">
+                        <input type="text" 
+                               id="customer-search-input" 
+                               class="customer-search-input"
+                               placeholder="Søk etter kunde (navn eller kundenummer)..."
+                               autocomplete="off">
+                        <div class="search-icon">🔍</div>
+                    </div>
+                    
+                    <!-- EKSISTERENDE: Behold alt under her -->
                     <h2>Kunder uten oppdrag <span class="order-count-badge" id="order-count">0</span></h2>
                     <div id="project-list">
                         <!-- Kunder lastes dynamisk -->

@@ -17,40 +17,99 @@ router.get('/', async (req, res) => {
       count: 1000
     });
     
-    // Transform Tripletex data til forventet format
-    const transformedCustomers = customers.map(customer => ({
-      id: String(customer.id), // Konverter alltid til string
-      name: customer.name,
-      customerNumber: customer.customerNumber,
-      organizationNumber: customer.organizationNumber,
+    // FORBEDRET Transform Tripletex data med null-safe adresse-håndtering
+    const transformedCustomers = customers.map(customer => {
       
-      // Kontaktinfo
-      contact: customer.customerContact 
-        ? `${customer.customerContact.firstName || ''} ${customer.customerContact.lastName || ''}`.trim()
-        : '',
-      email: customer.email || customer.customerContact?.email || '',
-      phone: customer.phoneNumber || customer.phoneNumberMobile || '',
+      // DEBUG: Log ALL address data for Ammerudslettas
+      if (customer.name && customer.name.toLowerCase().includes('ammerudslettas')) {
+        console.log('🏠 AMMERUDSLETTAS ADRESSE DEBUG:');
+        console.log('Raw customer object keys:', Object.keys(customer));
+        console.log('Raw physicalAddress:', JSON.stringify(customer.physicalAddress, null, 2));
+        console.log('Raw postalAddress:', JSON.stringify(customer.postalAddress, null, 2));
+        console.log('Raw deliveryAddress:', JSON.stringify(customer.deliveryAddress, null, 2));
+        console.log('Raw addresses object:', JSON.stringify(customer.addresses, null, 2));
+      }
       
-      // Adresser
-      physicalAddress: customer.physicalAddress 
-        ? `${customer.physicalAddress.addressLine1 || ''} ${customer.physicalAddress.addressLine2 || ''}, ${customer.physicalAddress.postalCode || ''} ${customer.physicalAddress.city || ''}`.trim()
-        : '',
-      postalAddress: customer.postalAddress 
-        ? `${customer.postalAddress.addressLine1 || ''} ${customer.postalAddress.addressLine2 || ''}, ${customer.postalAddress.postalCode || ''} ${customer.postalAddress.city || ''}`.trim()
-        : '',
+      // Forbedret adresse-parsing som håndterer null/undefined
+      const buildAddressString = (addressObj) => {
+        if (!addressObj || typeof addressObj !== 'object') {
+          return '';
+        }
+        
+        const parts = [];
+        
+        // Legg til adresselinjer hvis de finnes
+        if (addressObj.addressLine1) parts.push(addressObj.addressLine1);
+        if (addressObj.addressLine2) parts.push(addressObj.addressLine2);
+        
+        // Legg til postnummer og sted
+        const location = [];
+        if (addressObj.postalCode) location.push(addressObj.postalCode);
+        if (addressObj.city) location.push(addressObj.city);
+        if (location.length > 0) parts.push(location.join(' '));
+        
+        return parts.filter(part => part && part.trim()).join(', ');
+      };
       
-      // Andre felter
-      currency: customer.currency?.id || 'NOK',
-      language: customer.language?.id || 'NO',
-      isCustomer: customer.isCustomer,
-      isSupplier: customer.isSupplier,
-      isPrivate: customer.isPrivateIndividual || false,
-      customerAccountManager: customer.accountManager?.name || '',
+      // Forbedret kontaktperson-parsing
+      const getContactName = () => {
+        if (!customer.customerContact) return '';
+        
+        const firstName = customer.customerContact.firstName || '';
+        const lastName = customer.customerContact.lastName || '';
+        const fullName = `${firstName} ${lastName}`.trim();
+        
+        return fullName;
+      };
       
-      // Ekstra data
-      invoiceEmail: customer.invoiceEmail || '',
-      overdueNoticeEmail: customer.overdueNoticeEmail || ''
-    }));
+      // Forbedret telefon-parsing med flere kilder
+      const getPhoneNumber = () => {
+        return customer.phoneNumber || 
+               customer.phoneNumberMobile || 
+               (customer.customerContact && customer.customerContact.phoneNumber) ||
+               (customer.customerContact && customer.customerContact.phoneNumberMobile) ||
+               '';
+      };
+      
+      // Forbedret e-post parsing med flere kilder
+      const getEmailAddress = () => {
+        return customer.email || 
+               customer.invoiceEmail || 
+               customer.overdueNoticeEmail ||
+               (customer.customerContact && customer.customerContact.email) || 
+               '';
+      };
+      
+      const transformed = {
+        id: String(customer.id),
+        name: customer.name || '',
+        customerNumber: customer.customerNumber || '',
+        organizationNumber: customer.organizationNumber || '',
+        
+        // FORBEDRET kontaktinfo
+        contact: getContactName(),
+        email: getEmailAddress(),
+        phone: getPhoneNumber(),
+        
+        // FORBEDRET adresser med null-safe parsing
+        physicalAddress: buildAddressString(customer.physicalAddress),
+        postalAddress: buildAddressString(customer.postalAddress),
+        
+        // Andre felter
+        currency: customer.currency?.id || 'NOK',
+        language: customer.language?.id || 'NO',
+        isCustomer: customer.isCustomer || false,
+        isSupplier: customer.isSupplier || false,
+        isPrivate: customer.isPrivateIndividual || false,
+        customerAccountManager: customer.accountManager?.name || '',
+        
+        // Ekstra data
+        invoiceEmail: customer.invoiceEmail || '',
+        overdueNoticeEmail: customer.overdueNoticeEmail || ''
+      };
+      
+      return transformed;
+    });
     
     res.json(transformedCustomers);
     

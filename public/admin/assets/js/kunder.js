@@ -118,7 +118,7 @@ document.addEventListener('DOMContentLoaded', function() {
      */
     function renderCustomerList(customers) {
         if (!customers || customers.length === 0) {
-            customerTableBody.innerHTML = `<tr><td colspan="3">Ingen kunder funnet.</td></tr>`;
+            customerTableBody.innerHTML = `<tr><td colspan="2">Ingen kunder funnet.</td></tr>`;
             return;
         }
 
@@ -126,9 +126,6 @@ document.addEventListener('DOMContentLoaded', function() {
             <tr data-customer-id="${customer.id}" onclick="selectCustomer('${customer.id}')" style="cursor: pointer;">
                 <td>
                     <div style="font-weight: 500;">${customer.name || 'Ukjent navn'}</div>
-                </td>
-                <td>
-                    <div style="font-size: 14px;">${customer.contact || ''}</div>
                 </td>
                 <td>
                     <div class="customer-number">${customer.customerNumber || '-'}</div>
@@ -169,241 +166,332 @@ document.addEventListener('DOMContentLoaded', function() {
      * Rendrer detaljert kundeinfo (uten servicehistorikk)
      */
     function renderCustomerDetails(customer) {
-        console.log('📋 Rendrer kundedetaljer for:', customer.name);
-
-        detailsContent.innerHTML = `
-            <div class="customer-header">
-                <h2>${customer.name}</h2>
-                <span class="customer-number-badge">Nr. ${customer.customerNumber || 'Ikke angitt'}</span>
+    console.log('📋 Rendrer kundedetaljer for:', customer.name);
+    
+    detailsContent.innerHTML = `
+        <!-- MODERNE KUNDEKORT HEADER -->
+        <div class="modern-customer-header">
+            <div class="customer-title-section">
+                <h2 class="modern-customer-name">${customer.name}</h2>
+                ${customer.customerNumber ? 
+                    `<span class="modern-customer-number">Nr. ${customer.customerNumber}</span>` : 
+                    ''
+                }
             </div>
+        </div>
 
-            <!-- Kunde-/leverandørdetaljer -->
-            <div class="info-section">
-                <h3 class="section-title">Kunde-/leverandørdetaljer</h3>
-                <div class="detail-grid">
-                    <div class="detail-group">
-                        <div class="detail-label">Type</div>
-                        <div class="detail-value">${customer.customerType || 'Kunde'}</div>
+        <!-- HOVEDINNHOLD I TO KOLONNER -->
+        <div class="modern-customer-content">
+            <!-- VENSTRE KOLONNE -->
+            <div class="customer-left-section">
+                <div class="modern-info-group">
+                    <div class="modern-info-label">Organisasjonsnummer</div>
+                    <div class="modern-info-value ${customer.organizationNumber ? '' : 'empty'}">
+                        ${customer.organizationNumber || 'Ikke angitt'}
                     </div>
-                    <div class="detail-group">
-                        <div class="detail-label">Språk</div>
-                        <div class="detail-value">${customer.language || 'Norsk'}</div>
-                    </div>
-                    <div class="detail-group">
-                        <div class="detail-label">Valuta</div>
-                        <div class="detail-value">${customer.currency || 'NOK'}</div>
-                    </div>
-                    <div class="detail-group">
-                        <div class="detail-label">Bedrift/Privatperson</div>
-                        <div class="detail-value">${customer.isPrivate ? 'Privatperson' : 'Bedrift'}</div>
-                    </div>
-                    <div class="detail-group">
-                        <div class="detail-label">Organisasjonsnummer</div>
-                        <div class="detail-value ${customer.organizationNumber ? '' : 'missing'}">
-                            ${customer.organizationNumber || 'Ikke angitt'}
-                        </div>
-                    </div>
-                    <div class="detail-group">
-                        <div class="detail-label">Kundeansvarlig</div>
-                        <div class="detail-value">${customer.customerAccountManager || 'Ikke tildelt'}</div>
-                    </div>
+                </div>
+                
+                <div class="modern-info-group">
+                    <div class="modern-info-label">Kundeansvarlig</div>
+                    <div class="modern-info-value">${customer.customerAccountManager || 'Ikke tildelt'}</div>
+                </div>
+                
+                <div class="modern-info-group">
+                    <div class="modern-info-label">Kontaktperson</div>
+                    <div class="modern-info-value">${customer.contact || 'Ikke angitt'}</div>
                 </div>
             </div>
 
-            <!-- Kontaktinformasjon -->
-            <div class="info-section">
-                <h3 class="section-title">Kontaktinformasjon</h3>
-                <div class="detail-grid">
-                    <div class="detail-group">
-                        <div class="detail-label">Kontaktperson</div>
-                        <div class="detail-value">${customer.contact}</div>
+            <!-- HØYRE KOLONNE -->
+            <div class="customer-right-section">
+                <div class="modern-info-group">
+                    <div class="modern-info-label">E-post</div>
+                    <div class="modern-info-value ${customer.email ? 'highlight' : 'empty'}">
+                        ${customer.email || 'Mangler e-post'}
                     </div>
-                    <div class="detail-group">
-                        <div class="detail-label">E-post</div>
-                        <div class="detail-value ${customer.email ? 'highlight' : 'missing'}">
-                            ${customer.email || 'Mangler e-post'}
-                        </div>
+                </div>
+                
+                <div class="modern-info-group">
+                    <div class="modern-info-label">Telefon</div>
+                    <div class="modern-info-value">${customer.phone || 'Ikke angitt'}</div>
+                </div>
+                
+                <div class="modern-info-group">
+                    <div class="modern-info-label">Mobil</div>
+                    <div class="modern-info-value">${customer.mobile || 'Ikke angitt'}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ADRESSE-SEKSJON -->
+        <div class="modern-address-section">
+            <h3 class="modern-section-title">📍 Adresser</h3>
+            <div class="modern-address-grid">
+                <div class="modern-address-card">
+                    <div class="address-card-title">Postadresse</div>
+                    <div class="address-card-content">
+                        ${customer.postalAddress || 'Ikke registrert'}
                     </div>
-                    <div class="detail-group">
-                        <div class="detail-label">Telefon</div>
-                        <div class="detail-value">${customer.phone}</div>
-                    </div>
-                    <div class="detail-group">
-                        <div class="detail-label">Mobil</div>
-                        <div class="detail-value">${customer.mobile || 'Ikke angitt'}</div>
-                    </div>
-                    <div class="detail-group">
-                        <div class="detail-label">Nettside</div>
-                        <div class="detail-value">
-                            ${customer.website ? 
-                                `<a href="${customer.website}" target="_blank" style="color: var(--primary-color);">${customer.website}</a>` : 
-                                'Ikke angitt'
-                            }
-                        </div>
+                </div>
+                <div class="modern-address-card">
+                    <div class="address-card-title">Forretningsadresse</div>
+                    <div class="address-card-content">
+                        ${customer.physicalAddress || 'Ikke registrert'}
                     </div>
                 </div>
             </div>
+        </div>
+    `;
+    
+    detailsPlaceholder.style.display = 'none';
+    detailsContent.style.display = 'block';
+    
+    console.log('✅ Moderne kundedetaljer rendret');
+}
 
-            <!-- Adresser i 2-kolonne grid -->
-            <div class="info-section">
-                <h3 class="section-title">Adresser</h3>
-                <div class="address-grid">
-                    <div class="address-section">
-                        <div class="section-title">Postadresse</div>
-                        <div class="address-content">${customer.postalAddress}</div>
-                    </div>
-                    <div class="address-section">
-                        <div class="section-title">Forretningsadresse</div>
-                        <div class="address-content">${customer.physicalAddress}</div>
-                    </div>
-                </div>
-                ${customer.deliveryAddress ? `
-                    <div style="margin-top: 16px;">
-                        <div class="address-section">
-                            <div class="section-title">Leveringsadresse</div>
-                            <div class="address-content">${customer.deliveryAddress}</div>
-                        </div>
-                    </div>
-                ` : ''}
-            </div>
-        `;
-        
-        detailsPlaceholder.style.display = 'none';
-        detailsContent.style.display = 'block';
-        
-        console.log('✅ Kundedetaljer rendret');
-    }
-
-    /**
-     * Rendrer servicehistorikk i høyre sidebar
-     */
     function renderServiceHistory(customer) {
-        console.log('📊 Rendrer servicehistorikk for:', customer.name);
+    console.log('📊 Rendrer servicehistorikk for:', customer.name);
+    console.log('🔍 Customer object:', customer);
+    console.log('🔍 Total orders i systemet:', customerHistory.length);
+    
+    // FORBEDRET MATCHING - prøv alle mulige ID-kombinasjoner
+    const customerServiceHistory = customerHistory.filter(order => {
+        // Debug hver ordre
+        const matches = [
+            // Direkte ID matching  
+            order.customerId === customer.id,
+            order.customer_id === customer.id,
+            
+            // String vs Number konvertering
+            String(order.customerId) === String(customer.id),
+            String(order.customer_id) === String(customer.id),
+            Number(order.customerId) === Number(customer.id),
+            Number(order.customer_id) === Number(customer.id),
+            
+            // Customer number matching
+            order.customerNumber === customer.customerNumber,
+            String(order.customerNumber) === String(customer.customerNumber),
+            
+            // Name matching (backup)
+            order.customerName === customer.name,
+            order.customer_name === customer.name
+        ];
         
-        // Finn servicehistorikk for denne kunden
-        const customerServiceHistory = customerHistory.filter(order => 
-            order.customerId === customer.id || 
-            order.customerName === customer.name
-        );
-
-        if (customerServiceHistory.length === 0) {
-            serviceHistoryContent.innerHTML = `
-                <div class="empty-history">
-                    <p>Ingen servicehistorikk funnet for ${customer.name}</p>
-                </div>
-            `;
-            return;
+        const matchFound = matches.some(match => match === true);
+        
+        if (matchFound) {
+            console.log('✅ MATCH:', {
+                orderId: order.id,
+                orderCustomerId: order.customer_id || order.customerId,
+                customerName: order.customer_name || order.customerName,
+                selectedCustomerId: customer.id,
+                selectedCustomerName: customer.name
+            });
         }
-
-        const historyHTML = customerServiceHistory.map(order => `
-            <li class="service-history-item" onclick="showOrderDetails('${order.id}')" style="cursor: pointer;">
-                <div class="order-info">
-                    <div class="order-number">${order.orderNumber || order.id}</div>
-                    <div class="order-description">${order.description || order.serviceType || 'Serviceoppdrag'}</div>
-                    <div style="font-size: 12px; color: var(--text-light); margin-top: 4px;">
-                        ${order.scheduledDate ? formatDate(order.scheduledDate) : 'Ikke planlagt'}
-                    </div>
-                </div>
-                <span class="status-badge status-${order.status || 'scheduled'}">${getStatusText(order.status)}</span>
-            </li>
-        `).join('');
-
-        serviceHistoryContent.innerHTML = `
-            <ul class="service-history-list-sidebar">${historyHTML}</ul>
-        `;
         
-        console.log(`✅ Viser ${customerServiceHistory.length} serviceordre i sidebar`);
+        return matchFound;
+    });
+
+    console.log(`🎯 Funnet ${customerServiceHistory.length} ordre for ${customer.name}`);
+
+    if (customerServiceHistory.length === 0) {
+        serviceHistoryContent.innerHTML = `
+            <div class="empty-history">
+                <p>Ingen servicehistorikk funnet for ${customer.name}</p>
+                <div class="debug-info">
+                    <small>Debug: Kunde-ID = "${customer.id}" | Total ordre = ${customerHistory.length}</small>
+                    ${customerHistory.length > 0 ? `<small>Første ordre kunde-ID = "${customerHistory[0].customer_id || customerHistory[0].customerId}"</small>` : ''}
+                </div>
+            </div>
+        `;
+        return;
     }
+
+    // SORTER ORDRE ETTER DATO (nyeste først)
+    const sortedHistory = customerServiceHistory.sort((a, b) => {
+        const dateA = new Date(a.scheduled_date || a.scheduledDate || a.created_at || 0);
+        const dateB = new Date(b.scheduled_date || b.scheduledDate || b.created_at || 0);
+        return dateB - dateA; // Nyeste først
+    });
+
+    // NYTT FORMAT: Ordre-ID, dato, tekniker per linje
+    const historyHTML = `
+        <div class="service-history-list-modern">
+            ${sortedHistory.map(order => {
+                // Formater ordre-ID
+                const orderNumber = order.orderNumber || `SO-${order.id.split('-')[1]}-${order.id.split('-')[2]?.slice(-6)}` || order.id;
+                
+                // Formater dato
+                const orderDate = order.scheduled_date || order.scheduledDate || order.created_at;
+                const formattedDate = orderDate ? formatDate(orderDate) : 'Ikke planlagt';
+                
+                // Finn tekniker
+                const technician = order.technician_name || order.technicianName || 
+                               (order.technicianId ? 'Tekniker tildelt' : 'Ikke tildelt');
+                
+                return `
+                    <div class="service-history-order" onclick="showOrderDetails('${order.id}')">
+                        <div class="order-id">#${orderNumber}</div>
+                        <div class="order-date">${formattedDate}</div>
+                        <div class="order-technician">${technician}</div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+
+    serviceHistoryContent.innerHTML = historyHTML;
+    console.log('✅ Servicehistorikk rendret med', sortedHistory.length, 'ordre');
+}
 
     /**
      * Viser detaljer for en serviceordre i modal
      */
     window.showOrderDetails = function(orderId) {
-        console.log('🔍 Viser detaljer for ordre:', orderId);
+    console.log('🔍 Viser detaljer for ordre:', orderId);
+    
+    const order = customerHistory.find(o => o.id === orderId);
+    if (!order) {
+        console.error('Ordre ikke funnet:', orderId);
+        return;
+    }
+
+    console.log('📋 Ordre data:', order);
+
+    // Formater ordre-nummer
+    const orderNumber = order.orderNumber || `SO-${order.id.split('-')[1]}-${order.id.split('-')[2]?.slice(-6)}` || order.id;
+    
+    // Hent tekniker-informasjon
+    let technicianInfo = 'Ikke tildelt';
+    if (order.technician_name || order.technicianName) {
+        technicianInfo = order.technician_name || order.technicianName;
+    } else if (order.technician_id || order.technicianId) {
+        technicianInfo = `Tekniker ID: ${order.technician_id || order.technicianId}`;
+    }
+    
+    // Formater planlagt dato og tid
+    let planlagtDateTime = 'Ikke planlagt';
+    if (order.scheduled_date || order.scheduledDate) {
+        const dateStr = order.scheduled_date || order.scheduledDate;
+        const timeStr = order.scheduled_time || order.scheduledTime;
         
-        const order = customerHistory.find(o => o.id === orderId);
-        if (!order) {
-            console.error('Ordre ikke funnet:', orderId);
-            return;
+        try {
+            const date = new Date(dateStr);
+            planlagtDateTime = date.toLocaleDateString('no-NO', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            });
+            
+            if (timeStr) {
+                planlagtDateTime += ` kl. ${timeStr}`;
+            }
+        } catch (e) {
+            planlagtDateTime = dateStr;
         }
-
-        const customer = allCustomers.find(c => 
-            c.id === order.customerId || 
-            c.name === order.customerName
-        );
-
-        const modalBody = document.getElementById('order-modal-body');
-        modalBody.innerHTML = `
+    }
+    
+    // Bestem service type / anleggstype
+    let serviceType = 'Ikke spesifisert';
+    if (order.service_type || order.serviceType) {
+        serviceType = order.service_type || order.serviceType;
+    }
+    
+    // Vis utstyr hvis tilgjengelig
+    let equipmentInfo = '';
+    if (order.included_equipment_ids && Array.isArray(order.included_equipment_ids) && order.included_equipment_ids.length > 0) {
+        equipmentInfo = `
             <div class="report-section">
-                <h4>Grunnleggende informasjon</h4>
-                <div class="detail-grid">
-                    <div class="detail-group">
-                        <div class="detail-label">Ordrenummer</div>
-                        <div class="detail-value">${order.orderNumber || order.id}</div>
-                    </div>
-                    <div class="detail-group">
-                        <div class="detail-label">Status</div>
-                        <div class="detail-value">
-                            <span class="status-badge status-${order.status || 'scheduled'}">${getStatusText(order.status)}</span>
-                        </div>
-                    </div>
-                    <div class="detail-group">
-                        <div class="detail-label">Kunde</div>
-                        <div class="detail-value">${customer ? customer.name : order.customerName || 'Ukjent kunde'}</div>
-                    </div>
-                    <div class="detail-group">
-                        <div class="detail-label">Servicetype</div>
-                        <div class="detail-value">${order.serviceType || 'Ikke angitt'}</div>
-                    </div>
-                    <div class="detail-group">
-                        <div class="detail-label">Planlagt dato</div>
-                        <div class="detail-value">${order.scheduledDate ? formatDate(order.scheduledDate) : 'Ikke planlagt'}</div>
-                    </div>
-                    <div class="detail-group">
-                        <div class="detail-label">Tekniker</div>
-                        <div class="detail-value">${order.technicianId || 'Ikke tildelt'}</div>
-                    </div>
+                <h4>📱 Inkludert utstyr</h4>
+                <div class="equipment-list">
+                    ${order.included_equipment_ids.map(eqId => `
+                        <div class="equipment-item">ID: ${eqId}</div>
+                    `).join('')}
                 </div>
             </div>
-
-            <div class="report-section">
-                <h4>Beskrivelse</h4>
-                <p>${order.description || 'Ingen beskrivelse tilgjengelig'}</p>
-            </div>
-
-            ${customer ? `
-                <div class="report-section">
-                    <h4>Kundeinformasjon</h4>
-                    <div class="detail-grid">
-                        <div class="detail-group">
-                            <div class="detail-label">Kontaktperson</div>
-                            <div class="detail-value">${customer.contact}</div>
-                        </div>
-                        <div class="detail-group">
-                            <div class="detail-label">Telefon</div>
-                            <div class="detail-value">${customer.phone}</div>
-                        </div>
-                        <div class="detail-group">
-                            <div class="detail-label">E-post</div>
-                            <div class="detail-value">${customer.email || 'Ikke angitt'}</div>
-                        </div>
-                        <div class="detail-group">
-                            <div class="detail-label">Adresse</div>
-                            <div class="detail-value">${customer.physicalAddress}</div>
-                        </div>
-                    </div>
-                </div>
-            ` : ''}
         `;
+    }
 
-        // Oppdater knapp for å se full ordre
-        const viewOrderBtn = document.getElementById('view-order-details-btn');
-        viewOrderBtn.onclick = () => {
-            window.open(`/admin/servicedetaljer.html?id=${orderId}`, '_blank');
+    const modalBody = document.getElementById('order-modal-body');
+    modalBody.innerHTML = `
+        <div class="modern-order-modal">
+            <!-- Ordre-header -->
+            <div class="order-modal-header">
+                <div class="order-number-section">
+                    <span class="order-number-label">Ordrenummer</span>
+                    <span class="order-number-value">#${orderNumber}</span>
+                </div>
+                <div class="order-status-section">
+                    <span class="status-badge status-${order.status || 'scheduled'}">
+                        ${getStatusText(order.status || 'scheduled')}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Hovedinformasjon -->
+            <div class="order-details-grid">
+                <div class="detail-card">
+                    <div class="detail-icon">🔧</div>
+                    <div class="detail-content">
+                        <div class="detail-label">Servicetype / Anleggstype</div>
+                        <div class="detail-value">${serviceType}</div>
+                    </div>
+                </div>
+
+                <div class="detail-card">
+                    <div class="detail-icon">📅</div>
+                    <div class="detail-content">
+                        <div class="detail-label">Planlagt tidspunkt</div>
+                        <div class="detail-value">${planlagtDateTime}</div>
+                    </div>
+                </div>
+
+                <div class="detail-card">
+                    <div class="detail-icon">👨‍🔧</div>
+                    <div class="detail-content">
+                        <div class="detail-label">Tekniker</div>
+                        <div class="detail-value">${technicianInfo}</div>
+                    </div>
+                </div>
+
+                <div class="detail-card">
+                    <div class="detail-icon">📝</div>
+                    <div class="detail-content">
+                        <div class="detail-label">Beskrivelse</div>
+                        <div class="detail-value">${order.description || 'Ingen beskrivelse angitt'}</div>
+                    </div>
+                </div>
+            </div>
+
+            ${equipmentInfo}
+
+            <!-- Opprettelsesinfo -->
+            <div class="order-meta-info">
+                <div class="meta-item">
+                    <span class="meta-label">Opprettet:</span>
+                    <span class="meta-value">${order.created_at ? formatDate(order.created_at) : 'Ukjent'}</span>
+                </div>
+                ${order.updated_at ? `
+                    <div class="meta-item">
+                        <span class="meta-label">Sist oppdatert:</span>
+                        <span class="meta-value">${formatDate(order.updated_at)}</span>
+                    </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+
+    // Oppdater "Se full ordre" knapp
+    const viewOrderBtn = document.getElementById('view-order-details-btn');
+    if (viewOrderBtn) {
+        viewOrderBtn.onclick = function() {
+            window.open(`/app/orders.html?id=${order.id}`, '_blank');
         };
+    }
 
-        orderModal.classList.add('show');
-    };
+    orderModal.classList.add('show');
+};
 
     /**
      * Lukker ordre-modal

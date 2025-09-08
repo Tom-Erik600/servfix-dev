@@ -853,3 +853,254 @@ body {
     resize: vertical;
     min-height: 80px;
 }
+
+/* ===== CUSTOMER SEARCH SECTION ===== */
+.customer-search-section {
+    position: relative;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--bg-light);
+}
+
+.customer-search-input {
+    width: 100%;
+    padding: 10px 16px 10px 42px; /* Økt left padding til 42px */
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 14px;
+    background-color: white;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.customer-search-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.customer-search-input::placeholder {
+    color: #9ca3af;
+    font-style: italic;
+}
+
+.search-icon {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+    font-size: 16px;
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* ===== FORBEDRET KUNDEKORT DESIGN (breddebasert) ===== */
+.modern-customer-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+    cursor: grab;
+    position: relative;
+    overflow: hidden;
+}
+
+.modern-customer-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary-color) 0%, #10b981 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.modern-customer-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    border-color: var(--primary-color);
+}
+
+.modern-customer-card:hover::before {
+    opacity: 1;
+}
+
+.modern-customer-card.dragging {
+    opacity: 0.7;
+    cursor: grabbing;
+    transform: rotate(3deg) scale(0.98);
+}
+
+.modern-customer-card.drag-over {
+    border-color: #10b981;
+    background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+    border-style: dashed;
+}
+
+/* ===== KUNDE HEADER (KOMPAKT) ===== */
+.customer-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.customer-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0;
+    line-height: 1.2;
+}
+
+.customer-number-badge {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #1e40af 100%);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* ===== HOVEDINNHOLD (HORISONTALT LAYOUT) ===== */
+.customer-main-content {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+.customer-left-section {
+    flex: 1;
+    min-width: 0; /* Tillat text-overflow */
+}
+
+.customer-right-section {
+    flex: 1;
+    min-width: 0; /* Tillat text-overflow */
+}
+
+/* ===== INFO ELEMENTER ===== */
+.customer-info-item {
+    margin-bottom: 8px;
+}
+
+.customer-info-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
+    margin-bottom: 2px;
+    display: block;
+}
+
+.customer-info-value {
+    font-size: 13px;
+    color: #334155;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.customer-info-value.empty {
+    color: #94a3b8;
+    font-style: italic;
+}
+
+/* ===== KONTAKT FOOTER ===== */
+.customer-contact-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid #e2e8f0;
+    gap: 16px;
+}
+
+.customer-contact-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #64748b;
+    flex: 1;
+    min-width: 0;
+}
+
+.customer-contact-item span:last-child {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.contact-icon {
+    width: 14px;
+    height: 14px;
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 768px) {
+    .customer-main-content {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .customer-contact-footer {
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+    }
+}
+
+/* ===== SEARCH NO RESULTS ===== */
+.search-no-results {
+    padding: 30px 20px; /* Redusert fra 40px */
+    text-align: center;
+    color: #64748b;
+    font-style: italic;
+    font-size: 14px;
+}
+
+/* ===== RESPONSIVE JUSTERINGER ===== */
+@media (max-width: 768px) {
+    .customer-search-section {
+        padding: 10px 12px;
+    }
+    
+    .customer-search-input {
+        padding: 8px 12px 8px 36px;
+        font-size: 13px;
+    }
+    
+    .search-icon {
+        left: 24px;
+        font-size: 14px;
+    }
+    
+    .modern-customer-card,
+    .project-card {
+        padding: 10px 12px;
+        margin-bottom: 8px;
+    }
+    
+    .customer-details-grid {
+        grid-template-columns: 1fr; /* Stack på mobile */
+        gap: 6px;
+    }
+    
+    .customer-contact-row {
+        flex-direction: column;
+        gap: 6px;
+    }
+}
