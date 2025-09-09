@@ -367,6 +367,41 @@
             font-size: 16px;
             color: #6b7280;
         }
+
+        /* Instruction button styles */
+        .instruction-btn {
+            background: #e5e7eb;
+            border: 2px solid #d1d5db;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .instruction-btn:hover {
+            background: #dbeafe;
+            border-color: #3b82f6;
+        }
+
+        .instruction-btn.has-instruction {
+            background: #3b82f6;
+            border-color: #2563eb;
+            color: white;
+        }
+
+        .instruction-btn.has-instruction:hover {
+            background: #2563eb;
+        }
+
+        .instruction-icon {
+            font-size: 14px;
+            font-weight: bold;
+            font-style: normal;
+        }
     </style>
 </head>
 <body>
@@ -538,6 +573,32 @@
             <div class="modal-footer">
                 <button class="cancel-btn">Avbryt</button>
                 <button class="save-btn" id="save-checklist-item-btn">Lagre Sjekkpunkt</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Instruction Modal -->
+    <div class="modal-overlay" id="instruction-modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>Rediger instruksjon</h3>
+                <button class="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Sjekkpunkt:</label>
+                    <input type="text" id="instruction-item-label" class="form-control" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="instruction-text">Instruksjon til tekniker:</label>
+                    <textarea id="instruction-text" class="form-control" rows="6" 
+                        placeholder="Skriv detaljerte instruksjoner for hvordan dette punktet skal utføres..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn">Avbryt</button>
+                <button class="delete-btn" id="delete-instruction-btn" style="display: none;">Slett instruksjon</button>
+                <button class="save-btn" id="save-instruction-btn">Lagre instruksjon</button>
             </div>
         </div>
     </div>

@@ -41,6 +41,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const addSubpointBtn = document.getElementById('add-subpoint-btn');
     const saveChecklistItemModalBtn = document.getElementById('save-checklist-item-btn'); // Renamed to avoid conflict
 
+    // Instruction modal elements (legg til etter eksisterende variabler)
+    const instructionModal = document.getElementById('instruction-modal');
+    const instructionItemLabel = document.getElementById('instruction-item-label');
+    const instructionTextArea = document.getElementById('instruction-text');
+    const saveInstructionBtn = document.getElementById('save-instruction-btn');
+    const deleteInstructionBtn = document.getElementById('delete-instruction-btn');
+
+    let currentInstructionItemId = null;
+
     let checklistTemplates = { facilityTypes: [] }; // Initialize with the new structure
     let currentFacilityType = null; // Store the entire object, not just the ID
     let editingChecklistItem = null; // To store the item being edited
@@ -131,127 +140,84 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         checklistConfigDiv.style.display = 'block';
 
-        // Render System Fields
+        // Render System Fields (eksisterende kode)
         systemFieldsDisplay.innerHTML = '';
         currentFacilityType.systemFields.sort((a, b) => a.order - b.order).forEach(field => {
             const div = document.createElement('div');
             div.classList.add('form-group');
             div.innerHTML = `
                 <label>${field.label}${field.required ? ' *' : ''}</label>
-                <input type="text" value="${field.name}" readonly>
+                <input type="text" value="${field.name}" readonly class="form-control">
             `;
             systemFieldsDisplay.appendChild(div);
         });
 
-        // Render Checklist Items
-        checklistItemsContainer.innerHTML = '';
-        renderChecklistItems(currentFacilityType.checklistItems, checklistItemsContainer, 0);
+        // Render Checklist Items med instruksjons-knapper
+        renderChecklistItems();
 
-        // Render Additional Sections
-        allowProductsCheckbox.checked = currentFacilityType.allowProducts;
-        allowAdditionalWorkCheckbox.checked = currentFacilityType.allowAdditionalWork;
-        allowCommentsCheckbox.checked = currentFacilityType.allowComments;
-
-        // Render Drift Schedule
-        hasDriftScheduleCheckbox.checked = currentFacilityType.hasDriftSchedule || false;
-        renderDriftScheduleTable();
-
-        addDragDropListeners();
-        addDeleteListeners();
-        addInputListeners();
-        addSubpointToggleListeners();
-        addEditChecklistItemListeners(); // Add listeners for edit buttons
+        // Render andre seksjoner (eksisterende kode)
+        allowProductsCheckbox.checked = currentFacilityType.allowProducts || false;
+        allowAdditionalWorkCheckbox.checked = currentFacilityType.allowAdditionalWork || false;
+        allowCommentsCheckbox.checked = currentFacilityType.allowComments || false;
+        
+        if (typeof renderDriftScheduleConfig === 'function') {
+            renderDriftScheduleConfig();
+        }
     }
 
-    function renderChecklistItems(items, container, level) {
-        items.sort((a, b) => a.order - b.order).forEach(item => {
-            const div = document.createElement('div');
-            div.classList.add('checklist-item', `nested-${level}`);
-            div.setAttribute('draggable', 'true');
-            div.dataset.itemId = item.id;
-            div.dataset.level = level;
+    function renderChecklistItems() {
+        if (!currentFacilityType || !currentFacilityType.checklistItems) {
+            checklistItemsContainer.innerHTML = '<p>Ingen sjekkpunkter konfigurert.</p>';
+            return;
+        }
 
-            let inputHtml = '';
-            if (item.inputType === 'checkbox') {
-                inputHtml = `<input type="checkbox" data-id="${item.id}" data-field="value">`;
-            } else if (item.inputType === 'ok_avvik') {
-                inputHtml = `
-                    <label><input type="radio" name="${item.id}" value="ok"> OK</label>
-                    <label><input type="radio" name="${item.id}" value="avvik"> Avvik</label>
-                `;
-            } else if (item.inputType === 'ok_byttet_avvik') {
-                inputHtml = `
-                    <label><input type="radio" name="${item.id}" value="ok"> OK</label>
-                    <label><input type="radio" name="${item.id}" value="byttet"> Byttet</label>
-                    <label><input type="radio" name="${item.id}" value="avvik"> Avvik</label>
-                `;
-            } else if (item.inputType === 'numeric') {
-                inputHtml = `<input type="number" data-id="${item.id}" data-field="value">`;
-            } else if (item.inputType === 'text') {
-                inputHtml = `<input type="text" data-id="${item.id}" data-field="value">`;
-            } else if (item.inputType === 'comment') {
-                inputHtml = `<textarea data-id="${item.id}" data-field="value"></textarea>`;
-            } else if (item.inputType === 'group_selection') {
-                inputHtml = ``; // No direct input for group selection
-            }
-
-            // Legg til støtte for dropdown options
-            let optionsHtml = '';
-            if (item.inputType === 'dropdown_ok_avvik' || item.inputType === 'dropdown_ok_avvik_comment') {
-                const options = item.dropdownOptions || [];
-                optionsHtml = `
-                    <div class="dropdown-options-config" style="margin-top: 8px;">
-                        <label style="font-size: 12px; color: #666;">Dropdown alternativer (ett per linje):</label>
-                        <textarea data-id="${item.id}" data-field="dropdownOptions" 
-                                 style="width: 100%; min-height: 60px; font-size: 12px; margin-top: 4px;"
-                                 placeholder="Roterende varmegjenvinner\nFast plate varmeveksler\nKryssveksler">${options.join('\n')}</textarea>
-                    </div>
-                `;
-            }
-
-            div.innerHTML = `
-                <span class="drag-handle">☰</span>
-                ${item.subpoints && item.subpoints.length > 0 ? '<span class="subpoint-toggle">▶</span>' : ''}
-                <input type="text" value="${item.label}" data-id="${item.id}" data-field="label">
-                <select data-id="${item.id}" data-field="inputType">
-                    <option value="checkbox" ${item.inputType === 'checkbox' ? 'selected' : ''}>Checkbox</option>
-                    <option value="ok_avvik" ${item.inputType === 'ok_avvik' ? 'selected' : ''}>OK / Avvik</option>
-                    <option value="ok_byttet_avvik" ${item.inputType === 'ok_byttet_avvik' ? 'selected' : ''}>OK / Byttet / Avvik</option>
-                    <option value="numeric" ${item.inputType === 'numeric' ? 'selected' : ''}>Numerisk</option>
-                    <option value="text" ${item.inputType === 'text' ? 'selected' : ''}>Tekst</option>
-                    <option value="textarea" ${item.inputType === 'textarea' ? 'selected' : ''}>Langt tekstfelt</option>
-                    <option value="comment" ${item.inputType === 'comment' ? 'selected' : ''}>Kommentar</option>
-                    <option value="multi_checkbox">Multi Checkbox</option>
-                    <option value="timer">Timer</option>
-                    <option value="rengjort_ikke_rengjort">Rengjort / Ikke Rengjort</option>
-                    <option value="virkningsgrad">Virkningsgrad</option>
-                    <option value="image_only">Kun Bilde</option>
-                    <option value="dropdown">Dropdown</option>
-                    <option value="group_selection" ${item.inputType === 'group_selection' ? 'selected' : ''}>Gruppevalg</option>
-                    <option value="switch_select" ${item.inputType === 'switch_select' ? 'selected' : ''}>Bryter/Status</option>
-                    <option value="dropdown_ok_avvik" ${item.inputType === 'dropdown_ok_avvik' ? 'selected' : ''}>Dropdown + OK/Avvik</option>
-                    <option value="dropdown_ok_avvik_comment" ${item.inputType === 'dropdown_ok_avvik_comment' ? 'selected' : ''}>Dropdown + OK/Avvik + Kommentar</option>
-                    <option value="temperature" ${item.inputType === 'temperature' ? 'selected' : ''}>Temperatur (°C + OK/Avvik)</option>
-                    <option value="virkningsgrad" ${item.inputType === 'virkningsgrad' ? 'selected' : ''}>Virkningsgrad (%)</option>
-                    <option value="tilstandsgrad_dropdown" ${item.inputType === 'tilstandsgrad_dropdown' ? 'selected' : ''}>Tilstandsgrad (TG)</option>
-                    <option value="konsekvensgrad_dropdown" ${item.inputType === 'konsekvensgrad_dropdown' ? 'selected' : ''}>Konsekvensgrad (KG)</option>
-                </select>
-                ${inputHtml}
-                ${optionsHtml}
-                <button class="edit-item-btn" data-id="${item.id}">✏️</button>
-                <button class="delete-item-btn" data-id="${item.id}">🗑️</button>
-            `;
-            container.appendChild(div);
-
-            if (item.subpoints && item.subpoints.length > 0) {
-                // Create a container for subpoints to allow toggling
-                const subpointsDiv = document.createElement('div');
-                subpointsDiv.classList.add('subpoints-list', `level-${level + 1}`);
-                subpointsDiv.style.display = 'none'; // Hidden by default
-                container.appendChild(subpointsDiv);
-                renderChecklistItems(item.subpoints, subpointsDiv, level + 1);
-            }
+        checklistItemsContainer.innerHTML = '';
+        currentFacilityType.checklistItems.sort((a, b) => a.order - b.order).forEach(item => {
+            renderSingleChecklistItem(item, checklistItemsContainer, 0);
         });
+    }
+
+    function renderSingleChecklistItem(item, container, nestLevel) {
+        const div = document.createElement('div');
+        div.classList.add('checklist-item');
+        if (nestLevel > 0) {
+            div.classList.add(`nested-${Math.min(nestLevel, 2)}`);
+        }
+        div.dataset.itemId = item.id;
+
+        // Sjekk om instruksjon eksisterer
+        const hasInstruction = item.hasInstructions || false;
+
+        div.innerHTML = `
+            <div class="drag-handle">⋮⋮</div>
+            <input type="text" value="${item.label}" data-field="label" class="form-control">
+            <select data-field="inputType" class="form-control">
+                <option value="ok_avvik" ${item.inputType === 'ok_avvik' ? 'selected' : ''}>OK/Avvik</option>
+                <option value="checkbox" ${item.inputType === 'checkbox' ? 'selected' : ''}>Avkrysning</option>
+                <option value="number" ${item.inputType === 'number' ? 'selected' : ''}>Tall</option>
+                <option value="text" ${item.inputType === 'text' ? 'selected' : ''}>Tekst</option>
+                <option value="textarea" ${item.inputType === 'textarea' ? 'selected' : ''}>Tekstområde</option>
+                <option value="dropdown" ${item.inputType === 'dropdown' ? 'selected' : ''}>Dropdown</option>
+            </select>
+            <button class="instruction-btn ${hasInstruction ? 'has-instruction' : ''}" 
+                    data-item-id="${item.id}" 
+                    title="Rediger instruksjon">
+                <i class="instruction-icon">ⓘ</i>
+            </button>
+            <div class="checklist-item-actions">
+                <button class="edit-item-btn" data-item-id="${item.id}" title="Rediger">✏️</button>
+                <button class="delete-item-btn" data-item-id="${item.id}" title="Slett">🗑️</button>
+            </div>
+        `;
+
+        container.appendChild(div);
+
+        // Render subpoints hvis de finnes
+        if (item.subpoints && item.subpoints.length > 0) {
+            item.subpoints.forEach(subpoint => {
+                renderSingleChecklistItem(subpoint, container, nestLevel + 1);
+            });
+        }
     }
 
     function addSubpointToggleListeners() {
@@ -556,7 +522,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <input type="text" value="${exclusiveGroup || ''}" data-field-prop="exclusiveGroup" placeholder="Eksklusiv gruppe">
             <button class="remove-subpoint-btn">&times;</button>
         `;
-        subpointsContainer.appendChild(subpointDiv);
+        subpointsContainer.appendChild(div);
 
         subpointDiv.querySelector('.remove-subpoint-btn').addEventListener('click', () => {
             subpointDiv.remove();
@@ -869,4 +835,142 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initial load
     await fetchChecklistTemplates();
+
+    // Event listener for instruksjons-knapper
+    checklistItemsContainer.addEventListener('click', async (e) => {
+        if (e.target.closest('.instruction-btn')) {
+            const btn = e.target.closest('.instruction-btn');
+            const itemId = btn.dataset.itemId;
+            const item = findChecklistItemById(currentFacilityType.checklistItems, itemId);
+            
+            if (item) {
+                currentInstructionItemId = itemId;
+                instructionItemLabel.value = item.label;
+                
+                // Last eksisterende instruksjon
+                try {
+                    const response = await fetch(`/api/checklist-instructions/${currentFacilityType.name}/${currentInstructionItemId}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        instructionTextArea.value = data.instruction;
+                        deleteInstructionBtn.style.display = 'block';
+                    } else {
+                        instructionTextArea.value = '';
+                        deleteInstructionBtn.style.display = 'none';
+                    }
+                } catch (error) {
+                    console.error('Error loading instruction:', error);
+                    instructionTextArea.value = '';
+                    deleteInstructionBtn.style.display = 'none';
+                }
+                
+                instructionModal.classList.add('show');
+            }
+        }
+    });
+
+    // Lagre instruksjon
+    saveInstructionBtn.addEventListener('click', async () => {
+        const instructionText = instructionTextArea.value.trim();
+        
+        if (!instructionText) {
+            alert('Instruksjonstekst kan ikke være tom');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/checklist-instructions/${currentFacilityType.name}/${currentInstructionItemId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ instructionText })
+            });
+            
+            if (response.ok) {
+                // Oppdater hasInstructions på item
+                const item = findChecklistItemById(currentFacilityType.checklistItems, currentInstructionItemId);
+                if (item) {
+                    item.hasInstructions = true;
+                }
+                
+                renderChecklistItems();
+                saveChecklistTemplates(); // Lagre oppdatert mal
+                instructionModal.classList.remove('show');
+                
+                showToast('Instruksjon lagret', 'success');
+            } else {
+                throw new Error('Failed to save instruction');
+            }
+        } catch (error) {
+            console.error('Error saving instruction:', error);
+            alert('Kunne ikke lagre instruksjon');
+        }
+    });
+
+    // Slett instruksjon
+    deleteInstructionBtn.addEventListener('click', async () => {
+        if (!confirm('Er du sikker på at du vil slette denne instruksjonen?')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/checklist-instructions/${currentFacilityType.name}/${currentInstructionItemId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                // Oppdater hasInstructions på item
+                const item = findChecklistItemById(currentFacilityType.checklistItems, currentInstructionItemId);
+                if (item) {
+                    item.hasInstructions = false;
+                }
+                
+                renderChecklistItems();
+                saveChecklistTemplates(); // Lagre oppdatert mal
+                instructionModal.classList.remove('show');
+                
+                showToast('Instruksjon slettet', 'success');
+            } else {
+                throw new Error('Failed to delete instruction');
+            }
+        } catch (error) {
+            console.error('Error deleting instruction:', error);
+            alert('Kunne ikke slette instruksjon');
+        }
+    });
+
+    // Modal close events for instruction modal
+    modalCloseBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            if (e.target.closest('#instruction-modal')) {
+                instructionModal.classList.remove('show');
+            }
+        });
+    });
+
+    // Toast-funksjon (legg til hvis den ikke finnes)
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+            color: white;
+            border-radius: 6px;
+            z-index: 10000;
+            transition: all 0.3s ease;
+        `;
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
 });

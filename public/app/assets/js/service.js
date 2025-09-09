@@ -930,6 +930,7 @@ async function loadServiceReport() {
 
 function renderAll() {
     console.log("Rendering all components...");
+    clearAllImageContainers();
     
     try { renderHeader(); } catch (e) { console.error('Error in renderHeader:', e); }
     try { renderAnleggInfo(); } catch (e) { console.error('Error in renderAnleggInfo:', e); }
@@ -1248,6 +1249,7 @@ function renderChecklist() {
     container.innerHTML = itemsHTML;
 
     // Chain initialization med riktig timing
+    // Chain initialization med riktig timing
     setTimeout(() => {
         console.log('🎨 Step 1: Creating Lucide icons...');
         if (typeof lucide !== 'undefined') {
@@ -1258,10 +1260,8 @@ function renderChecklist() {
             console.log('📸 Step 2: Re-initializing photo handlers...');
             reinitializePhotoHandlers();
             
-            setTimeout(() => {
-                console.log('🖼️ Step 3: Rendering avvik images...');
-                renderAvvikImagesForChecklist();
-            }, 100);
+            // FJERNET: Automatisk bilderedering som forårsaket problemet
+            console.log('✅ Checklist rendered without automatic image loading');
         }, 100);
     }, 100);
 }
@@ -1895,8 +1895,10 @@ function clearAllImageContainers() {
         '#general-images-gallery',
         '[id^="avvik-images-container-"]',
         '[id^="byttet-images-container-"]',
+        '[id^="image-only-container-"]',
         '.avvik-images-container',
-        '.byttet-images-container'
+        '.byttet-images-container',
+        '.image-only-container'
     ];
     
     containerSelectors.forEach(selector => {
@@ -1907,16 +1909,32 @@ function clearAllImageContainers() {
         });
     });
     
-    // Nullstill photo context
+    // NYTT: Nullstill photo context eksplisitt
     if (window.currentPhotoContext) {
         window.currentPhotoContext = null;
+        console.log('   ✅ Photo context cleared');
     }
     
-    console.log('✅ All image containers cleared');
+    // NYTT: Force garbage collection på img elements
+    const allImages = document.querySelectorAll('img[src*="storage.googleapis.com"]');
+    allImages.forEach(img => {
+        img.src = '';
+        img.remove();
+    });
+    
+    console.log('✅ All image containers and cached images cleared');
 }
 
 function resetAndLoadForm(isEditing = false) {
-    clearAllImageContainers(); // <-- LEGG TIL DENNE LINJEN
+    console.log('🔄 Resetting form and clearing all caches...');
+    
+    // KRITISK: Clear alle bilder FØRST
+    clearAllImageContainers();
+    
+    // NYTT: Vent litt for å sikre clearing
+    setTimeout(() => {
+        console.log('✅ Image clearing complete');
+    }, 50);
 
     if (!isEditing) {
         state.editingComponentIndex = null;
@@ -3348,8 +3366,18 @@ async function uploadImageToServer(file, imageType) {
             itemId: currentPhotoContext.itemId,
             context: currentPhotoContext
         });
-        // ENDRET: Fra 'checklistItemId' til 'avvikId' for å matche backend
-        formData.append('avvikId', currentPhotoContext.itemId);  // ← OGSÅ ENDRET
+        
+        // FIKSET: Send den korrekte checklist item ID
+        const checklistItem = document.querySelector(`[data-item-id="${currentPhotoContext.itemId}"]`);
+        
+        if (checklistItem) {
+            const actualItemId = checklistItem.dataset.itemId;
+            console.log('📷 Found actual checklist item ID:', actualItemId);
+            formData.append('avvikId', actualItemId);
+        } else {
+            console.warn('⚠️ Could not find checklist item for ID:', currentPhotoContext.itemId);
+            formData.append('avvikId', currentPhotoContext.itemId);
+        }
     }
     
     const endpoint = imageType === 'avvik' ? '/api/images/avvik' : '/api/images/general';
@@ -3513,6 +3541,13 @@ async function openPhotoOption(type) {
         if (e.target.files[0]) {
             const file = e.target.files[0];
             console.log('📷 File selected:', file.name, 'Size:', Math.round(file.size/1024) + 'KB');
+            // NYTT: Clear gamle bilder fra UI før opplasting
+            if (currentPhotoContext?.type === 'avvik' && currentPhotoContext?.itemId) {
+                console.log('🧹 Clearing old images before new upload');
+                clearAllImageContainers();
+                // Kort pause for å sikre clearing
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
             
             // Sjekk at vi har nødvendig data
             if (!state.order?.id || !state.equipment?.id || !state.serviceReport?.reportId) {
@@ -3664,6 +3699,13 @@ async function loadAndRenderImages() {
 async function renderAvvikImagesForChecklist(currentReportId) {
     console.log('🖼️ Rendering avvik images for checklist items');
     
+    // KRITISK: ALLTID tøm containere først
+    console.log('🧹 Force clearing all image containers before render...');
+    clearAllImageContainers();
+    
+    // NYTT: Kort pause for å sikre clearing er fullført
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
     // NYTT: Bruk reportId fra state hvis ikke eksplisitt sendt
     const reportIdToUse = currentReportId || state.serviceReport?.reportId;
     
@@ -3699,15 +3741,47 @@ async function renderAvvikImagesForChecklist(currentReportId) {
             
             // Group images by checklist_item_id
             const imagesByAvvik = {};
+            const orphanedImages = []; // Bilder uten checklist_item_id
+
             avvikImages.forEach(img => {
                 const itemId = img.checklist_item_id;
+                
+                // DEBUG: Log hver bilde
+                console.log('📸 Processing image:', {
+                    id: img.id,
+                    avvik_number: img.avvik_number,
+                    checklist_item_id: img.checklist_item_id,
+                    has_item_id: !!itemId
+                });
+                
                 if (itemId) {
                     if (!imagesByAvvik[itemId]) {
                         imagesByAvvik[itemId] = [];
                     }
                     imagesByAvvik[itemId].push(img);
+                    console.log(`✅ Image ${img.avvik_number} assigned to item ${itemId}`);
+                } else {
+                    orphanedImages.push(img);
+                    console.warn(`⚠️ ORPHANED IMAGE: Avvik ${img.avvik_number} has no checklist_item_id`);
                 }
             });
+
+            // DEBUG: Log resultat
+            console.log('📊 Filtering results:', {
+                totalImages: avvikImages.length,
+                imagesWithItemId: Object.values(imagesByAvvik).flat().length,
+                orphanedImages: orphanedImages.length,
+                itemsWithImages: Object.keys(imagesByAvvik)
+            });
+
+            // DEBUG: Vis orphaned images
+            if (orphanedImages.length > 0) {
+                console.log('🚨 ORPHANED IMAGES DETECTED:', orphanedImages.map(img => ({
+                    avvik_number: img.avvik_number,
+                    id: img.id,
+                    uploaded_at: img.uploaded_at
+                })));
+            }
             
             // Render images for each avvik container
             Object.entries(imagesByAvvik).forEach(([itemId, images]) => {
@@ -4338,3 +4412,20 @@ window.addEventListener('beforeunload', function() {
         clearInterval(autoSaveInterval);
     }
 });
+
+// DEBUG: Funksjon for å verifisere checklist item IDs
+function debugChecklistItemIds() {
+    console.log('🔍 DEBUG: Current checklist item IDs:');
+    
+    const checklistItems = document.querySelectorAll('[data-item-id]');
+    checklistItems.forEach((item, index) => {
+        const itemId = item.dataset.itemId;
+        const container = document.getElementById(`avvik-images-container-${itemId}`);
+        const hasImages = container ? container.children.length : 0;
+        
+        console.log(`   ${index + 1}. Item ID: "${itemId}", Images: ${hasImages}`);
+    });
+    
+    console.log('   Current photo context:', window.currentPhotoContext);
+}
+

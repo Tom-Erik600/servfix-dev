@@ -186,6 +186,7 @@ setupSession().then(() => {
       app.use('/api/customers', require('./src/routes/customers'));
       app.use('/api/technicians', require('./src/routes/technicians'));
       app.use('/api/checklist-templates', require('./src/routes/checklist-templates'));
+      app.use('/api/checklist-instructions', require('./src/routes/checklist-instructions'));
       app.use('/api/quotes', require('./src/routes/quotes'));
       //app.use('/api/products', require('./src/routes/products'));
       //app.use('/api/print', require('./src/routes/print'));
