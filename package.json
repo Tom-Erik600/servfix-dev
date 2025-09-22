@@ -21,6 +21,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "cloud-proxy": "C:\\tools\\cloud-sql-proxy.x64.exe --port 5432 servfix-production:europe-north1:servfix-db"
+    "cloud-proxy": "C:\\tools\\cloud-sql-proxy.x64.exe --port 5432 servfix-production:europe-north1:servfix-db",
+    "cloud-proxy-test": "C:\\tools\\cloud-sql-proxy.x64.exe --port 5433 servfix-test:europe-north1:servfix-test-db"
   }
 }
