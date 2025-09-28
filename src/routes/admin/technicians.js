@@ -3,9 +3,21 @@ const router = express.Router();
 const db = require('../../config/database');
 const bcrypt = require('bcryptjs'); // Import bcryptjs
 
-// Middleware for å sette adminTenantId (beholdes fra tidligere)
+// Middleware for å sette adminTenantId - DEBUG VERSION
 router.use((req, res, next) => {
+  console.log('🚀 MIDDLEWARE: Technicians route accessed', {
+    method: req.method,
+    path: req.path,
+    url: req.url,
+    sessionExists: !!req.session,
+    isAdmin: req.session?.isAdmin
+  });
+
   if (!req.session.isAdmin) {
+    console.log('❌ MIDDLEWARE: Admin authentication failed', {
+      session: req.session,
+      isAdmin: req.session?.isAdmin
+    });
     return res.status(401).json({ error: 'Admin authentication required' });
   }
   
@@ -13,6 +25,13 @@ router.use((req, res, next) => {
                       req.query.tenantId || 
                       req.session.selectedTenantId || 
                       'airtech'; // default
+  
+  console.log('✅ MIDDLEWARE: Admin auth passed', {
+    adminTenantId: req.adminTenantId,
+    headers: req.headers['x-tenant-id'],
+    query: req.query.tenantId,
+    selected: req.session.selectedTenantId
+  });
   
   if (req.headers['x-tenant-id'] || req.query.tenantId) {
     req.session.selectedTenantId = req.adminTenantId;
@@ -25,7 +44,7 @@ router.use((req, res, next) => {
 router.get('/', async (req, res) => {
   try {
     const pool = await db.getTenantConnection(req.adminTenantId);
-    const result = await pool.query('SELECT id, name, initials, stilling, is_active FROM technicians');
+    const result = await pool.query('SELECT id, name, initials, stilling, is_active FROM technicians WHERE is_active = true');
     res.json(result.rows);
   } catch (error) {
     console.error(`[${req.adminTenantId}] Error fetching technicians:`, error);
@@ -73,16 +92,42 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const pool = await db.getTenantConnection(req.adminTenantId);
+    
+    // Sjekk om teknikeren er i bruk (kun orders)
+    const usageCheck = await pool.query(
+      'SELECT COUNT(*) as order_count FROM orders WHERE technician_id = $1', 
+      [id]
+    );
+    
+    const orderCount = parseInt(usageCheck.rows[0].order_count);
+    
+    if (orderCount > 0) {
+      // Deaktiver i stedet for å slette
+      const result = await pool.query(
+        'UPDATE technicians SET is_active = FALSE WHERE id = $1 RETURNING id', 
+        [id]
+      );
+      
+      return res.json({ 
+        message: `Tekniker deaktivert (${orderCount} ordre).`, 
+        action: 'deactivated'
+      });
+    }
+    
+    // Hvis ikke i bruk, slett tekniker
     const result = await pool.query('DELETE FROM technicians WHERE id = $1 RETURNING id', [id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Tekniker ikke funnet.' });
     }
 
-    res.status(200).json({ message: 'Tekniker slettet.', id: result.rows[0].id });
+    res.json({ 
+      message: 'Tekniker slettet.', 
+      action: 'deleted'
+    });
 
   } catch (error) {
-    console.error(`[${req.adminTenantId}] Error deleting technician:`, error);
+    console.error('Error deleting technician:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

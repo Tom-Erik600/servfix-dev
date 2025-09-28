@@ -8,3 +8,5 @@ test-output/
 # Google Cloud credentials
 config/gcp/*.json
 dev/
+test-env.txt
+prod-env.txt

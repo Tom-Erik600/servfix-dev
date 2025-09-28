@@ -178,11 +178,28 @@ async function handleDeleteTechnician(event) {
 
         if (!response.ok) {
             const errorData = await response.json();
+            
+            if (errorData.code === 'FOREIGN_KEY_VIOLATION') {
+                alert(`⚠️ Tekniker kan ikke slettes!\n\n${errorData.error}\n\nTeknikeren er blitt deaktivert i stedet.`);
+                loadTechnicians();
+                return;
+            }
+            
             throw new Error(errorData.error || 'Sletting feilet på serveren.');
         }
 
-        alert('Tekniker slettet!');
-        loadTechnicians(); // Last listen på nytt
+        const result = await response.json();
+        
+        if (result.action === 'deactivated') {
+            alert(`⚠️ ${result.message}`);
+        } else if (result.action === 'deleted') {
+            alert(`✅ ${result.message}`);
+        } else {
+            alert('Tekniker behandlet!');
+        }
+        
+        loadTechnicians();
+        
     } catch (error) {
         console.error('Feil ved sletting av tekniker:', error);
         alert(`Kunne ikke slette tekniker: ${error.message}`);
