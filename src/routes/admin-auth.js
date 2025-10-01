@@ -17,7 +17,7 @@ router.post('/login', async (req, res) => {
       'SELECT * FROM admin_users WHERE email = $1',
       [username]
     );
-    
+
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Ugyldig brukernavn eller passord' });
     }
@@ -29,17 +29,24 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Ugyldig brukernavn eller passord' });
     }
     
-    // Lagre admin session
+    // Lagre admin session med tenant fra database
     req.session.isAdmin = true;
     req.session.adminId = admin.id;
     req.session.adminEmail = admin.email;
+    
+    // Sett tenant fra database hvis kolonnen eksisterer
+    if (admin.tenant_id) {
+      req.session.selectedTenantId = admin.tenant_id;
+      req.session.tenantId = admin.tenant_id;
+    }
     
     res.json({
       success: true,
       admin: {
         id: admin.id,
         email: admin.email,
-        name: admin.name
+        name: admin.name,
+        tenantId: admin.tenant_id
       }
     });
     
@@ -58,7 +65,8 @@ router.get('/me', (req, res) => {
   res.json({
     admin: {
       id: req.session.adminId,
-      email: req.session.adminEmail
+      email: req.session.adminEmail,
+      tenantId: req.session.selectedTenantId
     }
   });
 });

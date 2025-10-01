@@ -46,6 +46,7 @@ async function clearAllTestData() {
     
   } catch (error) {
     console.error('\n❌ Feil under nullstilling:', error.message);
+    console.error('Stack:', error.stack);
     process.exit(1);
   }
 }
@@ -60,8 +61,34 @@ async function clearDatabase() {
   });
   
   try {
-    await pool.query('TRUNCATE TABLE orders, service_reports, equipment, quotes, avvik_images CASCADE');
-    console.log('   ✅ Database tømt');
+    // Slett data i riktig rekkefølge (dependencies først)
+    console.log('   🗑️  Sletter service_reports...');
+    await pool.query('DELETE FROM service_reports');
+    
+    console.log('   🗑️  Sletter avvik_images...');
+    await pool.query('DELETE FROM avvik_images');
+    
+    console.log('   🗑️  Sletter quotes...');
+    await pool.query('DELETE FROM quotes');
+    
+    console.log('   🗑️  Sletter orders...');
+    await pool.query('DELETE FROM orders');
+    
+    console.log('   🗑️  Sletter equipment...');
+    await pool.query('DELETE FROM equipment');
+    
+    console.log('   🗑️  Sletter checklist_instructions...');
+    await pool.query('DELETE FROM checklist_instructions');
+    
+    // Reset SERIAL sequences så IDs starter på 1 igjen
+    console.log('   🔄 Resetter ID-sekvenser...');
+    await pool.query('ALTER SEQUENCE IF EXISTS equipment_id_seq RESTART WITH 1');
+    
+    console.log('   ✅ Database tømt og ID-sekvenser reset');
+  } catch (error) {
+    console.error('   ❌ Database-feil:', error.message);
+    console.error('   Detaljer:', error);
+    throw error;
   } finally {
     await pool.end();
   }

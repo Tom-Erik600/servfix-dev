@@ -43,12 +43,12 @@ router.get('/', async (req, res) => {
         o.customer_id,
         o.scheduled_date,
         o.service_type,
-        e.name as equipment_name,
-        e.type as equipment_type,
+        e.systemnavn as equipment_name,
+        e.systemtype as equipment_type,
         t.name as technician_name
       FROM service_reports sr
       LEFT JOIN orders o ON sr.order_id = o.id
-      LEFT JOIN equipment e ON sr.equipment_id = e.id
+      LEFT JOIN equipment e ON sr.equipment_id = CAST(e.id AS VARCHAR)
       LEFT JOIN technicians t ON o.technician_id = t.id
       ${whereClause}
       ORDER BY sr.created_at DESC

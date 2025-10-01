@@ -1,0 +1,132 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  annotations:
+    run.googleapis.com/build-enable-automatic-updates: 'false'
+    run.googleapis.com/build-id: b53e9d63-54de-4ef8-8a14-dc10e13efe40
+    run.googleapis.com/build-image-uri: europe-north1-docker.pkg.dev/servfix-production/cloud-run-source-deploy/servfix-app
+    run.googleapis.com/build-name: projects/471345128928/locations/europe-north1/builds/b53e9d63-54de-4ef8-8a14-dc10e13efe40
+    run.googleapis.com/build-source-location: gs://run-sources-servfix-production-europe-north1/services/servfix-app/1757419691.770687-cfa11664ccb34c82ad022236061a6ef8.zip#1757419698423577
+    run.googleapis.com/client-name: gcloud
+    run.googleapis.com/client-version: 532.0.0
+    run.googleapis.com/ingress: all
+    run.googleapis.com/ingress-status: all
+    run.googleapis.com/operation-id: d099ce23-a7fe-4f3c-b4f5-d19de8a83ba2
+    run.googleapis.com/urls: '["https://servfix-app-471345128928.europe-north1.run.app","https://servfix-app-eufsbr5tvq-lz.a.run.app"]'
+    serving.knative.dev/creator: servfixadm@gmail.com
+    serving.knative.dev/lastModifier: servfixadm@gmail.com
+  creationTimestamp: '2025-08-05T23:33:13.562859Z'
+  generation: 164
+  labels:
+    cloud.googleapis.com/location: europe-north1
+  name: servfix-app
+  namespace: '471345128928'
+  resourceVersion: AAY+XTM9TvI
+  selfLink: /apis/serving.knative.dev/v1/namespaces/471345128928/services/servfix-app
+  uid: aa4367e5-7594-44b8-8226-e8781b35cc86
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: '10'
+        autoscaling.knative.dev/minScale: '1'
+        run.googleapis.com/client-name: gcloud
+        run.googleapis.com/client-version: 532.0.0
+        run.googleapis.com/cloudsql-instances: servfix-production:europe-north1:servfix-db
+        run.googleapis.com/startup-cpu-boost: 'true'
+      labels:
+        client.knative.dev/nonce: kzasvqdwoq
+        run.googleapis.com/startupProbeType: Default
+    spec:
+      containerConcurrency: 80
+      containers:
+      - env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: db-password
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: session-secret
+        - name: CONSUMER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: tripletex-consumer-token
+        - name: EMPLOYEE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: tripletex-employee-token
+        - name: SMTP_PASS
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: smtp-password
+        - name: NODE_ENV
+          value: production
+        - name: CLOUD_SQL_CONNECTION_NAME
+          value: servfix-production:europe-north1:servfix-db
+        - name: DB_USER
+          value: postgres
+        - name: DB_NAME
+          value: servfix_admin
+        - name: DEFAULT_TENANT_ID
+          value: airtech
+        - name: GCS_BUCKET_NAME
+          value: servfix-files
+        - name: GOOGLE_CLOUD_PROJECT_ID
+          value: servfix-production
+        - name: BASE_URL
+          value: https://api-test.tripletex.tech/v2
+        - name: SMTP_HOST
+          value: smtp.gmail.com
+        - name: SMTP_PORT
+          value: '587'
+        - name: SMTP_USER
+          value: servfixadm@gmail.com
+        - name: SMTP_FROM
+          value: servfixadm@gmail.com
+        image: europe-north1-docker.pkg.dev/servfix-production/cloud-run-source-deploy/servfix-app@sha256:cb94f85165610b5d492de5c90055cd8b579a47272d81a0d7fb060d1cfd2eaec9
+        ports:
+        - containerPort: 8080
+          name: http1
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        startupProbe:
+          failureThreshold: 1
+          periodSeconds: 240
+          tcpSocket:
+            port: 8080
+          timeoutSeconds: 240
+      serviceAccountName: 471345128928-compute@developer.gserviceaccount.com
+      timeoutSeconds: 300
+  traffic:
+  - latestRevision: true
+    percent: 100
+status:
+  address:
+    url: https://servfix-app-eufsbr5tvq-lz.a.run.app
+  conditions:
+  - lastTransitionTime: '2025-09-09T12:11:12.800498Z'
+    status: 'True'
+    type: Ready
+  - lastTransitionTime: '2025-09-09T12:11:10.427226Z'
+    status: 'True'
+    type: ConfigurationsReady
+  - lastTransitionTime: '2025-09-09T12:11:12.771233Z'
+    status: 'True'
+    type: RoutesReady
+  latestCreatedRevisionName: servfix-app-00164-qx4
+  latestReadyRevisionName: servfix-app-00164-qx4
+  observedGeneration: 164
+  traffic:
+  - latestRevision: true
+    percent: 100
+    revisionName: servfix-app-00164-qx4
+  url: https://servfix-app-eufsbr5tvq-lz.a.run.app

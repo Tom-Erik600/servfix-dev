@@ -386,6 +386,28 @@ const state = {
     editingComponentIndex: null
 };
 
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 100);
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+            toast.remove();
+        }, 500);
+    }, 5000);
+}
+
 // Global variabel for å holde styr på hvilken knapp som ble klikket
 let currentPhotoContext = null;
 
@@ -605,6 +627,44 @@ const api = {
     post: (endpoint, body) => api.request(endpoint, { method: 'POST', body })
 };
 
+// Auto-save state
+let autoSaveTimeout = null;
+const AUTO_SAVE_DELAY = 3000; // 3 sekunder
+
+// Debounced auto-save funksjon
+function triggerAutoSave() {
+    if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+    }
+    
+    autoSaveTimeout = setTimeout(async () => {
+        console.log('🔄 Auto-saving checklist...');
+        try {
+            await saveChecklist(false); // false = ikke vis toast
+            console.log('✅ Auto-save successful');
+        } catch (error) {
+            console.error('❌ Auto-save failed:', error);
+        }
+    }, AUTO_SAVE_DELAY);
+}
+
+// Setup auto-save listeners
+function setupAutoSaveListeners() {
+    // Lytt til endringer i alle input-felter
+    document.addEventListener('input', (e) => {
+        if (e.target.matches('input, textarea, select')) {
+            triggerAutoSave();
+        }
+    });
+    
+    // Lytt til checkbox endringer
+    document.addEventListener('change', (e) => {
+        if (e.target.matches('input[type="checkbox"], input[type="radio"]')) {
+            triggerAutoSave();
+        }
+    });
+}
+
 // Helper function to get query parameters
 function getQueryParam(param) {
     const params = new URLSearchParams(window.location.search);
@@ -626,11 +686,22 @@ async function initializePage() {
     
     try {
         // Get params from URL
-        state.orderId = getQueryParam('orderId');
-        state.equipmentId = getQueryParam('equipmentId');
+        const rawOrderId = getQueryParam('orderId');
+        const rawEquipmentId = getQueryParam('equipmentId');
         
-        if (!state.orderId || !state.equipmentId) {
-            throw new Error('Mangler ordre ID eller utstyr ID');
+        // Valider og konverter equipmentId til integer
+        state.orderId = rawOrderId;
+        state.equipmentId = rawEquipmentId ? parseInt(rawEquipmentId) : null;
+        
+        console.log('Raw URL params:', { rawOrderId, rawEquipmentId });
+        console.log('Parsed params:', { orderId: state.orderId, equipmentId: state.equipmentId });
+        
+        if (!state.orderId) {
+            throw new Error('Mangler ordre-ID i URL. Bruk: service.html?orderId=XXX&equipmentId=YYY');
+        }
+        
+        if (!state.equipmentId || isNaN(state.equipmentId)) {
+            throw new Error('Mangler eller ugyldig anlegg-ID i URL. Bruk: service.html?orderId=XXX&equipmentId=YYY');
         }
         
         console.log('Initializing with:', { orderId: state.orderId, equipmentId: state.equipmentId });
@@ -648,6 +719,9 @@ async function initializePage() {
             loadEquipmentData(state.equipmentId),
             loadTechnician()
         ]);
+
+        // LEGG TIL DENNE LINJEN:
+        renderHeader();
         
         state.equipment = equipment;
         state.technician = technician;
@@ -660,6 +734,9 @@ async function initializePage() {
         
         // Render everything
         renderAll();
+        
+        // Setup auto-save listeners
+        setupAutoSaveListeners();
         
     } catch (error) {
         console.error('Initialization error:', error);
@@ -850,16 +927,23 @@ async function loadServiceReport() {
         
         if (reportResponse.id) {
             // Existing report found
+            
+            // ✅ FIX: Backend returnerer data DIREKTE i reportData-nøkkelen
+            const backendReportData = reportResponse.reportData || reportResponse.report_data || {};
+            
+            console.log('📊 Backend reportData keys:', Object.keys(backendReportData));
+            console.log('📊 Backend reportData content:', backendReportData);
+            
             state.serviceReport = {
                 id: reportResponse.id,
-                reportId: reportResponse.id,  // ← RIKTIG: Bruk id som reportId
-                orderId: reportResponse.order_id,
-                equipmentId: reportResponse.equipment_id,
+                reportId: reportResponse.id,
+                orderId: reportResponse.order_id || reportResponse.orderId,
+                equipmentId: reportResponse.equipment_id || reportResponse.equipmentId,
                 technicianId: reportResponse.technician_id,
-                reportData: reportResponse.report_data || {},
+                reportData: backendReportData,  // ← VIKTIG: Bruk den parsed dataen
                 status: reportResponse.status,
-                createdAt: reportResponse.created_at,
-                updatedAt: reportResponse.updated_at
+                createdAt: reportResponse.created_at || reportResponse.createdAt,
+                updatedAt: reportResponse.updated_at || reportResponse.updatedAt
             };
             
             // VIKTIG: Sørg for at avvikNumbers eksisterer i reportData
@@ -867,51 +951,55 @@ async function loadServiceReport() {
                 state.serviceReport.reportData.avvikNumbers = {};
             }
             
-            console.log('Loaded existing report with reportId:', state.serviceReport.reportId);
+            console.log('✅ Loaded existing report with reportId:', state.serviceReport.reportId);
+            console.log('✅ Report data structure:', {
+                hasChecklist: !!state.serviceReport.reportData.checklist,
+                hasSystemData: !!state.serviceReport.reportData.systemData,
+                checklistKeys: state.serviceReport.reportData.checklist ? Object.keys(state.serviceReport.reportData.checklist) : []
+            });
+            
         } else {
-            // Create new report - FIKSET: Generer reportId riktig
-            const timestamp = Date.now();
-            const random = Math.floor(Math.random() * 1000);
-            const newReportId = `RPT-${state.orderId}-${state.equipmentId}-${timestamp}-${random}`;
-            
-            state.serviceReport = {
-                reportId: newReportId,  // KRITISK: Dette feltet må settes
-                orderId: state.orderId,
-                equipmentId: state.equipmentId,
-                technicianId: state.technician?.id || 'TECH-TK', // Fallback hvis technician ikke er lastet
-                reportData: {
-                    components: [],
-                    productList: [],
-                    additionalWork: [],
-                    overallComment: '',
-                    avvikNumbers: {} // VIKTIG: Initialiser avvikNumbers objekt
-                },
-                status: 'draft'
-            };
-            
-            console.log('Created new report with reportId:', newReportId);
+            // Create new report
+            const newReportId = `RPT-${state.orderId}-${state.equipmentId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
             
             try {
-                const response = await fetch('/api/reports', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({
-                        reportId: state.serviceReport.reportId,
-                        orderId: state.orderId,
-                        equipmentId: state.equipmentId,
-                        reportData: state.serviceReport.reportData
-                    })
+                const createResponse = await api.post('/reports', {
+                    reportId: newReportId,
+                    orderId: state.orderId,
+                    equipmentId: state.equipmentId,
+                    reportData: {
+                        checklist: {},
+                        systemData: {},
+                        systemFields: {},
+                        products: [],
+                        additionalWork: [],
+                        overallComment: '',
+                        avvikNumbers: {}
+                    }
                 });
                 
-                if (!response.ok) {
-                    throw new Error('Kunne ikke opprette rapport');
-                }
+                state.serviceReport = {
+                    id: createResponse.id,
+                    reportId: createResponse.id,
+                    orderId: state.orderId,
+                    equipmentId: state.equipmentId,
+                    reportData: createResponse.reportData || createResponse.report_data || {
+                        checklist: {},
+                        systemData: {},
+                        systemFields: {},
+                        products: [],
+                        additionalWork: [],
+                        overallComment: '',
+                        avvikNumbers: {}
+                    },
+                    status: 'draft'
+                };
                 
-                console.log('Report created in database');
+                console.log('Created new report with ID:', state.serviceReport.reportId);
+                
             } catch (error) {
-                console.error('Failed to create report:', error);
-                showToast('Kunne ikke opprette rapport. Prøv igjen.', 'error');
+                console.error('Failed to create new report:', error);
+                showToast('Kunne ikke opprette ny rapport. Prøv igjen.', 'error');
                 throw error;
             }
         }
@@ -919,7 +1007,9 @@ async function loadServiceReport() {
         // DEBUGGING: Verifiser at reportId er satt
         console.log('🔍 FINAL SERVICE REPORT STATE:', {
             hasReportId: !!state.serviceReport.reportId,
-            reportId: state.serviceReport.reportId
+            reportId: state.serviceReport.reportId,
+            hasChecklist: !!state.serviceReport.reportData?.checklist,
+            checklistKeys: state.serviceReport.reportData?.checklist ? Object.keys(state.serviceReport.reportData.checklist) : []
         });
         
     } catch (error) {
@@ -942,6 +1032,14 @@ function renderAll() {
     try { resetAndLoadForm(); } catch (e) { console.error('Error in resetAndLoadForm:', e); }
     try { setupOverallCommentDetection(); } catch (e) { console.error('Error in setupOverallCommentDetection:', e); }
     
+    // NYTT: Last inn eksisterende data ETTER at alt er rendret
+    try { 
+        // Vent litt slik at DOM er fullstendig rendret
+        setTimeout(() => {
+            loadExistingReportData();
+        }, 100);
+    } catch (e) { console.error('Error in loadExistingReportData:', e); }
+    
     // Set overall comment if exists
     try {
         const overallCommentEl = document.getElementById('overall-comment');
@@ -950,7 +1048,7 @@ function renderAll() {
         }
     } catch (e) { console.error('Error setting overall comment:', e); }
     
-    // LEGG TIL DETTE - VIS ALLTID attachments og overall comment sections
+    // VIS ALLTID attachments og overall comment sections
     try {
         const attachmentsSection = document.getElementById('attachments-section');
         const overallCommentSection = document.getElementById('overall-comment-section');
@@ -983,21 +1081,33 @@ function renderAll() {
 
 function renderHeader() {
     const header = document.getElementById('app-header');
-    if (!header) {
-        console.error('app-header element not found!');
-        return;
-    }
-
-    const tech = state.technician || {};
+    if (!header) return;
+    
+    const orderId = state.orderId || 'ukjent';
+    
+    // Formater dagens dato
     const today = new Date();
-    const norwegianMonths = ['jan', 'feb', 'mar', 'apr', 'mai', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'des'];
-    const dateString = `${today.getDate()}. ${norwegianMonths[today.getMonth()]} ${today.getFullYear()}`;
-
+    const months = ['jan', 'feb', 'mar', 'apr', 'mai', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'des'];
+    const dateString = `${today.getDate()}. ${months[today.getMonth()]}. ${today.getFullYear()}`;
+    
+    // Hent tekniker-initialer (bruker samme pattern som orders.js og app.js)
+    const techInitials = state.technician?.initials || 'TK';
+    
     header.innerHTML = `
-        <a href="orders.html?id=${state.orderId}" class="header-nav-button" title="Tilbake">‹</a>
+        <a href="/app/orders.html?id=${orderId}" class="header-nav-button" title="Tilbake til ordre">
+            <i data-lucide="arrow-left"></i>
+        </a>
         <div class="header-main-content">
             <div class="logo-circle">
-                <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="14" stroke="white" stroke-width="2" fill="none"/><circle cx="16" cy="16" r="8" stroke="white" stroke-width="2" fill="none"/><circle cx="16" cy="16" r="3" fill="white"/><path d="M16 2 L16 8" stroke="white" stroke-width="2"/><path d="M16 24 L16 30" stroke="white" stroke-width="2"/><path d="M30 16 L24 16" stroke="white" stroke-width="2"/><path d="M8 16 L2 16" stroke="white" stroke-width="2"/></svg>
+                <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="16" cy="16" r="14" stroke="white" stroke-width="2" fill="none"/>
+                    <circle cx="16" cy="16" r="8" stroke="white" stroke-width="2" fill="none"/>
+                    <circle cx="16" cy="16" r="3" fill="white"/>
+                    <path d="M16 2 L16 8" stroke="white" stroke-width="2"/>
+                    <path d="M16 24 L16 30" stroke="white" stroke-width="2"/>
+                    <path d="M30 16 L24 16" stroke="white" stroke-width="2"/>
+                    <path d="M8 16 L2 16" stroke="white" stroke-width="2"/>
+                </svg>
             </div>
             <div class="company-info">
                 <h1>AIR-TECH AS</h1>
@@ -1005,59 +1115,67 @@ function renderHeader() {
             </div>
         </div>
         <div class="header-user-info">
-            <span id="technician-initials">${tech.initials || ''}</span>
-            <span id="current-date">${dateString}</span>
+            <div class="technician-avatar">${techInitials}</div>
+            <span class="current-date">${dateString}</span>
         </div>
     `;
+    
+    // Re-initialize Lucide icons
+    if (window.lucide) {
+        lucide.createIcons();
+    }
+}
+
+function navigateBack() {
+    const orderId = state.orderId;
+    if (!orderId) {
+        console.error('Missing orderId for navigation');
+        return;
+    }
+    console.log('Navigating back to order:', orderId);
+    window.location.href = `/app/orders.html?id=${orderId}`;
 }
 
 function renderAnleggInfo() {
     const container = document.getElementById('anlegg-info');
     if (!container) return;
-    
-    // Handle display name for equipment type
-    const typeDisplayName = state.equipment.type ? 
-        state.equipment.type.charAt(0).toUpperCase() + state.equipment.type.slice(1) : 
-        'Ukjent';
-    
+
     // Status mapping
     const statusMap = {
         'not_started': { text: 'Ikke startet', icon: 'clock' },
         'in_progress': { text: 'Under arbeid', icon: 'tool' },
         'completed': { text: 'Ferdigstilt', icon: 'check-circle' }
     };
-    
-    const currentStatus = statusMap[state.equipment.serviceStatus || 'not_started'];
-    
+    const currentStatus = statusMap[state.equipment?.serviceStatus || 'not_started'];
+
+    const typeDisplayName = state.equipment?.systemtype || state.equipment?.type || '';
+
     container.innerHTML = `
+        <div style="font-size: 10px; opacity: 0.6; margin-bottom: 4px;">
+            Ordrenummer: ${state.orderId}
+        </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
             <h4 class="card-title" style="margin: 0;">Anleggsinformasjon</h4>
-            <div class="anlegg-status-indicator ${state.equipment.serviceStatus || 'not_started'}">
+            <div class="anlegg-status-indicator ${state.equipment?.serviceStatus || 'not_started'}">
                 <i data-lucide="${currentStatus.icon}" style="width: 16px; height: 16px;"></i>
                 <span>${currentStatus.text}</span>
             </div>
         </div>
         <div class="anlegg-info-grid">
             <div class="info-item">
+                <span class="label">Kunde</span>
+                <span class="value">${state.order?.customer?.name || 'Laster...'}</span>
+            </div>
+            <div class="info-item">
                 <span class="label">Anleggstype</span>
                 <span class="value">${typeDisplayName}</span>
             </div>
             <div class="info-item">
                 <span class="label">Plassering</span>
-                <span class="value">${state.equipment.name || 'Ikke angitt'}</span>
+                <span class="value">${state.equipment?.plassering || state.equipment?.name || ''}</span>
             </div>
-            <div class="info-item">
-                <span class="label">Ordrenummer</span>
-                <span class="value">${state.order.orderNumber || state.order.id}</span>
-            </div>
-            ${state.order.customer ? `
-            <div class="info-item">
-                <span class="label">Kunde</span>
-                <span class="value">${state.order.customer.name || 'Ikke angitt'}</span>
-            </div>
-            ` : ''}
         </div>
-        ${state.equipment.internalNotes ? `
+        ${state.equipment?.internalNotes ? `
             <div class="internal-notes-section" style="margin-top: 12px; padding: 12px; background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px;">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                     <i data-lucide="info" style="width: 16px; height: 16px; color: #856404;"></i>
@@ -1158,58 +1276,62 @@ function getComponentTitle(details) {
 }
 
 function renderComponentDetailsForm() {
-    console.log("Rendering component details form...");
+    console.log('Rendering component details form...');
     const container = document.getElementById('component-details-form');
     if (!container) {
-        console.error('component-details-form container not found!');
+        console.error('Component details form container not found');
         return;
     }
-    
-    if (!state.checklistTemplate) {
-        container.innerHTML = '<p class="placeholder-text">Laster sjekklistedetaljer...</p>';
-        return;
-    }
-    
-    let formHTML = '';
-    
-    // Use dynamic systemFields from template
-    if (state.checklistTemplate.systemFields && state.checklistTemplate.systemFields.length > 0) {
-        console.log('Rendering systemFields:', state.checklistTemplate.systemFields);
-        
-        const fieldsHtml = state.checklistTemplate.systemFields
-            .sort((a, b) => a.order - b.order)
-            .map(field => {
-                // Sikkerhetstsjekk for fieldproperties
-                const fieldName = field.name || `field_${Date.now()}`;
-                const fieldLabel = field.label || field.name || 'Ukjent felt';
-                const isRequired = field.required || false;
-                
-                const inputType = field.type === 'textarea' ? 'textarea' : 'input';
-                const inputHtml = inputType === 'textarea' ?
-                    `<textarea id="comp-${fieldName}" class="large-textarea" placeholder="${fieldLabel}" rows="4"></textarea>` :
-                    `<input type="text" id="comp-${fieldName}" placeholder="${fieldLabel}">`;
-                
-                return `
-                    <div class="form-group">
-                        <label for="comp-${fieldName}">${fieldLabel}${isRequired ? ' *' : ''}</label>
-                        ${inputHtml}
-                    </div>
-                `;
-            }).join('');
-        
-        formHTML = `<div class="component-grid">${fieldsHtml}</div>`;
-    } else {
-        console.log('No systemFields found, using fallback');
-        // Minimal fallback
-        formHTML = `
-            <div class="form-group">
-                <label>Beskrivelse</label>
-                <textarea id="comp-beskrivelse" class="large-textarea" placeholder="Beskriv hva som er sjekket/gjort..." rows="4"></textarea>
-            </div>
-        `;
-    }
-    
-    container.innerHTML = formHTML;
+
+    // Generer HTML for dynamiske systemFields
+    const systemFieldsHTML = state.checklistTemplate.systemFields
+        .sort((a, b) => a.order - b.order)
+        .map(field => {
+            const value = state.serviceReport?.reportData?.systemData?.[field.name] || '';
+            const inputHtml = field.inputType === 'textarea' 
+                ? `<textarea 
+                    id="system-${field.name}" 
+                    class="form-control" 
+                    rows="3" 
+                    ${field.required ? 'required' : ''}
+                >${value}</textarea>`
+                : `<input 
+                    type="text" 
+                    id="system-${field.name}" 
+                    class="form-control" 
+                    value="${value}" 
+                    ${field.required ? 'required' : ''}
+                />`;
+
+            return `
+                <div class="form-group">
+                    <label for="system-${field.name}">
+                        ${field.label}
+                        ${field.required ? '<span class="required">*</span>' : ''}
+                    </label>
+                    ${inputHtml}
+                </div>
+            `;
+        })
+        .join('');
+
+    // Kun vis Aggregat type hvis relevant
+    const aggregatTypeHTML = state.equipment?.systemtype === 'ventilasjonsaggregat' 
+        ? `<div class="form-group">
+            <label for="aggregat-type">Aggregat type</label>
+            <input type="text" id="aggregat-type" class="form-control" 
+                   value="${state.equipment?.systemtype || ''}" readonly />
+           </div>`
+        : '';
+
+    container.innerHTML = `
+        <div class="system-details-section">
+            <h3>Anleggsinformasjon</h3>
+            ${aggregatTypeHTML}
+            ${systemFieldsHTML}
+        </div>
+    `;
+
     console.log('Component details form rendered successfully');
 }
 
@@ -1926,10 +2048,10 @@ function clearAllImageContainers() {
 }
 
 function resetAndLoadForm(isEditing = false) {
-    console.log('🔄 Resetting form and clearing all caches...');
+    console.log('🔄 Resetting form...');
     
-    // KRITISK: Clear alle bilder FØRST
-    clearAllImageContainers();
+    // KOMMENTER UT:
+    // clearAllImageContainers();  // ← Dette kalles alt for ofte
     
     // NYTT: Vent litt for å sikre clearing
     setTimeout(() => {
@@ -1992,6 +2114,122 @@ function resetAndLoadForm(isEditing = false) {
     if (state.editingComponentIndex !== null) {
         loadChecklistForEditing(state.editingComponentIndex);
     }
+} 
+function loadExistingReportData() {
+    console.log('📥 Loading existing report data into form...');
+    
+    if (!state.serviceReport?.reportData) {
+        console.log('⚠️ No existing report data to load');
+        return;
+    }
+    
+    const reportData = state.serviceReport.reportData;
+    console.log('📊 Report data structure:', {
+        hasChecklist: !!reportData.checklist,
+        hasSystemData: !!reportData.systemData,
+        hasProducts: !!reportData.products,
+        hasAdditionalWork: !!reportData.additionalWork,
+        checklistKeys: reportData.checklist ? Object.keys(reportData.checklist) : []
+    });
+    
+    // 1. LAST INN SYSTEM FIELDS
+    if (reportData.systemData && state.checklistTemplate?.systemFields) {
+    console.log('📝 Loading system fields...');
+    state.checklistTemplate.systemFields.forEach(field => {
+        const input = document.getElementById(`system-${field.name}`);  // ← ENDRE til .name
+        const value = reportData.systemData[field.name] || reportData.systemData[field.name];
+        
+        if (input && value) {
+            input.value = value;
+            console.log(`  ✅ Loaded ${field.label}: ${value}`);
+        }
+    });
+}
+    
+    // 2. LAST INN CHECKLIST DATA
+    if (reportData.checklist && state.checklistTemplate?.checklistItems) {
+        console.log('📋 Loading checklist items...');
+        populateChecklistItems(state.checklistTemplate.checklistItems, reportData.checklist);
+    }
+    
+    // 3. LAST INN PRODUKTER
+    if (reportData.products && reportData.products.length > 0) {
+        console.log(`📦 Loading ${reportData.products.length} products...`);
+        reportData.products.forEach(product => addProductLine(product));
+    }
+    
+    // 4. LAST INN TILLEGGSARBEID
+    if (reportData.additionalWork && reportData.additionalWork.length > 0) {
+        console.log(`🔧 Loading ${reportData.additionalWork.length} additional work items...`);
+        reportData.additionalWork.forEach(work => addAdditionalWorkLine(work));
+    }
+    
+    // 5. LAST INN OVERALL COMMENT
+    const overallCommentEl = document.getElementById('overall-comment');
+    if (overallCommentEl && reportData.overallComment) {
+        overallCommentEl.value = reportData.overallComment;
+        console.log('💬 Loaded overall comment');
+    }
+    
+    console.log('✅ Existing report data loaded successfully!');
+}
+function loadExistingReportData() {
+    console.log('📥 Loading existing report data into form...');
+    
+    if (!state.serviceReport?.reportData) {
+        console.log('⚠️ No existing report data to load');
+        return;
+    }
+    
+    const reportData = state.serviceReport.reportData;
+    console.log('📊 Report data structure:', {
+        hasChecklist: !!reportData.checklist,
+        hasSystemData: !!reportData.systemData,
+        hasProducts: !!reportData.products,
+        hasAdditionalWork: !!reportData.additionalWork,
+        checklistKeys: reportData.checklist ? Object.keys(reportData.checklist) : []
+    });
+    
+    // 1. LAST INN SYSTEM FIELDS
+    if (reportData.systemData && state.checklistTemplate?.systemFields) {
+        console.log('📝 Loading system fields...');
+        state.checklistTemplate.systemFields.forEach(field => {
+            const input = document.getElementById(`system-${field.id}`);
+            const value = reportData.systemData[field.id]?.value || reportData.systemData[field.id];
+            
+            if (input && value) {
+                input.value = value;
+                console.log(`  ✅ Loaded ${field.label}: ${value}`);
+            }
+        });
+    }
+    
+    // 2. LAST INN CHECKLIST DATA
+    if (reportData.checklist && state.checklistTemplate?.checklistItems) {
+        console.log('📋 Loading checklist items...');
+        populateChecklistItems(state.checklistTemplate.checklistItems, reportData.checklist);
+    }
+    
+    // 3. LAST INN PRODUKTER
+    if (reportData.products && reportData.products.length > 0) {
+        console.log(`📦 Loading ${reportData.products.length} products...`);
+        reportData.products.forEach(product => addProductLine(product));
+    }
+    
+    // 4. LAST INN TILLEGGSARBEID
+    if (reportData.additionalWork && reportData.additionalWork.length > 0) {
+        console.log(`🔧 Loading ${reportData.additionalWork.length} additional work items...`);
+        reportData.additionalWork.forEach(work => addAdditionalWorkLine(work));
+    }
+    
+    // 5. LAST INN OVERALL COMMENT
+    const overallCommentEl = document.getElementById('overall-comment');
+    if (overallCommentEl && reportData.overallComment) {
+        overallCommentEl.value = reportData.overallComment;
+        console.log('💬 Loaded overall comment');
+    }
+    
+    console.log('✅ Existing report data loaded successfully!');
 }
 function loadChecklistForEditing(index) {
     const component = state.serviceReport.reportData.components[index];
@@ -2049,12 +2287,27 @@ function loadChecklistForEditing(index) {
 }
 
 function populateChecklistItems(items, checklistData) {
+    console.log('🔄 Populating checklist items...', {
+        itemsCount: items.length,
+        checklistDataKeys: Object.keys(checklistData)
+    });
+    
     items.forEach(item => {
-        const result = checklistData[item.id];
-        if (!result) return;
+        // ✅ FIX: Prøv først med label (ny struktur), deretter id (gammel struktur)
+        const result = checklistData[item.label] || checklistData[item.id];
+        
+        if (!result) {
+            console.log(`⚠️ No data found for item: ${item.label} (id: ${item.id})`);
+            return;
+        }
+        
+        console.log(`✅ Found data for ${item.label}:`, result);
         
         const element = document.querySelector(`[data-item-id="${item.id}"]`);
-        if (!element) return;
+        if (!element) {
+            console.warn(`⚠️ No DOM element found for item: ${item.id}`);
+            return;
+        }
         
         switch (item.inputType) {
             case 'ok_avvik':
@@ -2063,12 +2316,16 @@ function populateChecklistItems(items, checklistData) {
                     const statusButton = element.querySelector(`[data-status="${result.status}"]`);
                     if (statusButton) {
                         statusButton.click();
+                        console.log(`  ✅ Set status: ${result.status}`);
                         
                         if (result.status === 'avvik' && result.comment) {
                             const avvikContainer = element.nextElementSibling;
-                            if (avvikContainer) {
+                            if (avvikContainer && avvikContainer.classList.contains('avvik-container')) {
                                 const textarea = avvikContainer.querySelector('textarea');
-                                if (textarea) textarea.value = result.comment;
+                                if (textarea) {
+                                    textarea.value = result.comment;
+                                    console.log(`  ✅ Set avvik comment`);
+                                }
                             }
                         }
                         
@@ -2076,7 +2333,10 @@ function populateChecklistItems(items, checklistData) {
                             const byttetContainer = document.getElementById(`byttet-${item.id}`);
                             if (byttetContainer) {
                                 const textarea = byttetContainer.querySelector('textarea');
-                                if (textarea) textarea.value = result.comment;
+                                if (textarea) {
+                                    textarea.value = result.comment;
+                                    console.log(`  ✅ Set byttet comment`);
+                                }
                             }
                         }
                     }
@@ -2087,180 +2347,57 @@ function populateChecklistItems(items, checklistData) {
             case 'text':
             case 'textarea':
                 const input = document.getElementById(`input-${item.id}`);
-                if (input) input.value = result;
+                if (input) {
+                    input.value = result;
+                    console.log(`  ✅ Set value: ${result}`);
+                }
                 break;
                 
             case 'comment':
                 const commentInput = document.getElementById(`comment-${item.id}`);
-                if (commentInput) commentInput.value = result;
+                if (commentInput) {
+                    commentInput.value = result;
+                    console.log(`  ✅ Set comment: ${result}`);
+                }
                 break;
                 
             case 'checkbox':
                 const checkbox = document.getElementById(item.id);
-                if (checkbox) checkbox.checked = !!result;
+                if (checkbox) {
+                    checkbox.checked = !!result;
+                    console.log(`  ✅ Set checkbox: ${result}`);
+                }
                 break;
                 
+            case 'dropdown':
             case 'switch_select':
                 const select = document.getElementById(`select-${item.id}`);
-                if (select) select.value = result;
+                if (select) {
+                    select.value = result;
+                    console.log(`  ✅ Set dropdown: ${result}`);
+                }
                 break;
-
-            case 'dropdown_ok_avvik':
-                // Håndter forskjellige datastrukturer
-                let dropdownValue = '';
                 
-                if (typeof result === 'string') {
-                    // Direkte streng-verdi (f.eks. "Trykk")
-                    dropdownValue = result;
-                } else if (result && typeof result === 'object') {
-                    // Objekt med selectedOption eller andre property-navn
-                    dropdownValue = result.selectedOption || 
-                                result.dropdownValue || 
-                                result.value ||
-                                '';
-                }
-                
-                if (dropdownValue) {
-                    const dropdown = element.querySelector('.checklist-dropdown');
-                    if (dropdown) {
-                        dropdown.value = dropdownValue;
-                    }
-                }
-                
-                // Håndter status og avvik som før
-                if (result && typeof result === 'object') {
-                    if (result.status) {
-                        const button = element.querySelector(`[data-status="${result.status}"]`);
-                        if (button) button.classList.add('active');
-                    }
-                    
-                    if (result.avvikComment) {
-                        const avvikContainer = element.nextElementSibling;
-                        if (avvikContainer && avvikContainer.classList.contains('avvik-container')) {
-                            avvikContainer.classList.add('show');
-                            const textarea = avvikContainer.querySelector('textarea');
-                            if (textarea) textarea.value = result.avvikComment;
-                        }
+            case 'rengjort_ikke_rengjort':
+                if (result) {
+                    const statusButton = element.querySelector(`[data-status="${result}"]`);
+                    if (statusButton) {
+                        statusButton.click();
+                        console.log(`  ✅ Set rengjort status: ${result}`);
                     }
                 }
                 break;
                 
-            case 'dropdown_ok_avvik_comment':
-                // Håndter forskjellige datastrukturer
-                let dropdownValueComment = '';
-                
-                if (typeof result === 'string') {
-                    dropdownValueComment = result;
-                } else if (result && typeof result === 'object') {
-                    dropdownValueComment = result.selectedOption || 
-                                        result.dropdownValue || 
-                                        result.value ||
-                                        '';
-                }
-                
-                if (dropdownValueComment) {
-                    const dropdown = element.querySelector('.checklist-dropdown');
-                    if (dropdown) {
-                        dropdown.value = dropdownValueComment;
-                    }
-                }
-                
-                // Håndter resten som før
-                if (result && typeof result === 'object') {
-                    if (result.status) {
-                        const button = element.querySelector(`[data-status="${result.status}"]`);
-                        if (button) button.classList.add('active');
-                    }
-                    
-                    if (result.comment) {
-                        const commentElement = element.querySelector(`#comment-${item.id}`);
-                        if (commentElement) commentElement.value = result.comment;
-                    }
-                    
-                    if (result.avvikComment) {
-                        // Finn riktig avvik-container (kan være nest flere elementer ned)
-                        let avvikContainer = element.nextElementSibling;
-                        while (avvikContainer && !avvikContainer.classList.contains('avvik-container')) {
-                            avvikContainer = avvikContainer.nextElementSibling;
-                        }
-                        
-                        if (avvikContainer) {
-                            avvikContainer.classList.add('show');
-                            const textarea = avvikContainer.querySelector('textarea');
-                            if (textarea) textarea.value = result.avvikComment;
-                        }
-                    }
+            case 'timer':
+                const timerDisplay = element.querySelector('.timer-display');
+                if (timerDisplay && result) {
+                    timerDisplay.textContent = result;
+                    console.log(`  ✅ Set timer: ${result}`);
                 }
                 break;
                 
-            case 'temperature':
-                if (result.temperature !== null) {
-                    const tempInput = element.querySelector(`#temp-${item.id}`);
-                    if (tempInput) tempInput.value = result.temperature;
-                }
-                if (result.status) {
-                    const button = element.querySelector(`[data-status="${result.status}"]`);
-                    if (button) button.classList.add('active');
-                }
-                if (result.avvikComment) {
-                    const avvikContainer = element.nextElementSibling;
-                    if (avvikContainer) {
-                        avvikContainer.classList.add('show');
-                        avvikContainer.querySelector('textarea').value = result.avvikComment;
-                    }
-                }
-                break;
-                
-            case 'virkningsgrad':
-                if (result.t2 !== undefined && result.t2 !== null) {
-                    const t2Input = element.querySelector(`#t2-${item.id}`);
-                    if (t2Input) t2Input.value = result.t2;
-                }
-                if (result.t3 !== undefined && result.t3 !== null) {
-                    const t3Input = element.querySelector(`#t3-${item.id}`);
-                    if (t3Input) t3Input.value = result.t3;
-                }
-                if (result.t7 !== undefined && result.t7 !== null) {
-                    const t7Input = element.querySelector(`#t7-${item.id}`);
-                    if (t7Input) t7Input.value = result.t7;
-                }
-                
-                // VIKTIG: Beregn virkningsgrad etter at verdiene er satt
-                if (result.t2 !== null && result.t3 !== null && result.t7 !== null) {
-                    const virkningsgrad = calculateVirkningsgrad(result.t2, result.t3, result.t7);
-                    const resultSpan = element.querySelector(`#result-${item.id}`);
-                    if (resultSpan && virkningsgrad !== null) {
-                        resultSpan.textContent = `${virkningsgrad.toFixed(1)}%`;
-                    }
-                }
-                
-                // Sett status hvis den finnes
-                if (result.status) {
-                    const button = element.querySelector(`[data-status="${result.status}"]`);
-                    if (button) button.classList.add('active');
-                }
-                
-                // Sett avvik kommentar hvis den finnes
-                if (result.avvikComment) {
-                    const avvikContainer = element.nextElementSibling;
-                    if (avvikContainer && avvikContainer.classList.contains('avvik-container')) {
-                        avvikContainer.classList.add('show');
-                        const textarea = avvikContainer.querySelector('textarea');
-                        if (textarea) textarea.value = result.avvikComment;
-                    }
-                }
-                break;
-                
-            case 'tilstandsgrad_dropdown':
-            case 'konsekvensgrad_dropdown': {
-                // Prøv først med ID, deretter med class
-                const selectElement = element.querySelector(`#select-${item.id}`) || 
-                                    element.querySelector('.checklist-dropdown');
-                if (selectElement && result) {
-                    selectElement.value = result;
-                }
-                break;
-            }
+            default:
+                console.log(`  ⚠️ Unknown input type: ${item.inputType}`);
         }
         
         // Handle subpoints recursively
@@ -2268,6 +2405,8 @@ function populateChecklistItems(items, checklistData) {
             populateChecklistItems(item.subpoints, checklistData);
         }
     });
+    
+    console.log('✅ Checklist population complete');
 }
 
 function setupEventListeners() {
@@ -2496,10 +2635,15 @@ function addAutoOkVisualFeedback(checklistItem) {
         }, 300);
     }
 }
-async function saveChecklist(e) {
-    e.preventDefault();
+async function saveChecklist(event, showToastMessage = true) {
+    if (event && typeof event.preventDefault === 'function') {
+        event.preventDefault();
+    } else if (typeof event === 'boolean') {
+        showToastMessage = event;
+    }
+
     console.log('Saving checklist...');
-    
+
     // Validate system fields
     const hasSystemFields = state.checklistTemplate?.systemFields && 
                            state.checklistTemplate.systemFields.length > 0;
@@ -2507,52 +2651,51 @@ async function saveChecklist(e) {
     if (hasSystemFields) {
         for (const field of state.checklistTemplate.systemFields) {
             if (field.required) {
-                const input = document.getElementById(`comp-${field.name}`);
+                const input = document.getElementById(`system-${field.id}`); // RIKTIG ID!
                 if (!input || input.value.trim() === '') {
-                    showToast(`${field.label} må fylles ut før du kan lagre.`, 'error');
+                    if (showToastMessage) {
+                        showToast(`${field.label} må fylles ut før du kan lagre.`, 'error');
+                    }
                     return;
                 }
             }
         }
     }
-    
+
     setLoading(true);
     
     try {
-        // Collect all form data
         const componentData = collectComponentData();
         
-        // Add or update component
-        if (state.editingComponentIndex === null) {
-            state.serviceReport.reportData.components.push(componentData);
-        } else {
-            state.serviceReport.reportData.components[state.editingComponentIndex] = componentData;
+        // VIKTIG: Behold eksisterende reportData
+        if (!state.serviceReport.reportData) {
+            state.serviceReport.reportData = {};
         }
         
-        // VIKTIG: Ikke send photos i reportData
-        const updateData = {
-            components: state.serviceReport.reportData.components,
-            overallComment: document.getElementById('overall-comment')?.value || ''
-        };
+        // Oppdater kun checklist-data uten å ødelegge resten
+        state.serviceReport.reportData.systemData = componentData.detailsWithLabels;
+        state.serviceReport.reportData.checklist = componentData.checklist;
+        state.serviceReport.reportData.products = componentData.products;
+        state.serviceReport.reportData.additionalWork = componentData.additionalWork;
         
-        await api.put(`/reports/${state.serviceReport.reportId}`, {
+        // Lagre til backend
+        const response = await api.put(`/reports/${state.serviceReport.reportId}`, {
             orderId: state.orderId,
             equipmentId: state.equipmentId,
-            reportData: updateData
+            reportData: state.serviceReport.reportData
         });
         
-        // Reset form and update UI
-        state.editingComponentIndex = null;
-        resetAndLoadForm();
-        renderComponentList();
-        updatePageFooterVisibility();
-        updateFinalizeButtonState();
-        showToast('Sjekkliste lagret!', 'success');
-        markFormAsClean();
+        if (showToastMessage) {
+            showToast('Sjekkliste lagret!', 'success');
+        }
+        
+        // IKKE reset form - data skal forbli synlig!
         
     } catch (error) {
         console.error('Save error:', error);
-        showToast(`Kunne ikke lagre: ${error.message}`, 'error');
+        if (showToastMessage) {
+            showToast(`Kunne ikke lagre: ${error.message}`, 'error');
+        }
     } finally {
         setLoading(false);
     }
@@ -2569,49 +2712,23 @@ function resetForm() {
 
 function collectComponentData() {
     console.log('Collecting component data...');
-    
-    // Collect system field details med labels
-    const details = {};
-    const detailsWithLabels = {}; // Ny struktur som inkluderer labels
-    
+
+    // Samle systemFields med både ID og label
+    const systemFieldsData = {};
     if (state.checklistTemplate?.systemFields) {
         state.checklistTemplate.systemFields.forEach(field => {
-            const input = document.getElementById(`comp-${field.name}`);
-            if (input) {
-                // Lagre både verdi og metadata
-                details[field.name] = input.value;
-                
-                // For dropdown/select, lagre også den valgte tekstens label
-                if (input.tagName === 'SELECT' && input.selectedIndex >= 0) {
-                    detailsWithLabels[field.name] = {
-                        value: input.value,
-                        label: input.options[input.selectedIndex].text,
-                        fieldLabel: field.label,
-                        fieldType: 'select'
-                    };
-                } else {
-                    detailsWithLabels[field.name] = {
-                        value: input.value,
-                        fieldLabel: field.label,
-                        fieldType: input.tagName.toLowerCase()
-                    };
-                }
+            const input = document.getElementById(`system-${field.id}`);
+            if (input && input.value) {
+                systemFieldsData[field.id] = {
+                    label: field.label,
+                    value: input.value
+                };
             }
         });
     }
-    
-    // Collect checklist responses med labels (allerede implementert)
-    const checklist = {};
-    const checklistContainer = document.getElementById('checklist-items-container');
-    if (checklistContainer && state.checklistTemplate?.checklistItems) {
-        state.checklistTemplate.checklistItems.forEach(item => {
-            const value = getChecklistItemValue(item.id);
-            if (value !== null && value !== undefined) {
-                checklist[item.id] = value;
-            }
-        });
-    }
-    
+
+    const checklist = collectChecklistData();
+
     // Collect products
     const products = [];
     const productContainer = document.getElementById('product-lines-container');
@@ -2667,9 +2784,8 @@ function collectComponentData() {
             driftSchedule[day][field] = input.value;
         });
     }
-    
-    // Returner strukturert data med all metadata
-    const componentData = {
+
+    return {
         id: state.editingComponentIndex !== null ? 
             state.serviceReport.reportData.components[state.editingComponentIndex].id : 
             `comp_${Date.now()}`,
@@ -2679,16 +2795,20 @@ function collectComponentData() {
             name: state.checklistTemplate.name,
             version: state.checklistTemplate.version || '1.0'
         },
-        details: details, // Bakoverkompatibilitet
-        detailsWithLabels: detailsWithLabels, // Ny struktur
-        checklist: checklist,
+        systemData: {
+            systemtype: state.equipment?.systemtype,
+            systemnummer: state.equipment?.systemnummer,
+            systemnavn: state.equipment?.systemnavn,
+            plassering: state.equipment?.plassering,
+            betjener: state.equipment?.betjener,
+            location: state.equipment?.location
+        },
+        systemFields: systemFieldsData,  // Med labels
+        checklist: checklist,             // Med faktiske navn som keys
         products: products,
         additionalWork: additionalWork,
         driftSchedule: driftSchedule
     };
-    
-    console.log('Collected component data:', componentData);
-    return componentData;
 }
 
 function getChecklistItemValue(itemId) {
@@ -2906,102 +3026,226 @@ function getChecklistItemValue(itemId) {
     }
 }
 
-function collectChecklistData(items) {
+function collectChecklistData(items = state.checklistTemplate?.checklistItems || []) {
     const data = {};
     
     items.forEach(item => {
+        // Bruk item.label som key i stedet for item.id
+        const key = item.label; // "Funksjonskontroll" i stedet for "item1"
+        let value = null;
+        
         const element = document.querySelector(`[data-item-id="${item.id}"]`);
         if (!element) return;
         
-        let value = null;
+        const itemType = element.dataset.itemType;
         
-        switch (item.inputType) {
+        switch (itemType) {
             case 'ok_avvik':
-            case 'ok_byttet_avvik':
-                const activeBtn = element?.querySelector('.status-btn.active');
-                if (activeBtn) {
-                    const status = activeBtn.dataset.status;
-                    value = { status };
-                    
-                    if (status === 'avvik') {
-                        const avvikTextarea = document.querySelector(`#avvik-${item.id} textarea`);
-                        value.comment = avvikTextarea?.value || '';
-                    } else if (status === 'byttet') {
-                        const byttetTextarea = document.querySelector(`#byttet-${item.id} textarea`);
-                        value.comment = byttetTextarea?.value || '';
+            case 'ok_byttet_avvik': {
+                // Sjekk hvilken status-knapp som er aktiv
+                const activeButton = element.querySelector('.status-btn.active');
+                if (!activeButton) { value = null; break; }
+                
+                const status = activeButton.dataset.status;
+                value = { status };
+                
+                // Hvis avvik eller byttet, hent kommentar
+                if (status === 'avvik') {
+                    const avvikContainer = document.getElementById(`avvik-${item.id}`);
+                    if (avvikContainer && avvikContainer.classList.contains('show')) {
+                        const textarea = avvikContainer.querySelector('textarea');
+                        value.avvikComment = textarea ? textarea.value : '';
+                    }
+                } else if (status === 'byttet') {
+                    const byttetContainer = document.getElementById(`byttet-${item.id}`);
+                    if (byttetContainer && byttetContainer.classList.contains('show')) {
+                        const textarea = byttetContainer.querySelector('textarea');
+                        value.byttetComment = textarea ? textarea.value : '';
                     }
                 }
                 break;
-                
-            case 'numeric':
-            case 'text':
-            case 'textarea':
-                const input = document.getElementById(`input-${item.id}`);
-                if (input) value = input.value;
-                break;
-                
-            case 'comment':
-                const commentInput = document.getElementById(`comment-${item.id}`);
-                if (commentInput) value = commentInput.value;
-                break;
-                
-            case 'checkbox':
-                const checkbox = document.getElementById(item.id);
-                if (checkbox) value = checkbox.checked;
-                break;
-                
-            case 'switch_select':
-                const select = document.getElementById(`select-${item.id}`);
-                if (select) value = select.value;
-                break;
-            case 'timer':
-                const timerDisplay = element.querySelector('.timer-display');
-                const timerData = element.dataset.timerData;
-                value = timerData ? JSON.parse(timerData) : { elapsed: 0 };
-                break;
-
-            case 'multi_checkbox':
-                const checkedBoxes = element.querySelectorAll('input[type="checkbox"]:checked');
-                value = Array.from(checkedBoxes).map(cb => cb.value);
-                break;
-
-            case 'rengjort_ikke_rengjort':
-                const activeRengjortBtn = element.querySelector('.status-btn.active');
-                value = activeRengjortBtn ? activeRengjortBtn.dataset.status : null;
-                break;
-
-            case 'image_only':
-                // Images håndteres separat via bildeopplasting
-                value = { hasImages: element.querySelector('.image-only-container img') ? true : false };
-                break;
-
-            case 'dropdown':
-                const dropdownSelect = element.querySelector('select');
-                value = dropdownSelect ? dropdownSelect.value : '';
-                break;
+            }
             
-            case 'virkningsgrad':
-                const t2 = document.getElementById(`t2-${item.id}`);
-                const t3 = document.getElementById(`t3-${item.id}`);
-                const t7 = document.getElementById(`t7-${item.id}`);
-                const result = document.getElementById(`result-${item.id}`);
+            case 'numeric': {
+                const input = element.querySelector(`#number-${item.id}, input[type="number"]`);
+                if (!input) { value = null; break; }
+                
+                const numericValue = parseFloat(input.value);
+                value = isNaN(numericValue) ? null : numericValue;
+                break;
+            }
+            
+            case 'text': {
+                const input = element.querySelector(`#text-${item.id}, input[type="text"]`);
+                value = input ? input.value : null;
+                break;
+            }
+            
+            case 'textarea':
+            case 'comment': {
+                const textarea = element.querySelector(`#comment-${item.id}, textarea`);
+                value = textarea ? textarea.value : null;
+                break;
+            }
+            
+            case 'checkbox': {
+                const checkbox = element.querySelector(`#checkbox-${item.id}, input[type="checkbox"]`);
+                value = checkbox ? checkbox.checked : null;
+                break;
+            }
+            
+            case 'dropdown_ok_avvik': {
+                const select = element.querySelector('.checklist-dropdown');
+                const activeButton = element.querySelector('.status-btn.active');
+                
+                if (!activeButton) { value = null; break; }
+                
+                const status = activeButton.dataset.status;
+                value = { 
+                    status,
+                    dropdownValue: select ? select.value : ''
+                };
+                
+                if (status === 'avvik') {
+                    const avvikContainer = document.getElementById(`avvik-${item.id}`);
+                    if (avvikContainer && avvikContainer.classList.contains('show')) {
+                        const textarea = avvikContainer.querySelector('textarea');
+                        value.avvikComment = textarea ? textarea.value : '';
+                    }
+                }
+                break;
+            }
+            
+            case 'dropdown_ok_avvik_comment': {
+                const select = element.querySelector('.checklist-dropdown');
+                const activeButton = element.querySelector('.status-btn.active');
+                const commentTextarea = element.querySelector(`#comment-${item.id}`);
+                
+                if (!activeButton) { value = null; break; }
+                
+                const status = activeButton.dataset.status;
+                value = { 
+                    status,
+                    dropdownValue: select ? select.value : ''
+                };
+                
+                if (status === 'avvik') {
+                    const avvikContainer = document.getElementById(`avvik-${item.id}`);
+                    if (avvikContainer && avvikContainer.classList.contains('show')) {
+                        const textarea = avvikContainer.querySelector('textarea');
+                        value.avvikComment = textarea ? textarea.value : '';
+                    }
+                }
+                break;
+            }
+            
+            case 'temperature': {
+                const tempInput = element.querySelector(`#temp-${item.id}`);
+                const activeButton = element.querySelector('.status-btn.active');
                 
                 value = {
-                    t2: t2 ? parseFloat(t2.value) || null : null,
-                    t3: t3 ? parseFloat(t3.value) || null : null,
-                    t7: t7 ? parseFloat(t7.value) || null : null,
-                    virkningsgrad: result ? result.textContent.replace('%', '') : null
+                    temperature: tempInput ? parseFloat(tempInput.value) : null,
+                    status: activeButton ? activeButton.dataset.status : null
                 };
+                
+                if (value.status === 'avvik') {
+                    const avvikContainer = document.getElementById(`avvik-${item.id}`);
+                    if (avvikContainer && avvikContainer.classList.contains('show')) {
+                        const textarea = avvikContainer.querySelector('textarea');
+                        value.avvikComment = textarea ? textarea.value : '';
+                    }
+                }
                 break;
-
-            // NEW INPUT TYPES DATA COLLECTION:
+            }
+            
+            case 'virkningsgrad': {
+                const t2Input = element.querySelector(`#t2-${item.id}`);
+                const t3Input = element.querySelector(`#t3-${item.id}`);  
+                const t7Input = element.querySelector(`#t7-${item.id}`);
+                const activeButton = element.querySelector('.status-btn.active');
+                
+                value = {
+                    t2: t2Input ? parseFloat(t2Input.value) : null,
+                    t3: t3Input ? parseFloat(t3Input.value) : null,
+                    t7: t7Input ? parseFloat(t7Input.value) : null,
+                    status: activeButton ? activeButton.dataset.status : null
+                };
+                
+                if (value.t2 !== null && value.t3 !== null && value.t7 !== null) {
+                    value.virkningsgrad = calculateVirkningsgrad(value.t2, value.t3, value.t7);
+                }
+                
+                if (value.status === 'avvik') {
+                    const avvikContainer = document.getElementById(`avvik-${item.id}`);
+                    if (avvikContainer && avvikContainer.classList.contains('show')) {
+                        const textarea = avvikContainer.querySelector('textarea');
+                        value.avvikComment = textarea ? textarea.value : '';
+                    }
+                }
+                break;
+            }
+            
+            case 'tilstandsgrad_dropdown':
+            case 'konsekvensgrad_dropdown': {
+                const select = element.querySelector(`#select-${item.id}`) || 
+                              element.querySelector('.checklist-dropdown');
+                value = select ? select.value : null;
+                break;
+            }
+            
+            case 'group_selection': {
+                const checkedInputs = element.querySelectorAll('input[type="radio"]:checked');
+                value = Array.from(checkedInputs).map(input => input.value);
+                break;
+            }
+            
+            case 'switch_select': {
+                const select = element.querySelector(`#select-${item.id}`);
+                value = select ? select.value : null;
+                break;
+            }
+            
+            case 'dropdown': {
+                const select = element.querySelector(`#dropdown-${item.id}`) || 
+                              element.querySelector('.checklist-dropdown');
+                value = select ? select.value : null;
+                break;
+            }
+            
+            case 'multi_checkbox': {
+                const checkedBoxes = element.querySelectorAll('input[type="checkbox"]:checked');
+                value = Array.from(checkedBoxes).map(box => box.value);
+                break;
+            }
+            
+            case 'timer': {
+                const display = element.querySelector('.timer-display');
+                const timerData = element.dataset.timerData;
+                value = display ? display.textContent : '00:00:00';
+                break;
+            }
+            
+            case 'rengjort_ikke_rengjort': {
+                const activeButton = element.querySelector('.status-btn.active');
+                value = activeButton ? activeButton.dataset.status : null;
+                break;
+            }
+            
+            case 'image_only': {
+                const images = element.querySelectorAll('.uploaded-image');
+                value = images.length > 0;
+                break;
+            }
+            
+            default:
+                console.warn(`Unknown input type: ${itemType} for item: ${item.id}`);
+                value = null;
         }
         
         if (value !== null) {
-            data[item.id] = value;
+            data[key] = value;
         }
         
-        // Handle subpoints recursively
         if (item.hasSubpoints && item.subpoints) {
             Object.assign(data, collectChecklistData(item.subpoints));
         }
@@ -3182,137 +3426,131 @@ function updateFinalizeButtonState() {
     const btn = document.getElementById('finalize-report-btn');
     if (!btn) return;
     
-    const allComponents = state.serviceReport.reportData.components;
+    // Bare sjekk om rapport eksisterer
+    const hasReport = !!state.serviceReport?.reportId;
     
-    if (!allComponents || allComponents.length === 0) {
-        btn.disabled = true;
-        btn.title = 'Du må fullføre minst én sjekkliste før du kan ferdigstille.';
-        return;
-    }
-    
-    const allComplete = allComponents.every(isChecklistComplete);
-    
-    btn.disabled = !allComplete;
-    btn.title = allComplete ? 'Ferdigstill og generer rapport' : 'Alle sjekklister må være komplett før ferdigstilling.';
+    btn.disabled = !hasReport;
+    btn.textContent = hasReport ? 'Ferdigstill anlegg' : 'Lagre først';
 }
 
 async function finalizeAnlegg() {
     console.log('🏁 Starting finalize process...');
     
-    // Sjekk at minst en sjekkliste er lagret
-    if (!state.serviceReport?.reportData?.components || state.serviceReport.reportData.components.length === 0) {
-        showToast("Du må lagre minst én sjekkliste før ferdigstilling.", 'error');
-        return;
-    }
+    // Vis bekreftelsesmodal
+    const confirmed = await showFinalizeConfirmationModal();
     
-    // Debug: Vis hva som skal sendes
-    console.log('📋 Service report state:', {
-        reportId: state.serviceReport.reportId,
-        components: state.serviceReport.reportData.components.length,
-        status: state.serviceReport.status
-    });
-    
-    if (!confirm('Er du sikker på at du vil ferdigstille dette anlegget?\n\nDu kan ikke gjøre endringer etterpå.')) {
+    if (!confirmed) {
+        console.log('❌ Finalize cancelled by user');
         return;
     }
     
     setLoading(true);
     
     try {
-        // Først, sjekk at alle sjekklister er komplette
-        const allComplete = state.serviceReport.reportData.components.every(component => {
-            const isComplete = isChecklistComplete(component);
-            if (!isComplete) {
-                console.log('❌ Incomplete component:', component);
-            }
-            return isComplete;
+        // Lagre sjekkliste først
+        await saveChecklist(null, false); // Ikke vis toast
+        
+        // Ferdigstill anlegget
+        const response = await api.post(`/reports/${state.serviceReport.reportId}/complete`, {
+            signature: null // Kan legge til signatur senere
         });
         
-        if (!allComplete) {
-            showToast("Alle sjekklister må være fullført før ferdigstilling.", 'error');
-            setLoading(false);
-            return;
-        }
+        showToast('Anlegg ferdigstilt!', 'success');
         
-        // Prepare the finalize data
-        const finalizeData = {
-            orderId: state.orderId,
-            equipmentId: state.equipmentId,
-            reportData: {
-                components: state.serviceReport.reportData.components,
-                overallComment: document.getElementById('overall-comment')?.value || ''
-            },
-            status: 'completed'
-        };
-        
-        console.log('📤 Sending finalize request:', finalizeData);
-        
-        // Oppdater rapport
-        const response = await api.put(`/reports/${state.serviceReport.reportId}`, finalizeData);
-        
-        console.log('✅ Finalize response:', response);
-        
-        // NYTT: Oppdater også equipment status via complete endpoint
-        console.log('📤 Updating equipment status...');
-        const equipmentResponse = await api.post(`/equipment/${state.equipmentId}/complete`, {
-            orderId: state.orderId,
-            reportId: state.serviceReport.reportId
-        });
-        
-        console.log('✅ Equipment status updated:', equipmentResponse);
-        
-        // Update the local state
-        state.serviceReport.status = 'completed';
-        
-        // NYTT: Marker form som ren før navigering
-        markFormAsClean();
-        changeTracker.hasUnsavedChanges = false;
-        
-        showToast('✅ Anlegg ferdigstilt!', 'success');
-        
-        // Wait a bit before redirecting
+        // Naviger tilbake til ordre
         setTimeout(() => {
             window.location.href = `/app/orders.html?id=${state.orderId}`;
         }, 1500);
         
     } catch (error) {
-        console.error('❌ Error finalizing equipment:', error);
-        
-        // Gi mer detaljert feilmelding basert på feilen
-        let errorMessage = 'Kunne ikke ferdigstille anlegg';
-        
-        if (error.message.includes('500')) {
-            errorMessage = 'Server-feil ved ferdigstilling. Sjekk at alle felter er korrekt utfylt.';
-        } else if (error.message.includes('400')) {
-            errorMessage = 'Ugyldig data. Sjekk at alle påkrevde felter er fylt ut.';
-        } else if (error.message) {
-            errorMessage = error.message;
-        }
-        
-        showToast(errorMessage, 'error');
+        console.error('❌ Finalize error:', error);
+        showToast(`Kunne ikke ferdigstille: ${error.message}`, 'error');
     } finally {
         setLoading(false);
     }
 }
 
-function showFinalizeConfirmation(pdfUrl) {
-    const modal = document.createElement('div');
-    modal.className = 'finalize-modal';
-    modal.innerHTML = `
-        <div class="modal-content">
-            <h3>Rapport ferdigstilt!</h3>
-            <p>Servicerapporten er nå låst og PDF er generert.</p>
-            <a href="${pdfUrl}" target="_blank" class="btn-primary">Åpne PDF</a>
-            <button id="close-modal-btn" class="btn-secondary">Lukk</button>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    document.getElementById('close-modal-btn').addEventListener('click', () => {
-        modal.remove();
-        // Redirect back to order page
-        window.location.href = `orders.html?id=${state.orderId}`;
+function showFinalizeConfirmationModal() {
+    return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 90vw; margin: 20px;">
+                <h3>Ferdigstill anlegg?</h3>
+                <p>Er du sikker på at du vil ferdigstille anlegget?</p>
+                <p><strong>Du kan ikke endre anlegget igjen etter ferdigstilling.</strong></p>
+                <div class="modal-actions" style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button id="confirm-finalize" class="btn-primary" style="flex: 1;">
+                        OK
+                    </button>
+                    <button id="cancel-finalize" class="btn-secondary" style="flex: 1;">
+                        Avbryt
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        document.getElementById('confirm-finalize').addEventListener('click', () => {
+            modal.remove();
+            resolve(true);
+        });
+        
+        document.getElementById('cancel-finalize').addEventListener('click', () => {
+            modal.remove();
+            resolve(false);
+        });
+        
+        // Lukk ved klikk utenfor
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+                resolve(false);
+            }
+        });
+    });
+}
+
+function showFinalizeConfirmationModal() {
+    return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 90vw; margin: 20px;">
+                <h3>Ferdigstill anlegg?</h3>
+                <p>Er du sikker på at du vil ferdigstille anlegget?</p>
+                <p><strong>Du kan ikke endre anlegget igjen etter ferdigstilling.</strong></p>
+                <div class="modal-actions" style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button id="confirm-finalize" class="btn-primary" style="flex: 1;">
+                        OK
+                    </button>
+                    <button id="cancel-finalize" class="btn-secondary" style="flex: 1;">
+                        Avbryt
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        document.getElementById('confirm-finalize').addEventListener('click', () => {
+            modal.remove();
+            resolve(true);
+        });
+        
+        document.getElementById('cancel-finalize').addEventListener('click', () => {
+            modal.remove();
+            resolve(false);
+        });
+        
+        // Lukk ved klikk utenfor
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+                resolve(false);
+            }
+        });
     });
 }
 
@@ -3321,28 +3559,6 @@ function setLoading(isLoading) {
     if (loader) {
         loader.style.display = isLoading ? 'flex' : 'none';
     }
-}
-
-function showToast(message, type = 'info') {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
-    
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    
-    container.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.classList.add('show');
-    }, 100);
-    
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => {
-            toast.remove();
-        }, 500);
-    }, 5000);
 }
 
 // Upload image to server
@@ -4364,46 +4580,32 @@ function startAutoSave() {
     }, 60000);
 }
 
-// OPPDATERT DOMContentLoaded (erstatter den gamle)
 document.addEventListener('DOMContentLoaded', function() {
-    // Original init
+    // Initialize page
     initializePage();
     
-    // Start auto-save
-    startAutoSave();
-    
-    // Håndter tilbake-knapp
-    const backButton = document.querySelector('.back-btn');
-    if (!backButton) {
-        const orderLink = document.querySelector('[href*="orders.html"]');
-        if (orderLink) {
-            orderLink.addEventListener('click', async function(e) {
+    // Sett opp tilbake-knapp event listener ETTER at header er rendret
+    setTimeout(() => {
+        const backButton = document.querySelector('.header-nav-button');
+        if (backButton) {
+            backButton.addEventListener('click', async function(e) {
                 e.preventDefault();
-                const targetUrl = this.getAttribute('href');
+                console.log('Back button clicked, navigating to:', `/app/orders.html?id=${state.orderId}`);
                 
+                // Prøv å lagre før navigering
                 try {
-                    await autoSaveEverything();
-                    window.location.href = targetUrl;
+                    if (typeof autoSaveEverything === 'function') {
+                        await autoSaveEverything();
+                    }
                 } catch (error) {
                     console.error('Error during auto-save:', error);
-                    window.location.href = targetUrl;
                 }
+                
+                // Naviger uansett
+                window.location.href = `/app/orders.html?id=${state.orderId}`;
             });
         }
-    } else {
-        backButton.addEventListener('click', async function(e) {
-            e.preventDefault();
-            const targetUrl = this.getAttribute('href') || '/app/orders.html?id=' + state.orderId;
-            
-            try {
-                await autoSaveEverything();
-                window.location.href = targetUrl;
-            } catch (error) {
-                console.error('Error during auto-save:', error);
-                window.location.href = targetUrl;
-            }
-        });
-    }
+    }, 500); // Vent litt for at header skal være rendret
 });
 
 // NY: Cleanup ved window unload

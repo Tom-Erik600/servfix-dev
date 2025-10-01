@@ -1,5 +1,19 @@
 const express = require('express');
 const router = express.Router();
+
+// ✅ KRITISK FIX: Legg til authentication middleware
+router.use((req, res, next) => {
+  console.log('Reports route - Session check:', {
+    sessionId: req.sessionID,
+    technicianId: req.session?.technicianId,
+    tenantId: req.session?.tenantId
+  });
+  
+  if (!req.session.technicianId) {
+    return res.status(401).json({ error: 'Ikke autentisert' });
+  }
+  next();
+});
 const db = require('../config/database');
 
 /**
@@ -16,83 +30,35 @@ const db = require('../config/database');
 
 // Helper funksjon for å splitte frontend reportData til database kolonner
 function splitReportDataForDB(reportData) {
-  // Sikker initialisering
-  const dbData = {
-    checklist_data: {
-      components: [],
-      overallComment: ''
-    },
-    products_used: [],
-    additional_work: [],
-    photos: []
-  };
-
   // Håndter tilfelle hvor reportData er null eller undefined
   if (!reportData) {
     console.warn('splitReportDataForDB: reportData er null eller undefined');
-    return dbData;
+    return {
+      checklist_data: {},
+      products_used: [],
+      additional_work: [],
+      photos: []
+    };
   }
 
-  // Sett overallComment hvis den finnes
-  if (reportData.overallComment !== undefined) {
-    dbData.checklist_data.overallComment = reportData.overallComment;
-  }
-
-  // Håndter photos BARE hvis de er eksplisitt inkludert
-  if (reportData.hasOwnProperty('photos')) {
-    dbData.photos = reportData.photos || [];
-  }
-
-  // Prosesser komponenter hvis de finnes
-  if (reportData.components && Array.isArray(reportData.components)) {
-    reportData.components.forEach((component, index) => {
-      try {
-        // Lagre sjekkliste-komponenten uten produkter og tilleggsarbeid
-        const cleanComponent = {
-          details: component.details || {},
-          checklist: component.checklist || {},
-          driftSchedule: component.driftSchedule || {}
-        };
-        dbData.checklist_data.components.push(cleanComponent);
-
-        // Samle produkter - håndter både quantity og price
-        if (component.products && Array.isArray(component.products)) {
-          component.products.forEach(product => {
-            // Sjekk at produktet har innhold (navn eller pris)
-            if (product.name || (product.price && product.price > 0)) {
-              dbData.products_used.push({
-                name: product.name || '',
-                quantity: product.quantity || 0,
-                price: product.price || 0,
-                componentDetails: component.details || {}
-              });
-            }
-          });
-        }
-
-        // Samle tilleggsarbeid - håndter alle felter trygt
-        if (component.additionalWork && Array.isArray(component.additionalWork)) {
-          component.additionalWork.forEach(work => {
-            // Sjekk at arbeidet har innhold
-            if (work.description || (work.hours && work.hours > 0) || (work.price && work.price > 0)) {
-              dbData.additional_work.push({
-                description: work.description || '',
-                hours: work.hours || 0,
-                price: work.price || 0,
-                componentDetails: component.details || {}
-              });
-            }
-          });
-        }
-      } catch (err) {
-        console.error(`Feil ved prosessering av komponent ${index}:`, err);
-        // Fortsett med neste komponent selv om en feiler
+  // NY STRUKTUR: Direkte felter, ikke components array
+  const dbData = {
+    checklist_data: {
+      checklist: reportData.checklist || {},
+      systemFields: reportData.systemFields || {},
+      overallComment: reportData.overallComment || '',
+      metadata: {
+        version: '2.0',
+        saved_at: new Date().toISOString()
       }
-    });
-  }
+    },
+    products_used: reportData.products || [],
+    additional_work: reportData.additionalWork || [],
+    photos: reportData.photos || []
+  };
 
-  console.log('splitReportDataForDB result:', {
-    components: dbData.checklist_data.components.length,
+  console.log('splitReportDataForDB result (new structure):', {
+    hasChecklist: !!reportData.checklist,
     products: dbData.products_used.length,
     work: dbData.additional_work.length,
     hasPhotos: dbData.photos !== undefined
@@ -199,23 +165,92 @@ router.get('/:orderId', async (req, res) => {
 router.get('/equipment/:equipmentId', async (req, res) => {
   const { equipmentId } = req.params;
   const { orderId } = req.query;
-  const tenantId = req.tenantId;
+  
+  // KRITISK FIX: Bruk req.session.tenantId i stedet for req.tenantId
+  const tenantId = req.session.tenantId;
+  
+  console.log('=== GET REPORT BY EQUIPMENT ===');
+  console.log('Equipment ID:', equipmentId);
+  console.log('Order ID:', orderId);
+  console.log('Tenant ID:', tenantId);
+  console.log('Session:', { 
+    technicianId: req.session.technicianId,
+    tenantId: req.session.tenantId 
+  });
+  
+  // Valider input
+  if (!tenantId) {
+    console.error('❌ Missing tenantId in session');
+    return res.status(401).json({ error: 'Ikke autentisert - mangler tenant ID' });
+  }
+  
+  if (!orderId) {
+    console.error('❌ Missing orderId parameter');
+    return res.status(400).json({ error: 'orderId parameter er påkrevd' });
+  }
   
   try {
     const pool = await db.getTenantConnection(tenantId);
     
-    const result = await pool.query(
-      'SELECT * FROM service_reports WHERE equipment_id = $1 AND order_id = $2',
-      [equipmentId, orderId]
-    );
+    // ✅ KRITISK FIX: equipmentId must be a string as service_reports.equipment_id is VARCHAR
+    const result = await pool.query(`
+      SELECT sr.*, 
+             e.systemtype, e.systemnummer, e.systemnavn, e.plassering, e.betjener, e.location
+      FROM service_reports sr
+      LEFT JOIN equipment e ON sr.equipment_id = e.id::varchar
+      WHERE sr.equipment_id = $1 AND sr.order_id = $2
+    `, [String(equipmentId), orderId]);
+    
+    console.log(`✅ Query returned ${result.rows.length} rows`);
     
     if (result.rows.length > 0) {
-      res.json(transformDbRowToFrontend(result.rows[0]));
+      // Legg til systemData fra equipment
+      const row = result.rows[0];
+      // JSONB blir automatisk parsed av pg-driver, ikke parse igjen
+      let reportData = row.checklist_data || {};
+
+      // Sikkerhetssjekk: hvis det av en eller annen grunn ER en string, parse den
+      if (typeof reportData === 'string') {
+        try {
+          reportData = JSON.parse(reportData);
+        } catch (e) {
+          console.error('Failed to parse reportData:', e);
+          reportData = {};
+        }
+      }
+
+
+      reportData.systemData = {
+        systemtype: row.systemtype,
+        systemnummer: row.systemnummer,
+        systemnavn: row.systemnavn,
+        plassering: row.plassering,
+        betjener: row.betjener,
+        location: row.location
+      };
+
+      const transformedData = {
+        id: row.id,
+        reportId: row.id,
+        orderId: row.order_id,
+        equipmentId: row.equipment_id,
+        reportData: reportData,
+        productsUsed: row.products_used || [],
+        additionalWork: row.additional_work || [],
+        photos: row.photos || [],
+        status: row.status,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      };
+      
+      console.log('✅ Returning existing report');
+      res.json(transformedData);
     } else {
+      console.log('ℹ️ No existing report found - returning empty template');
       res.json({
         id: null,
         order_id: orderId,
-        equipment_id: equipmentId,
+        equipment_id: String(equipmentId),
         report_data: {
           components: [],
           overallComment: ''
@@ -224,8 +259,12 @@ router.get('/equipment/:equipmentId', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error(`[${tenantId}] Feil ved henting av rapport for utstyr ${equipmentId}:`, error);
-    res.status(500).json({ error: 'Intern serverfeil' });
+    console.error(`❌ Error fetching report for equipment ${equipmentId}:`, error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Intern serverfeil',
+      details: error.message 
+    });
   }
 });
 
@@ -242,6 +281,36 @@ router.post('/', async (req, res) => {
     
     // Splitt reportData til passende kolonner
     const dbData = splitReportDataForDB(reportData);
+
+    // Hent systemdata fra equipment table
+    const equipmentResult = await pool.query(`
+      SELECT systemtype, systemnummer, systemnavn, plassering, betjener, location
+      FROM equipment WHERE id = $1
+    `, [parseInt(equipmentId)]);
+
+    if (equipmentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Equipment ikke funnet' });
+    }
+
+    const equipment = equipmentResult.rows[0];
+
+    // Legg systemData til checklist_data
+    const systemData = {
+      systemtype: equipment.systemtype,
+      systemnummer: equipment.systemnummer,
+      systemnavn: equipment.systemnavn,
+      plassering: equipment.plassering,
+      betjener: equipment.betjener,
+      location: equipment.location
+    };
+
+    // Oppdater dbData.checklist_data
+    dbData.checklist_data.systemData = systemData;
+    dbData.checklist_data.metadata = {
+      version: '2.0',
+      equipment_id: equipmentId,
+      saved_at: new Date().toISOString()
+    };
     
     const result = await pool.query(
       `INSERT INTO service_reports 
@@ -252,7 +321,7 @@ router.post('/', async (req, res) => {
       [
         reportId, 
         orderId, 
-        equipmentId, 
+        String(equipmentId), 
         JSON.stringify(dbData.checklist_data),
         JSON.stringify(dbData.products_used),
         JSON.stringify(dbData.additional_work),
@@ -356,17 +425,17 @@ router.put('/:reportId', async (req, res) => {
        RETURNING *`,
       newStatus ? 
       [
-        JSON.stringify(dbData.checklist_data),
-        JSON.stringify(dbData.products_used),
-        JSON.stringify(dbData.additional_work),
+        dbData.checklist_data,
+        dbData.products_used,
+        dbData.additional_work,
         dbData.photos,
         reportId,
         newStatus
       ] :
       [
-        JSON.stringify(dbData.checklist_data),
-        JSON.stringify(dbData.products_used),
-        JSON.stringify(dbData.additional_work),
+        dbData.checklist_data,
+        dbData.products_used,
+        dbData.additional_work,
         dbData.photos,
         reportId
       ]

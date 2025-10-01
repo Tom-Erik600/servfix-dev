@@ -27,22 +27,32 @@ router.get('/', async (req, res) => {
     
     const pool = await db.getTenantConnection(req.adminTenantId);
     
-    // Only fetch active equipment for new orders
+    // ✅ OPPDATERT: Bruk nye kolonnenavn
     const query = `
-      SELECT * FROM equipment 
+      SELECT id, customer_id, systemtype, systemnummer, systemnavn, 
+             plassering, betjener, location, status, notater,
+             created_at, updated_at
+      FROM equipment 
       WHERE customer_id = $1 
-      AND (data->>'status' IS NULL OR data->>'status' = 'active')
-      ORDER BY name ASC
+      AND status = 'active'
+      ORDER BY systemnavn ASC
     `;
     
-    const result = await pool.query(query, [customerId]);
+    const result = await pool.query(query, [parseInt(customerId)]);
     
-    // Transform data
+    // ✅ Transform data til frontend format
     const equipment = result.rows.map(eq => ({
-      ...eq,
-      status: eq.data?.status || 'active',
-      serviceStatus: eq.data?.serviceStatus || 'not_started',
-      internalNotes: eq.data?.internalNotes || ''
+      id: eq.id,
+      customerId: eq.customer_id,
+      type: eq.systemtype,
+      name: eq.systemnavn,              // ← DETTE er viktig!
+      location: eq.location,
+      systemNumber: eq.systemnummer,
+      systemPlacement: eq.plassering,
+      betjener: eq.betjener,
+      status: eq.status,
+      internalNotes: eq.notater,
+      serviceStatus: 'not_started'
     }));
     
     res.json(equipment);
@@ -56,37 +66,37 @@ router.get('/', async (req, res) => {
 // POST new equipment
 router.post('/', async (req, res) => {
   try {
-    const { customerId, type, name, location, data } = req.body;
+    const { customerId, systemtype, systemnummer, systemnavn, plassering, betjener, location, notater } = req.body;
     
     // Valider påkrevde felter
-    if (!customerId || !type || !name) {
+    if (!customerId || !systemtype || !systemnummer || !systemnavn || !plassering) {
       return res.status(400).json({
-        error: 'Mangler påkrevde felter: customerId, type og name er påkrevd'
+        error: 'Mangler påkrevde felter: customerId, systemtype, systemnummer, systemnavn, og plassering er påkrevd'
       });
     }
     
-    // Generer ID - samme format som i technician equipment route
-    const equipmentId = `EQUIP-${new Date().getFullYear()}-${Date.now()}`;
-    
     const pool = await db.getTenantConnection(req.adminTenantId);
 
-    // Merge data med standard verdier
-    const equipmentData = {
-      status: 'active',
-      serviceStatus: 'not_started',
-      ...data
-    };
-
+    // Bruk nye kolonnenavn og la databasen generere ID
     const result = await pool.query(
-      'INSERT INTO equipment (id, customer_id, type, name, location, data) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;',
-      [equipmentId, customerId, type, name, location || name, equipmentData]
+      `INSERT INTO equipment 
+        (customer_id, systemtype, systemnummer, systemnavn, plassering, betjener, location, status, notater) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
+       RETURNING *;`,
+      [
+        parseInt(customerId), 
+        systemtype, 
+        systemnummer, 
+        systemnavn, 
+        plassering, 
+        betjener || null, 
+        location || null, 
+        'active', 
+        notater || null
+      ]
     );
     
-    // Returner data i forventet format
     const equipment = result.rows[0];
-    equipment.status = equipment.data?.status;
-    equipment.serviceStatus = equipment.data?.serviceStatus;
-    equipment.internalNotes = equipment.data?.internalNotes;
     
     console.log('Equipment created by admin:', equipment);
     res.status(201).json(equipment);
@@ -95,10 +105,10 @@ router.post('/', async (req, res) => {
     console.error('Error creating equipment:', error);
     
     if (error.code === '23505') {
-      return res.status(409).json({ error: 'Anlegg med denne ID finnes allerede' });
+      return res.status(409).json({ error: 'Anlegg med samme systemnummer eksisterer allerede' });
     }
     
-    res.status(500).json({ error: 'Kunne ikke opprette anlegg' });
+    res.status(500).json({ error: 'Kunne ikke opprette anlegg', details: error.message });
   }
 });
 

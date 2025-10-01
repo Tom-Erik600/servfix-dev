@@ -371,27 +371,47 @@ function escapeHtml(unsafe) {
         }
     }
 
+    async function loadEquipmentForModal(customer) {
+    try {
+        const response = await fetch(`/api/admin/equipment?customerId=${customer.id}`, {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) throw new Error('Kunne ikke laste anlegg');
+        
+        const equipment = await response.json();
+        
+        // Sorter etter ID (nyeste først)
+        equipment.sort((a, b) => b.id - a.id);
+        
+        // Oppdater equipment-listen i modalen
+        const equipmentList = document.querySelector('.equipment-list');
+        if (equipmentList) {
+            equipmentList.innerHTML = equipment.map(eq => `
+                <div class="equipment-item" style="padding: 12px; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 8px;">
+                    <label style="display: flex; align-items: start; cursor: pointer;">
+                        <input type="checkbox" value="${eq.id}" class="equipment-checkbox" style="margin-right: 10px; margin-top: 3px;" checked>
+                        <div>
+                            <strong>${eq.systemnavn || eq.name}</strong>
+                            <div style="font-size: 13px; color: #6b7280;">
+                                ${eq.systemtype || eq.type} | ${eq.systemnummer || ''} | ${eq.plassering || eq.location}
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            `).join('');
+        }
+        
+    } catch (error) {
+        console.error('Error loading equipment:', error);
+        showToast('Kunne ikke laste anlegg', 'error');
+    }
+}
+
     async function showModalWithEquipment(customer, technicianName) {
     try {
         // Definer today lokalt i funksjonen
         const today = new Date().toISOString().split('T')[0];
-        
-        // VIKTIG: Behold customerId som string (konverteres til integer i backend)
-        const customerId = customer.id;
-        console.log('Henter anlegg for customerId:', customerId, 'type:', typeof customerId);
-        
-        // Hent anlegg for kunden
-        const response = await fetch(`/api/admin/equipment?customerId=${customerId}`, {
-            credentials: 'include'
-        });
-        
-        let equipment = [];
-        if (response.ok) {
-            equipment = await response.json();
-            console.log('Equipment hentet:', equipment);
-        } else {
-            console.error('Kunne ikke hente equipment:', response.status, response.statusText);
-        }
         
         // Bygg modal innhold med equipment selection OG description-felt
         const modalContent = document.querySelector('.modal-content');
@@ -417,29 +437,15 @@ function escapeHtml(unsafe) {
                            placeholder="Skriv inn beskrivelse..." required>
                 </div>
                 
-                ${equipment.length > 0 ? `
-                    <div class="equipment-selection-section">
-                        <h4>Velg anlegg for service:</h4>
-                        <div class="equipment-selection-help">
-                            <small>Alle anlegg er valgt som standard. Fjern haken for anlegg som ikke skal inkluderes i dette oppdraget.</small>
-                        </div>
-                        <div class="equipment-selection-list">
-                            ${equipment.map(eq => `
-                                <label class="equipment-selection-item">
-                                    <input type="checkbox" 
-                                        class="equipment-checkbox" 
-                                        value="${eq.id}" 
-                                        checked>
-                                    <div class="equipment-info">
-                                        <span class="equipment-name">${eq.name || 'Uten navn'}</span>
-                                        <span class="equipment-type">${eq.type || 'Ukjent type'}</span>
-                                        ${eq.location ? `<span class="equipment-location">📍 ${eq.location}</span>` : ''}
-                                    </div>
-                                </label>
-                            `).join('')}
-                        </div>
+                <div class="equipment-selection-section">
+                    <h4>Velg anlegg for service:</h4>
+                    <div class="equipment-selection-help">
+                        <small>Alle anlegg er valgt som standard. Fjern haken for anlegg som ikke skal inkluderes i dette oppdraget.</small>
                     </div>
-                ` : '<p class="no-equipment-message">Ingen anlegg funnet for denne kunden</p>'}
+                    <div class="equipment-list">
+                        <!-- Anleggslisten lastes her av loadEquipmentForModal -->
+                    </div>
+                </div>
                 
                 <div class="add-equipment-section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
                     <button type="button" class="btn btn-outline" id="modal-add-equipment-btn">
@@ -453,6 +459,9 @@ function escapeHtml(unsafe) {
                 <button type="button" class="btn btn-primary" id="modal-save-btn">Opprett oppdrag</button>
             </div>
         `;
+
+        // Last anlegg inn i den nye strukturen
+        await loadEquipmentForModal(customer);
         
         // Vis modal
         dateModal.style.display = 'flex';
@@ -578,7 +587,6 @@ async function showAddEquipmentModal(customer) {
     }
 }
 
-// Funksjon for å vise skjema for å legge til anlegg
 function showEquipmentForm(customer, equipmentType) {
     const typeName = equipmentType.charAt(0).toUpperCase() + equipmentType.slice(1);
     
@@ -586,18 +594,42 @@ function showEquipmentForm(customer, equipmentType) {
     if (equipmentType === 'custom') {
         formFields = `
             <div class="form-group">
-                <label for="equipment-description">Beskrivelse</label>
-                <input type="text" id="equipment-description" required placeholder="F.eks. Kontroll av taksluk, etc.">
+                <label for="systemnummer">Systemnummer *</label>
+                <input type="text" id="systemnummer" required placeholder="F.eks. CUSTOM-001">
+            </div>
+            <div class="form-group">
+                <label for="systemnavn">Beskrivelse *</label>
+                <input type="text" id="systemnavn" required placeholder="F.eks. Kontroll av taksluk">
+            </div>
+            <div class="form-group">
+                <label for="plassering">Plassering *</label>
+                <input type="text" id="plassering" required placeholder="F.eks. Tak, seksjon B">
+            </div>
+            <div class="form-group">
+                <label for="equipment-notes">Intern kommentar</label>
+                <textarea id="equipment-notes" rows="3" placeholder="F.eks. Trenger gardintrapp"></textarea>
             </div>
         `;
     } else {
         formFields = `
             <div class="form-group">
-                <label for="equipment-location">Plassering</label>
-                <input type="text" id="equipment-location" required placeholder="F.eks. Teknisk rom 1. etasje, Tak aggregat A">
+                <label for="systemnummer">Systemnummer *</label>
+                <input type="text" id="systemnummer" required placeholder="F.eks. V-001, BA-12, KA-03">
             </div>
             <div class="form-group">
-                <label for="equipment-notes">Intern kommentar <span style="color: #6c757d; font-weight: normal;">(valgfritt)</span></label>
+                <label for="systemnavn">Systemnavn *</label>
+                <input type="text" id="systemnavn" required placeholder="F.eks. Boligventilasjon Leil 201">
+            </div>
+            <div class="form-group">
+                <label for="plassering">Systemplassering *</label>
+                <input type="text" id="plassering" required placeholder="F.eks. Teknisk rom 2.etg vest">
+            </div>
+            <div class="form-group">
+                <label for="betjener">Betjener (valgfritt)</label>
+                <input type="text" id="betjener" placeholder="F.eks. Kontorlokaler 1.etg">
+            </div>
+            <div class="form-group">
+                <label for="equipment-notes">Intern kommentar</label>
                 <textarea id="equipment-notes" rows="3" placeholder="F.eks. Vanskelig tilkomst, krever gardintrapp"></textarea>
             </div>
         `;
@@ -644,52 +676,161 @@ function showEquipmentForm(customer, equipmentType) {
         }
     });
     
-    // Form submit
+    // Form submit - inne i showAddEquipmentForm funksjonen
     formModal.querySelector('#equipment-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         
         const equipmentData = {
             customerId: customer.id,
-            type: equipmentType,
-            name: equipmentType === 'custom' ? 
-                document.getElementById('equipment-description').value : 
-                `${typeName} - ${document.getElementById('equipment-location').value}`,
-            location: document.getElementById('equipment-location')?.value || '',
-            data: {
-                internalNotes: document.getElementById('equipment-notes')?.value || ''
-            }
+            systemtype: equipmentType,
+            systemnummer: document.getElementById('systemnummer').value,
+            systemnavn: document.getElementById('systemnavn').value,
+            plassering: document.getElementById('plassering').value,
+            betjener: document.getElementById('betjener')?.value || null,
+            location: document.getElementById('plassering').value,
+            notater: document.getElementById('equipment-notes')?.value || null,
+            status: 'active'
         };
         
         try {
             const response = await fetch('/api/admin/equipment', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify(equipmentData)
             });
             
             if (!response.ok) {
-                throw new Error('Kunne ikke opprette anlegg');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Kunne ikke opprette anlegg');
             }
             
             const newEquipment = await response.json();
-            console.log('Nytt anlegg opprettet:', newEquipment);
+            console.log('Equipment opprettet:', newEquipment);
             
-            // Lukk form modal
+            // Fjern modal
             document.body.removeChild(formModal);
             
-            // Refresh equipment liste i hoved-modalen
-            await showModalWithEquipment(customer, document.querySelector('.modal-info-text strong:last-child').textContent);
+            // Refresh equipment-listen i hovedmodalen
+            await loadEquipmentForModal(customer);
             
             showToast('Anlegg opprettet!', 'success');
             
         } catch (error) {
             console.error('Error creating equipment:', error);
-            showToast('Kunne ikke opprette anlegg', 'error');
+            showToast(error.message, 'error');
         }
     });
+}
+
+// Legg til denne funksjonen i planlegger.js
+function showEquipmentSuccessModal(equipment, customer, previousModal) {
+    // Fjern forrige modal
+    if (previousModal && previousModal.parentNode) {
+        document.body.removeChild(previousModal);
+    }
+    
+    // Opprett ny modal med anleggsdetaljer
+    const successModal = document.createElement('div');
+    successModal.className = 'modal-overlay equipment-success-modal show';
+    successModal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 9999;';
+    
+    successModal.innerHTML = `
+        <div class="modal-content" style="background: white; padding: 30px; border-radius: 8px; max-width: 600px; width: 90%;">
+            <div class="modal-header" style="margin-bottom: 20px;">
+                <h3 style="color: #10b981; margin: 0;">✅ Anlegg opprettet!</h3>
+            </div>
+            
+            <div class="modal-body" style="margin-bottom: 30px;">
+                <div class="equipment-details" style="background: #f9fafb; padding: 20px; border-radius: 6px; border: 1px solid #e5e7eb;">
+                    <h4 style="margin: 0 0 15px 0; color: #374151;">Anleggsdetaljer:</h4>
+                    
+                    <div style="display: grid; gap: 12px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-weight: 600; color: #6b7280;">Type:</span>
+                            <span style="color: #111827;">${equipment.systemtype || equipment.type}</span>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-weight: 600; color: #6b7280;">Systemnummer:</span>
+                            <span style="color: #111827;">${equipment.systemnummer || 'N/A'}</span>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-weight: 600; color: #6b7280;">Systemnavn:</span>
+                            <span style="color: #111827;">${equipment.systemnavn || equipment.name || 'N/A'}</span>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-weight: 600; color: #6b7280;">Plassering:</span>
+                            <span style="color: #111827;">${equipment.plassering || 'N/A'}</span>
+                        </div>
+                        
+                        ${equipment.betjener ? `
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-weight: 600; color: #6b7280;">Betjener:</span>
+                            <span style="color: #111827;">${equipment.betjener}</span>
+                        </div>
+                        ` : ''}
+                        
+                        ${equipment.notater ? `
+                        <div style="border-top: 1px solid #e5e7eb; padding-top: 12px; margin-top: 8px;">
+                            <span style="font-weight: 600; color: #6b7280; display: block; margin-bottom: 8px;">Interne notater:</span>
+                            <span style="color: #111827; display: block; white-space: pre-wrap;">${equipment.notater}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px; padding: 15px; background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 4px;">
+                    <p style="margin: 0; color: #1e40af; font-size: 14px;">
+                        <strong>Hva vil du gjøre nå?</strong><br>
+                        Du kan opprette et oppdrag for dette anlegget eller lukke og opprette flere anlegg.
+                    </p>
+                </div>
+            </div>
+            
+            <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary cancel-btn" style="padding: 10px 20px; border: 1px solid #d1d5db; background: white; border-radius: 6px; cursor: pointer;">
+                    Lukk
+                </button>
+                <button type="button" class="btn btn-primary create-order-btn" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">
+                    Opprett oppdrag
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(successModal);
+    
+    // Lukk-knapp
+    successModal.querySelector('.cancel-btn').addEventListener('click', () => {
+        document.body.removeChild(successModal);
+        fetchData(); // Refresh data
+    });
+    
+    // Opprett oppdrag-knapp
+    successModal.querySelector('.create-order-btn').addEventListener('click', () => {
+        document.body.removeChild(successModal);
+        // Vis ordreopprettingsmodal med dette anlegget forhåndsvalgt
+        showOrderModalWithEquipment(customer, [equipment.id]);
+    });
+}
+
+// Hjelpefunksjon for å vise ordre-modal med forhåndsvalgte anlegg
+function showOrderModalWithEquipment(customer, equipmentIds) {
+    // Åpne den vanlige ordre-modalen
+    showStandardModal(customer, customer.technicianName);
+    
+    // Forhåndsvelg equipment
+    setTimeout(() => {
+        equipmentIds.forEach(id => {
+            const checkbox = document.querySelector(`input[type="checkbox"][value="${id}"]`);
+            if (checkbox) {
+                checkbox.checked = true;
+            }
+        });
+    }, 100);
 }
 
     // Hjelpefunksjon for standard modal (fallback)

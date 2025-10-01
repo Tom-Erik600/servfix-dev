@@ -284,3 +284,23 @@ setupSession().then(() => {
   console.error('❌ Failed to start server:', error);
   process.exit(1);
 });
+
+// MIDLERTIDIG TEST ENDPOINT - FJERN ETTER DEBUGGING
+app.get('/api/test-admin', async (req, res) => {
+  try {
+    const db = require('./src/config/database');
+    const pool = await db.getPool('servfix_admin');
+    const result = await pool.query('SELECT COUNT(*) as count FROM admin_users');
+    res.json({ 
+      success: true, 
+      adminUserCount: result.rows[0].count,
+      dbConnection: 'OK'
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      dbConnection: 'FAILED'
+    });
+  }
+});

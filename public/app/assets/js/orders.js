@@ -9,6 +9,23 @@ let pageState = {
     selectedEquipmentIds: [] // For equipment selection
 };
 
+/**
+ * Escapes HTML special characters in a string to prevent XSS.
+ * @param {string | null | undefined} str The string to escape.
+ * @returns {string} The escaped string.
+ */
+function escapeHTML(str) {
+    if (str === null || str === undefined) {
+        return '';
+    }
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 async function checkAuth() {
     try {
         const response = await fetch('/api/auth/me');
@@ -121,14 +138,20 @@ async function initializePage() {
         
         // Håndter inkluderte anlegg
         if (pageState.order.included_equipment_ids && pageState.order.included_equipment_ids.length > 0) {
-            pageState.selectedEquipmentIds = pageState.order.included_equipment_ids;
+            // Konverter til integers for sammenligning
+            pageState.selectedEquipmentIds = pageState.order.included_equipment_ids.map(id => parseInt(id));
             console.log('Loaded selected equipment from order:', pageState.selectedEquipmentIds);
         } else {
             // Bakoverkompatibel: NULL eller tom = alle anlegg inkludert
-            pageState.selectedEquipmentIds = pageState.equipment.map(eq => eq.id);
+            pageState.selectedEquipmentIds = pageState.equipment.map(eq => parseInt(eq.id));
             console.log('No specific selection, including all equipment:', pageState.selectedEquipmentIds);
         }
         
+        // VIKTIG: Konverter equipment IDs til integers for konsistens
+        pageState.equipment = pageState.equipment.map(eq => ({
+            ...eq,
+            id: parseInt(eq.id)
+        }));        
         console.log('Equipment after update:', {
             count: pageState.equipment.length,
             ids: pageState.equipment.map(eq => eq.id)
@@ -189,13 +212,48 @@ function renderHeader() {
 }
 
 function renderCustomerInfo() {
+    // Hent besøksadresse fra customer_data (fysisk adresse)
+    const visitAddress = pageState.customer.physicalAddress || 
+                        pageState.order.customer_data?.physicalAddress || 
+                        'Ikke registrert';
+    
+    // Avtalenummer - sjekk flere mulige kilder
+    const agreementNumber = pageState.order.agreement_number || 
+                           pageState.order.customer_data?.agreementNumber || 
+                           pageState.customer.agreementNumber || 
+                           'Ikke satt';
+    
+    // Service type og beskrivelse fra ordre
+    const serviceType = pageState.order.service_type || 'Generell service';
+    const description = pageState.order.description || 'Ingen beskrivelse';
+    
     const customerHTML = `
         <div class="section-header"><h3>👤 Kundeinformasjon</h3></div>
         <div class="customer-card-grid">
-            <div class="info-row"><span class="label">Kundenavn</span> <span class="value">${pageState.customer.name}</span></div>
-            <div class="info-row"><span class="label">Kundenummer</span> <span class="value">${pageState.customer.id}</span></div>
-            <div class="info-row"><span class="label">Ordrenummer</span> <span class="value">${pageState.order.orderNumber}</span></div>
-            <div class="info-row"><span class="label">Avtalenummer</span> <span class="value">${pageState.customer.agreementNumber || 'Ikke satt'}</span></div>
+            <div class="info-row">
+                <span class="label">Kundenavn</span> 
+                <span class="value">${escapeHTML(pageState.customer.name)}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Besøksadresse</span> 
+                <span class="value">${escapeHTML(visitAddress)}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Ordrenummer</span> 
+                <span class="value">${escapeHTML(pageState.order.orderNumber)}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Avtalenummer</span> 
+                <span class="value">${escapeHTML(agreementNumber)}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Servicetype</span> 
+                <span class="value">${escapeHTML(serviceType)}</span>
+            </div>
+            <div class="info-row full-width">
+                <span class="label">Beskrivelse</span> 
+                <span class="value">${escapeHTML(description)}</span>
+            </div>
         </div>`;
     document.getElementById('customer-info').innerHTML = customerHTML;
 }
@@ -206,21 +264,29 @@ function renderQuotesList() {
     return `
         <div class="quotes-section">
             <h4 style="color: #495057; font-size: 14px; margin-bottom: 8px;">📋 Tilbud</h4>
-            ${pageState.quotes.map(quote => `
-                <div class="quote-item" data-quote-id="${quote.id}">
+            ${pageState.quotes.map(quote => {
+                const description = quote.description;
+                const shortDescription = escapeHTML(description.substring(0, 40)) + (description.length > 40 ? '...' : '');
+                const quoteId = escapeHTML(quote.id);
+                const status = escapeHTML(quote.status);
+                const estimatedPrice = escapeHTML(quote.estimatedPrice);
+                const estimatedHours = escapeHTML(quote.estimatedHours);
+
+                return `
+                <div class="quote-item" data-quote-id="${quoteId}">
                     <div class="quote-header">
-                        <span class="quote-title">${quote.description.substring(0, 40)}${quote.description.length > 40 ? '...' : ''}</span>
+                        <span class="quote-title">${shortDescription}</span>
                         <div class="quote-actions">
-                            <span class="quote-status status-${quote.status}">${getStatusText(quote.status)}</span>
-                            <button class="delete-quote-btn" data-action="delete-quote" data-quote-id="${quote.id}" title="Slett tilbud">🗑️</button>
+                            <span class="quote-status status-${status}">${getStatusText(quote.status)}</span>
+                            <button class="delete-quote-btn" data-action="delete-quote" data-quote-id="${quoteId}" title="Slett tilbud">🗑️</button>
                         </div>
                     </div>
                     <div class="quote-details">
-                        <span class="quote-price">Estimat: ${quote.estimatedPrice} kr</span>
-                        <span class="quote-hours">${quote.estimatedHours} timer</span>
+                        <span class="quote-price">Estimat: ${estimatedPrice} kr</span>
+                        <span class="quote-hours">${estimatedHours} timer</span>
                     </div>
                 </div>
-            `).join('')}
+            `}).join('')}
         </div>
     `;
 }
@@ -254,61 +320,61 @@ function renderEquipmentList() {
 }
 
 function createEquipmentCardHTML(eq) {
-    const statusMap = { 
-        'not_started': 'Planlagt', 
-        'in_progress': 'Under arbeid', 
-        'completed': 'Fullført' 
+    const statusMap = {
+        'not_started': 'Planlagt',
+        'in_progress': 'Pågår',
+        'completed': 'Ferdig'
     };
     const statusText = statusMap[eq.serviceStatus || 'not_started'] || 'Planlagt';
     const statusClass = eq.serviceStatus || 'not_started';
     const isSelected = pageState.selectedEquipmentIds.includes(eq.id);
 
     return `
-        <div class="system-item ${statusClass} ${!isSelected ? 'not-selected' : ''}" data-equipment-id="${eq.id}">
-            <!-- Checkbox område - IKKE klikkbart -->
-            <div class="equipment-selection-bar">
-                <label class="equipment-checkbox">
-                    <input type="checkbox" 
-                           class="equipment-select-checkbox" 
-                           data-equipment-id="${eq.id}" 
+        <article class="anlegg-kort ${statusClass} ${!isSelected ? 'not-selected' : ''}" 
+                 data-equipment-id="${eq.id}" 
+                 onclick="navigateToServicePage(${eq.id})">
+            <div class="kort-topp">
+                <label class="checkbox-wrapper">
+                    <input type="checkbox"
+                           class="equipment-select-checkbox"
+                           data-equipment-id="${eq.id}"
                            ${isSelected ? 'checked' : ''}>
-                    <span class="checkbox-custom"></span>
-                    <span class="checkbox-label">Inkluder i rapport</span>
+                    <span>Inkluder</span>
                 </label>
+                <span class="status-badge ${statusClass}">${statusText}</span>
             </div>
-            
-            <!-- Klikkbart område for å navigere til service -->
-            <div class="system-content-wrapper" data-action="navigate-to-service" data-equipment-id="${eq.id}">
-                <div class="system-header">
-                    <span class="system-badge">ID: ${eq.id}</span>
-                    <button class="delete-icon-btn" data-action="delete-start" title="Deaktiver anlegg">🗑️</button>
-                </div>
-                <div class="system-info">
-                    <div class="system-name">${eq.name || 'Ikke navngitt'}</div>
-                    <div class="system-details">
-                        <span>Type: ${eq.type || 'Ukjent'}</span>
-                        ${eq.location ? `<span>Plassering: ${eq.location}</span>` : ''}
-                        ${eq.internalNotes ? `<span class="internal-notes">💡 ${eq.internalNotes}</span>` : ''}
+
+            <div class="kort-innhold">
+                <div class="kolonne-venstre">
+                    <div class="tittel-gruppe">
+                        <h3 class="anlegg-tittel">${eq.systemnavn || 'Ikke navngitt'}</h3>
+                        <span class="id-merke">ID: ${eq.id}</span>
+                    </div>
+                    <span class="type-tag">${eq.systemtype || 'ukjent'}</span>
+                    <div class="info-blokk">
+                        <div class="info-linje"><strong>Systemnr:</strong> ${eq.systemnummer || '-'}</div>
+                        <div class="info-linje"><strong>Plassering:</strong> ${eq.plassering || '-'}</div>
+                        ${eq.betjener ? `<div class="info-linje"><strong>Betjener:</strong> ${eq.betjener}</div>` : ''}
                     </div>
                 </div>
-                <div class="system-status">
-                    <span class="status-text">${statusText}</span>
+
+                <div class="kolonne-hoyre">
+                    ${eq.notater ? `
+                    <div class="kommentar-boks">
+                        <strong>Kommentar:</strong>
+                        <p>${eq.notater}</p>
+                    </div>
+                    ` : '<div class="kommentar-boks tom">Ingen kommentar</div>'}
+                    
+                    <button class="slett-knapp" data-action="delete-start" onclick="event.stopPropagation();">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
                 </div>
             </div>
             
-            <!-- Delete confirmation (skjult som standard) -->
             <div class="confirm-delete-container" style="display: none;">
-                <p>Sikker på at du vil deaktivere anlegget?</p>
-                <div class="form-group">
-                    <label for="deactivation-reason-${eq.id}">Årsak til deaktivering (obligatorisk)</label>
-                    <textarea id="deactivation-reason-${eq.id}" class="deactivation-reason" placeholder="F.eks. anlegg byttet ut, ikke lenger i bruk"></textarea>
                 </div>
-                <div class="delete-actions">
-                    <button class="btn btn-secondary" data-action="delete-cancel">Avbryt</button>
-                    <button class="btn btn-danger" data-action="delete-confirm" data-equipment-id="${eq.id}">Bekreft deaktivering</button>
-                </div>
-            </div>
-        </div>
+        </article>
     `;
 }
 
@@ -724,19 +790,43 @@ function showAddEquipmentForm() {
     if (pageState.selectedEquipmentType === 'custom') {
         formFields = `
             <div class="form-group">
-                <label for="plassering">Beskrivelse</label>
-                <input type="text" id="plassering" required placeholder="F.eks. Kontroll av taksluk, etc.">
+                <label for="systemnummer">Systemnummer *</label>
+                <input type="text" id="systemnummer" required placeholder="F.eks. CUSTOM-001">
+            </div>
+            <div class="form-group">
+                <label for="systemnavn">Beskrivelse *</label>
+                <input type="text" id="systemnavn" required placeholder="F.eks. Kontroll av taksluk">
+            </div>
+            <div class="form-group">
+                <label for="plassering">Plassering *</label>
+                <input type="text" id="plassering" required placeholder="F.eks. Tak, seksjon B">
+            </div>
+            <div class="form-group">
+                <label for="internalNotes">Intern kommentar</label>
+                <textarea id="internalNotes" rows="3" placeholder="F.eks. Trenger stige"></textarea>
             </div>
         `;
     } else {
         formFields = `
             <div class="form-group">
-                <label for="plassering">Plassering</label>
-                <input type="text" id="plassering" required placeholder="F.eks. Teknisk rom 1. etasje, Tak aggregat A">
+                <label for="systemnummer">Systemnummer *</label>
+                <input type="text" id="systemnummer" required placeholder="F.eks. V-001, BA-12, KA-03">
             </div>
             <div class="form-group">
-                <label for="internalNotes">Intern kommentar <span style="color: #6c757d; font-weight: normal;">(valgfritt)</span></label>
-                <textarea id="internalNotes" rows="3" placeholder="F.eks. Trenger stige for adgang, nøkkel hos vaktmester, kun originale deler..." style="width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-family: inherit; font-size: 14px; resize: vertical; box-sizing: border-box;"></textarea>
+                <label for="systemnavn">Systemnavn *</label>
+                <input type="text" id="systemnavn" required placeholder="F.eks. Boligventilasjon Leil 201">
+            </div>
+            <div class="form-group">
+                <label for="plassering">Systemplassering *</label>
+                <input type="text" id="plassering" required placeholder="F.eks. Teknisk rom 2.etg vest">
+            </div>
+            <div class="form-group">
+                <label for="betjener">Betjener (valgfritt)</label>
+                <input type="text" id="betjener" placeholder="F.eks. Kontorlokaler 1.etg">
+            </div>
+            <div class="form-group">
+                <label for="internalNotes">Intern kommentar</label>
+                <textarea id="internalNotes" rows="3" placeholder="F.eks. Trenger stige, nøkkel hos vaktmester" style="width: 100%; box-sizing: border-box;"></textarea>
             </div>
         `;
     }
@@ -765,60 +855,98 @@ async function handleSaveEquipment(event) {
     const customerId = pageState.order?.customer_id || pageState.order?.customerId || pageState.customer?.id;
     
     if (!customerId) {
-        showToast('Feil: Mangler kunde-ID for denne ordren', 'error');
+        showToast('Feil: Mangler kunde-ID', 'error');
         setLoading(false);
         return;
     }
     
     const newEquipmentData = {
         customerId: customerId,
-        type: pageState.selectedEquipmentType,
-        name: document.getElementById('plassering').value,
-        internalNotes: document.getElementById('internalNotes')?.value || '',
+        systemtype: pageState.selectedEquipmentType,
+        systemnummer: `${pageState.selectedEquipmentType.slice(0,2).toUpperCase()}-${Date.now().toString().slice(-3)}`,
+        systemnavn: document.getElementById('plassering').value,
+        plassering: document.getElementById('plassering').value,
+        betjener: null,
+        location: document.getElementById('plassering').value,
+        notater: document.getElementById('internalNotes')?.value || '',
         status: 'active'
     };
     
     console.log('Sender equipment data:', newEquipmentData);
-    console.log('Current orderId:', orderId);
     
     try {
         const response = await fetch('/api/equipment', { 
             method: 'POST', 
-            headers: { 
-                'Content-Type': 'application/json'
-            }, 
-            body: JSON.stringify(newEquipmentData),
-            credentials: 'include'
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(newEquipmentData)
         });
         
         if (!response.ok) {
             const errorData = await response.json();
-            console.error('Server error:', errorData);
-            throw new Error(errorData.error || 'Lagring feilet');
+            throw new Error(errorData.error || 'Kunne ikke opprette anlegg');
         }
         
-        const savedEquipment = await response.json();
-        console.log('Equipment saved:', savedEquipment);
+        const createdEquipment = await response.json();
+console.log('Equipment opprettet:', createdEquipment);
+
+// VIKTIG: Legg det nye anlegget til i pageState
+const newEquipment = {
+    id: parseInt(createdEquipment.id),
+    customer_id: parseInt(createdEquipment.customer_id),
+    systemtype: createdEquipment.systemtype,
+    systemnummer: createdEquipment.systemnummer,
+    systemnavn: createdEquipment.systemnavn,
+    plassering: createdEquipment.plassering,
+    betjener: createdEquipment.betjener,
+    notater: createdEquipment.notater,
+    serviceStatus: 'not_started',
+    internalNotes: createdEquipment.notater || ''
+};
+
+// Legg til i equipment array
+pageState.equipment.push(newEquipment);
+
+// VIKTIG: Legg til i selectedEquipmentIds (automatisk checked)
+pageState.selectedEquipmentIds.push(newEquipment.id);
+
+// Lagre valget til backend
+await saveSelectedEquipment();
+
+// Lukk modal
+hideModal();
+
+// Re-render listen
+renderEquipmentList();
+renderActionButtons();
+
+showToast('Anlegg opprettet og lagt til i ordren!', 'success');
         
-        savedEquipment.serviceStatus = savedEquipment.serviceStatus || 'not_started';
-        savedEquipment.internalNotes = savedEquipment.internalNotes || savedEquipment.data?.internalNotes || '';
+    } catch (error) {
+        console.error('Feil ved opprettelse av anlegg:', error);
+        showToast(`Feil: ${error.message}`, 'error');
+    } finally {
+        setLoading(false);
+    }
+}
+
+async function loadEquipmentData(customerId) {
+    try {
+        const response = await fetch(`/api/equipment/${customerId}`);
+        if (!response.ok) throw new Error('Kunne ikke laste anlegg');
         
-        pageState.equipment.push(savedEquipment);
+        const equipment = await response.json();
         
-        // Legg til i selectedEquipmentIds automatisk
-        pageState.selectedEquipmentIds.push(savedEquipment.id);
-        await saveSelectedEquipment();
+        // Sorter nyeste først
+        equipment.sort((a, b) => b.id - a.id);
         
+        pageState.equipment = equipment;
+        
+        // Refresh visningen
         renderEquipmentList();
-        renderActionButtons();
-        hideModal();
-        showToast('Anlegg lagt til', 'success');
-    } catch (error) { 
-        console.error('Error saving equipment:', error);
-        showToast(`Feil: ${error.message}`, 'error'); 
-    } 
-    finally { 
-        setLoading(false); 
+        
+    } catch (error) {
+        console.error('Error loading equipment:', error);
+        showToast('Kunne ikke laste anlegg', 'error');
     }
 }
 
@@ -952,7 +1080,17 @@ function navigateToServicePage(equipmentId) {
         return;
     }
     
-    window.location.href = `service.html?orderId=${orderId}&equipmentId=${equipmentId}`;
+    // VIKTIG: Konverter equipmentId til integer for konsistens
+    const eqId = parseInt(equipmentId);
+    
+    if (!eqId || isNaN(eqId)) {
+        showToast('Ugyldig anlegg-ID', 'error');
+        console.error('Invalid equipmentId:', equipmentId);
+        return;
+    }
+    
+    console.log('Navigating to service page:', { orderId, equipmentId: eqId });
+    window.location.href = `service.html?orderId=${orderId}&equipmentId=${eqId}`;
 }
 
 function hideModal() {

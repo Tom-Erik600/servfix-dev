@@ -40,13 +40,21 @@ router.get('/', async (req, res) => {
             const equipmentResult = await pool.query(
                 `SELECT 
                     e.id, 
-                    -- e.data->>'serviceStatus' as service_status, FJERNET
+                    e.customer_id, 
+                    e.systemtype, 
+                    e.systemnummer, 
+                    e.systemnavn, 
+                    e.plassering, 
+                    e.betjener, 
+                    e.location, 
+                    e.status,
+                    e.notater,
                     COALESCE(sr.status, 'not_started') as service_status,
                     COALESCE(sr.status, 'not_started') as service_report_status
                 FROM equipment e
                 LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
-                WHERE e.customer_id = $1`,
-                [order.customer_id, order.id]
+                WHERE e.customer_id = $1 AND e.status = 'active'`,
+                [parseInt(order.customer_id), order.id]
             );
 
             equipment = equipmentResult.rows.map(eq => ({
@@ -106,7 +114,7 @@ router.get('/today', async (req, res) => {
                 FROM equipment e
                 LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
                 WHERE e.customer_id = $1`,
-                [order.customer_id, order.id]
+                [parseInt(order.customer_id), order.id]
             );
 
             equipment = equipmentResult.rows.map(eq => ({
@@ -163,153 +171,78 @@ router.get('/all', async (req, res) => {
   }
 });
 
-// GET single order
-// GET single order - KOMPLETT FUNKSJON for src/routes/orders.js
-// GET single order - KOMPLETT FUNKSJON for src/routes/orders.js
-// GET single order - KOMPLETT FUNKSJON for src/routes/orders.js
 router.get('/:id', async (req, res) => {
   try {
+    const { id } = req.params;
     const pool = await db.getTenantConnection(req.session.tenantId);
-    const orderResult = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+    
+    console.log('📋 Fetching order:', id);
+
+    // 1. Hent ordre
+    const orderResult = await pool.query(
+      `SELECT * FROM orders WHERE id = $1`,
+      [id]
+    );
     
     if (orderResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Order not found' });
+      return res.status(404).json({ error: 'Ordre ikke funnet' });
     }
-    
+
     const order = orderResult.rows[0];
-    order.orderNumber = `SO-${order.id.split('-')[1]}-${order.id.split('-')[2].slice(-6)}`;
+    console.log('✅ Order found:', order.id);
 
-    // Fetch customer data - sjekk om det finnes customer_data i ordre
-    let customer = {
-        id: order.customer_id,
-        name: order.customer_name
-    };
-
-    // Hvis ordre har customer_data, bruk det
-    if (order.customer_data && typeof order.customer_data === 'object') {
-        customer = {
-            ...customer,
-            ...order.customer_data
-        };
-    }
-
-    // Prøv å hente fullstendig kundeinformasjon fra Tripletex
-    try {
-        const tripletexService = require('../services/tripletexService');
-        const customerDetails = await tripletexService.getCustomer(order.customer_id);
-        
-        if (customerDetails) {
-            customer.contact = customerDetails.customerContact 
-                ? `${customerDetails.customerContact.firstName || ''} ${customerDetails.customerContact.lastName || ''}`.trim()
-                : '';
-            customer.email = customerDetails.email || customerDetails.invoiceEmail || '';
-            customer.phone = customerDetails.phoneNumber || customerDetails.phoneNumberMobile || '';
-            customer.physicalAddress = customerDetails.physicalAddress 
-                ? `${customerDetails.physicalAddress.addressLine1 || ''} ${customerDetails.physicalAddress.addressLine2 || ''}`.trim()
-                : '';
-            customer.postalAddress = customerDetails.postalAddress 
-                ? `${customerDetails.postalAddress.addressLine1 || ''} ${customerDetails.postalAddress.addressLine2 || ''}`.trim()
-                : '';
-        }
-    } catch (tripletexError) {
-        console.log('Could not fetch customer details from Tripletex:', tripletexError.message);
-    }
-
-    // VIKTIG FIX: Hent equipment basert på included_equipment_ids hvis spesifisert
-    let equipmentResult;
-    if (order.included_equipment_ids && order.included_equipment_ids.length > 0) {
-      // Hent KUN inkluderte anlegg
-      console.log('Fetching only included equipment:', order.included_equipment_ids);
-      equipmentResult = await pool.query(
-        `SELECT 
-            e.*, 
-            e.data as data,
-            COALESCE(sr.status, 'not_started') as service_status,
-            COALESCE(sr.status, 'not_started') as service_report_status
-        FROM equipment e
-        LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $1)
-        WHERE e.id = ANY($2)`,
-        [order.id, order.included_equipment_ids]  // KORREKT PARAMETER REKKEFØLGE
-      );
-    } else {
-      // Bakoverkompatibel: hvis ingen spesifikke anlegg er valgt, hent alle aktive
-      console.log('No specific equipment selected, fetching all active equipment');
-      equipmentResult = await pool.query(
-        `SELECT 
-            e.*, 
-            e.data as data,
-            COALESCE(sr.status, 'not_started') as service_status,
-            COALESCE(sr.status, 'not_started') as service_report_status
-        FROM equipment e
-        LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $1)
-        WHERE e.customer_id = $2 
-        AND (e.data->>'status' IS NULL OR e.data->>'status' = 'active')`,
-        [order.id, customer.id]  // KORREKT PARAMETER REKKEFØLGE
-      );
-    }
-
-    const equipment = equipmentResult.rows.map(eq => ({
-        id: eq.id,
-        type: eq.type,
-        name: eq.name,
-        location: eq.location,
-        serviceStatus: eq.service_status || 'not_started',
-        systemNumber: eq.system_number || '',
-        systemType: eq.system_type || '',
-        operator: eq.operator || '',
-        data: eq.data,
-        serviceReportStatus: eq.service_report_status || 'not_started',
-        internalNotes: eq.data?.internalNotes || ''
-    }));
-
-    // Fetch technician data
-    const technicianResult = await pool.query('SELECT * FROM technicians WHERE id = $1', [order.technician_id]);
-    const technician = technicianResult.rows[0] || {};
+    // 2. Hent equipment
+    let equipment = [];
     
-    let quotes = [];
-    try {
-      const quotesResult = await pool.query(`
-        SELECT 
-          q.*,
-          q.items::jsonb as items_data
-        FROM quotes q 
-        WHERE q.order_id = $1
-        ORDER BY q.created_at DESC
-      `, [req.params.id]);
+    if (order.included_equipment_ids && Array.isArray(order.included_equipment_ids) && order.included_equipment_ids.length > 0) {
+      console.log('🔧 Fetching equipment with IDs:', order.included_equipment_ids);
       
-      quotes = quotesResult.rows.map(quote => {
-        const itemsData = typeof quote.items_data === 'string' ? JSON.parse(quote.items_data) : quote.items_data;
+      try {
+        // FIKSET: Konverter strings til integers først
+        const equipmentIds = order.included_equipment_ids.map(id => parseInt(id));
         
-        return {
-          ...quote,
-          description: itemsData?.description || '',
-          estimatedHours: itemsData?.estimatedHours || 0,
-          estimatedPrice: quote.total_amount,
-          products: itemsData?.products || [],
-          items: itemsData?.products || []
-        };
-      });
-    } catch (error) {
-      console.log('Could not fetch quotes for order:', req.params.id);
-      // quotes forblir tom array
+        const equipmentResult = await pool.query(
+          `SELECT 
+            id,
+            customer_id,
+            systemtype,
+            systemnummer,
+            systemnavn,
+            plassering,
+            betjener,
+            notater,
+            created_at
+           FROM equipment 
+           WHERE id = ANY($1::integer[])`,
+          [equipmentIds]  // ← Bruker konverterte integers
+        );
+        
+        equipment = equipmentResult.rows;
+        console.log(`✅ Found ${equipment.length} equipment`);
+        
+      } catch (eqError) {
+        console.error('⚠️ Equipment fetch failed:', eqError.message);
+      }
     }
 
+    // 3. Send response i riktig format for frontend
     res.json({
-      order: {
-          ...order,
-          customer_data: customer,
-          // VIKTIG: Send med included_equipment_ids til frontend
-          included_equipment_ids: order.included_equipment_ids || null
-      },
-      customer: customer,
+      order: order,           // ← Frontend forventer 'order' property
       equipment: equipment,
-      technician: technician,
-      quotes: quotes
+      customer: {
+        id: order.customer_id,
+        name: order.customer_name,
+        ...order.customer_data
+      }
     });
-    
+
   } catch (error) {
-    console.error('Error fetching order:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('❌ ORDERS GET /:id ERROR:', error);
+    console.error('Stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Feil ved henting av ordre',
+      details: error.message 
+    });
   }
 });
 
@@ -449,7 +382,7 @@ router.post('/:orderId/complete', async (req, res) => {
    
     // Hent service rapporter - filtrer på inkluderte anlegg hvis spesifisert
     let serviceReportsQuery = `
-      SELECT sr.*, e.name as equipment_name, e.type as equipment_type
+      SELECT sr.*, e.systemnavn as equipment_name, e.systemtype as equipment_type
       FROM service_reports sr
       JOIN equipment e ON sr.equipment_id = e.id
       WHERE sr.order_id = $1
@@ -537,8 +470,8 @@ router.get('/:id/reports', async (req, res) => {
     const result = await pool.query(
       `SELECT 
         sr.*,
-        e.name as equipment_name,
-        e.type as equipment_type,
+        e.systemnavn as equipment_name,
+        e.systemtype as equipment_type,
         CASE 
           WHEN sr.pdf_generated = true THEN 'generated'
           ELSE 'pending'
@@ -780,7 +713,7 @@ router.post('/:id/regenerate-reports', async (req, res) => {
     
     // Hent eksisterende service rapporter for de inkluderte anleggene
     let serviceReportsQuery = `
-      SELECT sr.*, e.name as equipment_name, e.type as equipment_type
+      SELECT sr.*, e.systemnavn as equipment_name, e.systemtype as equipment_type
       FROM service_reports sr
       JOIN equipment e ON sr.equipment_id = e.id
       WHERE sr.order_id = $1
