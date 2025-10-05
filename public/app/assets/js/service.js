@@ -681,15 +681,13 @@ function generateReportId() {
 // Main initialization function
 // Main initialization function
 async function initializePage() {
-    setLoading(true);
-    clearAllImageContainers();
-    
     try {
-        // Get params from URL
-        const rawOrderId = getQueryParam('orderId');
-        const rawEquipmentId = getQueryParam('equipmentId');
+        clearAllImageContainers();
         
-        // Valider og konverter equipmentId til integer
+        const urlParams = new URLSearchParams(window.location.search);
+        const rawOrderId = urlParams.get('orderId');
+        const rawEquipmentId = urlParams.get('equipmentId');
+        
         state.orderId = rawOrderId;
         state.equipmentId = rawEquipmentId ? parseInt(rawEquipmentId) : null;
         
@@ -719,12 +717,12 @@ async function initializePage() {
             loadEquipmentData(state.equipmentId),
             loadTechnician()
         ]);
-
-        // LEGG TIL DENNE LINJEN:
-        renderHeader();
         
         state.equipment = equipment;
         state.technician = technician;
+        
+        // FLYTT renderHeader HIT - ETTER at state.equipment er satt
+        renderHeader();
         
         // Load or create service report
         await loadServiceReport();
@@ -756,56 +754,12 @@ async function loadTechnician() {
 
 async function loadEquipmentData(equipmentId) {
     try {
-        console.log('Loading equipment with ID:', equipmentId);
-        
-        const equipment = await api.get(`/equipment/by-id/${equipmentId}`);
-        console.log('Equipment data loaded:', equipment);
-        
-// NYTT: Hent kundeinformasjon hvis customer_id finnes
-if (equipment.customer_id && state.order) {
-    try {
-        console.log('Loading customer info for customer_id:', equipment.customer_id);
-        
-        // Hent ordre-data som inneholder kundeinformasjon fra customer_data JSONB-feltet
-        const orderResponse = await api.get(`/orders/${state.orderId}`);
-        
-        if (orderResponse && orderResponse.customer) {
-            // Oppdater BARE customer-feltet i state.order
-            state.order.customer = {
-                id: orderResponse.customer.id,
-                name: orderResponse.customer.name || 'Ukjent kunde',
-                phone: orderResponse.customer.phone || '',
-                email: orderResponse.customer.email || '',
-                physicalAddress: orderResponse.customer.physicalAddress || ''
-            };
-            console.log('✅ Customer name updated:', state.order.customer.name);
-        } else {
-            console.warn('No customer data in order response');
-            state.order.customer.name = 'Kunde ikke funnet';
-        }
-    } catch (customerError) {
-        console.error('Could not load customer info:', customerError);
-        state.order.customer.name = 'Feil ved lasting';
-    }
-}
-        // Normalize type to lowercase
-        if (equipment.type) {
-            equipment.type = equipment.type.toLowerCase();
-        }
-        
-        // Load checklist based on equipment type
-        const facilityType = equipment.data?.facilityType || equipment.type;
-        if (facilityType) {
-            await loadChecklistForFacility(facilityType.toLowerCase());
-        } else {
-            console.warn('No facility type found for equipment');
-            showToast('Ingen sjekklistetype funnet for dette utstyret', 'warning');
-        }
-        
+        const equipment = await api.get(`/equipment/${equipmentId}`);
+        console.log('Loaded equipment:', equipment); // Debug
         return equipment;
     } catch (error) {
         console.error('Error loading equipment:', error);
-        throw new Error(`Kunne ikke laste anlegg: ${error.message}`);
+        throw error;
     }
 }
 
@@ -1020,7 +974,7 @@ async function loadServiceReport() {
 
 function renderAll() {
     console.log("Rendering all components...");
-    clearAllImageContainers();
+    // clearAllImageContainers(); // Ikke nødvendig - cleares allerede i initialize()
     
     try { renderHeader(); } catch (e) { console.error('Error in renderHeader:', e); }
     try { renderAnleggInfo(); } catch (e) { console.error('Error in renderAnleggInfo:', e); }
@@ -1083,20 +1037,12 @@ function renderHeader() {
     const header = document.getElementById('app-header');
     if (!header) return;
     
-    const orderId = state.orderId || 'ukjent';
-    
-    // Formater dagens dato
+    const tech = state.technician;
     const today = new Date();
-    const months = ['jan', 'feb', 'mar', 'apr', 'mai', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'des'];
-    const dateString = `${today.getDate()}. ${months[today.getMonth()]}. ${today.getFullYear()}`;
-    
-    // Hent tekniker-initialer (bruker samme pattern som orders.js og app.js)
-    const techInitials = state.technician?.initials || 'TK';
-    
+    const dateString = `${today.getDate()}. ${today.toLocaleString('no-NO', { month: 'short' })} ${today.getFullYear()}`;
+
     header.innerHTML = `
-        <a href="/app/orders.html?id=${orderId}" class="header-nav-button" title="Tilbake til ordre">
-            <i data-lucide="arrow-left"></i>
-        </a>
+        <a href="orders.html?id=${state.orderId}" class="header-nav-button" title="Tilbake til ordre">‹</a>
         <div class="header-main-content">
             <div class="logo-circle">
                 <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1111,19 +1057,14 @@ function renderHeader() {
             </div>
             <div class="company-info">
                 <h1>AIR-TECH AS</h1>
-                <span class="app-subtitle">Service gjennomføring</span>
+                <span class="app-subtitle">Service - ${state.equipment?.systemnavn || 'Anlegg'}</span>
             </div>
         </div>
         <div class="header-user-info">
-            <div class="technician-avatar">${techInitials}</div>
-            <span class="current-date">${dateString}</span>
+            ${tech ? `<div class="technician-avatar">${tech.initials}</div>` : ''}
+            <span>${dateString}</span>
         </div>
     `;
-    
-    // Re-initialize Lucide icons
-    if (window.lucide) {
-        lucide.createIcons();
-    }
 }
 
 function navigateBack() {
@@ -1140,58 +1081,134 @@ function renderAnleggInfo() {
     const container = document.getElementById('anlegg-info');
     if (!container) return;
 
-    // Status mapping
-    const statusMap = {
-        'not_started': { text: 'Ikke startet', icon: 'clock' },
-        'in_progress': { text: 'Under arbeid', icon: 'tool' },
-        'completed': { text: 'Ferdigstilt', icon: 'check-circle' }
+    // Status badge mapping
+    const getStatusBadge = (status) => {
+        const statusMap = {
+            'not_started': { text: 'IKKE STARTET', class: 'status-not-started' },
+            'draft': { text: 'UNDER ARBEID', class: 'status-in-progress' },
+            'in_progress': { text: 'UNDER ARBEID', class: 'status-in-progress' },
+            'completed': { text: 'FERDIG', class: 'status-completed' }
+        };
+        const info = statusMap[status] || statusMap['not_started'];
+        return `<span class="status-badge ${info.class}">${info.text}</span>`;
     };
-    const currentStatus = statusMap[state.equipment?.serviceStatus || 'not_started'];
 
-    const typeDisplayName = state.equipment?.systemtype || state.equipment?.type || '';
+    const statusBadge = state.serviceReport?.status ? 
+        getStatusBadge(state.serviceReport.status) : 
+        getStatusBadge('not_started');
+
+    // Hent kundeinfo fra order
+    const customerName = state.order?.customer_name || state.order?.customer?.name || 'Laster...';
+    const visitAddress = state.order?.customer_data?.physicalAddress || 
+                        state.order?.customer_data?.address || 
+                        state.order?.visit_address || 
+                        'Ikke registrert';
+
+    // Helper for escaping HTML
+    const escapeHTML = (str) => {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    };
 
     container.innerHTML = `
-        <div style="font-size: 10px; opacity: 0.6; margin-bottom: 4px;">
-            Ordrenummer: ${state.orderId}
+        <!-- Ordrenummer øverst i liten skrift -->
+        <div style="font-size: 11px; color: #6b7280; margin-bottom: 8px;">
+            Ordrenummer: ${escapeHTML(state.orderId || 'N/A')}
         </div>
+        
+        <!-- Header med tittel og status badge -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <h4 class="card-title" style="margin: 0;">Anleggsinformasjon</h4>
-            <div class="anlegg-status-indicator ${state.equipment?.serviceStatus || 'not_started'}">
-                <i data-lucide="${currentStatus.icon}" style="width: 16px; height: 16px;"></i>
-                <span>${currentStatus.text}</span>
+            <h3 style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;">Anleggsinformasjon</h3>
+            ${statusBadge}
+        </div>
+        
+        <!-- Kunde og besøksadresse (full bredde) -->
+        <div style="margin-bottom: 16px;">
+            <div style="margin-bottom: 12px;">
+                <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Kunde</div>
+                <div style="font-size: 14px; font-weight: 500; color: #111827;">${escapeHTML(customerName)}</div>
+            </div>
+            <div>
+                <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Besøksadresse</div>
+                <div style="font-size: 14px; color: #374151;">${escapeHTML(visitAddress)}</div>
             </div>
         </div>
-        <div class="anlegg-info-grid">
-            <div class="info-item">
-                <span class="label">Kunde</span>
-                <span class="value">${state.order?.customer?.name || 'Laster...'}</span>
+        
+        <!-- Anleggsinfo i to kolonner -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin-bottom: 16px;">
+            <!-- Anleggstype -->
+            <div>
+                <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Anleggstype</div>
+                <div style="font-size: 14px; font-weight: 500; color: #111827;">${escapeHTML(state.equipment?.systemtype || 'N/A')}</div>
             </div>
-            <div class="info-item">
-                <span class="label">Anleggstype</span>
-                <span class="value">${typeDisplayName}</span>
+            
+            <!-- Systemnummer -->
+            <div>
+                <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Systemnummer</div>
+                <div style="font-size: 14px; color: #374151;">${escapeHTML(state.equipment?.systemnummer || 'N/A')}</div>
             </div>
-            <div class="info-item">
-                <span class="label">Plassering</span>
-                <span class="value">${state.equipment?.plassering || state.equipment?.name || ''}</span>
+            
+            <!-- Systemnavn -->
+            <div>
+                <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Systemnavn</div>
+                <div style="font-size: 14px; color: #374151;">${escapeHTML(state.equipment?.systemnavn || 'N/A')}</div>
+            </div>
+            
+            <!-- Plassering -->
+            <div>
+                <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Plassering</div>
+                <div style="font-size: 14px; color: #374151;">${escapeHTML(state.equipment?.plassering || 'N/A')}</div>
             </div>
         </div>
-        ${state.equipment?.internalNotes ? `
-            <div class="internal-notes-section" style="margin-top: 12px; padding: 12px; background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px;">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                    <i data-lucide="info" style="width: 16px; height: 16px; color: #856404;"></i>
-                    <strong style="color: #856404; font-size: 14px;">Intern kommentar</strong>
-                </div>
-                <div style="color: #856404; font-size: 14px; line-height: 1.4;">
-                    ${state.equipment.internalNotes}
+
+        ${state.serviceReport?.reportData?.systemFields ? `
+            <!-- SystemFields fra sjekkliste -->
+            <div style="margin-bottom: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+                <div style="font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 12px;">Tilleggsinformasjon fra sjekkliste</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px;">
+                    ${state.serviceReport.reportData.systemFields.etasje ? `
+                        <div>
+                            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Etasje</div>
+                            <div style="font-size: 14px; color: #374151;">${escapeHTML(state.serviceReport.reportData.systemFields.etasje)}</div>
+                        </div>
+                    ` : ''}
+                    ${state.serviceReport.reportData.systemFields.leilighet_nr ? `
+                        <div>
+                            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Leilighet nr.</div>
+                            <div style="font-size: 14px; color: #374151;">${escapeHTML(state.serviceReport.reportData.systemFields.leilighet_nr)}</div>
+                        </div>
+                    ` : ''}
+                    ${state.serviceReport.reportData.systemFields.aggregat_type ? `
+                        <div>
+                            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Aggregat type</div>
+                            <div style="font-size: 14px; color: #374151;">${escapeHTML(state.serviceReport.reportData.systemFields.aggregat_type)}</div>
+                        </div>
+                    ` : ''}
                 </div>
             </div>
         ` : ''}
+        
+        <!-- Betjener (hvis finnes) -->
+        ${state.equipment?.betjener ? `
+        <div style="margin-bottom: 16px;">
+            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Betjener</div>
+            <div style="font-size: 14px; color: #374151;">${escapeHTML(state.equipment.betjener)}</div>
+        </div>
+        ` : ''}
+        
+        <!-- Intern kommentar (hvis finnes) -->
+        ${state.equipment?.notater ? `
+        <div style="padding: 12px; background-color: #fffbeb; border-radius: 6px; border: 1px solid #fef3c7;">
+            <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
+                <span style="color: #f59e0b;">⚠️</span>
+                <span style="font-size: 12px; font-weight: 600; color: #92400e;">Intern kommentar</span>
+            </div>
+            <div style="font-size: 13px; color: #78350f; line-height: 1.4;">${escapeHTML(state.equipment.notater)}</div>
+        </div>
+        ` : ''}
     `;
-    
-    // Initialize lucide icons
-    if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
-    }
 }
 
 function renderComponentList() {
@@ -1346,8 +1363,7 @@ function renderChecklist() {
     const hasChecklistItems = state.checklistTemplate?.checklistItems && 
                              state.checklistTemplate.checklistItems.length > 0;
     
-    // NYTT: Rydd opp bilder før re-rendering
-    clearAllImageContainers();
+    // clearAllImageContainers(); // Ikke nødvendig ved hver re-render
     
     container.style.display = hasChecklistItems ? 'block' : 'none';
     
@@ -1458,7 +1474,7 @@ function createChecklistItemHTML(item) {
         case 'tilstandsgrad_dropdown':
             return createTilstandsgradDropdownItemHTML(item);
         case 'konsekvensgrad_dropdown':
-            return createKonsekvenssgradDropdownItemHTML(item);
+            return createKonsekvensgradDropdownItemHTML(item);
         case 'timer':
             return createTimerItemHTML(item);
         case 'multi_checkbox':
@@ -1777,35 +1793,31 @@ function createVirkningsgradItemHTML(item) {
 }
 
 function createTilstandsgradDropdownItemHTML(item) {
-    const tgOptions = ['TG-0', 'TG-1', 'TG-2', 'TG-3', 'TG-4', 'TG-IU'];
-    const optionsHTML = tgOptions.map(opt => `<option value="${opt}">${opt}</option>`).join('');
-    
     return `
-        <div class="checklist-item" data-item-id="${item.id}" data-item-type="tilstandsgrad_dropdown">
-            <span class="item-label">${item.label}</span>
-            <div class="item-controls">
-                <select id="select-${item.id}" class="checklist-dropdown">
-                    <option value="">Velg TG...</option>
-                    ${optionsHTML}
-                </select>
-            </div>
+        <div class="form-group">
+            <label>${item.label}</label>
+            <select id="select-${item.id}" class="form-control checklist-dropdown">
+                <option value="">Velg tilstandsgrad</option>
+                <option value="0">TG0 - Ingen symptomer</option>
+                <option value="1">TG1 - Svake symptomer</option>
+                <option value="2">TG2 - Middels kraftige symptomer</option>
+                <option value="3">TG3 - Kraftige symptomer</option>
+            </select>
         </div>
     `;
 }
 
-function createKonsekvenssgradDropdownItemHTML(item) {
-    const kgOptions = ['KG-0', 'KG-1', 'KG-2', 'KG-3', 'KG-4', 'KG-IU'];
-    const optionsHTML = kgOptions.map(opt => `<option value="${opt}">${opt}</option>`).join('');
-    
+function createKonsekvensgradDropdownItemHTML(item) {
     return `
-        <div class="checklist-item" data-item-id="${item.id}" data-item-type="konsekvensgrad_dropdown">
-            <span class="item-label">${item.label}</span>
-            <div class="item-controls">
-                <select id="select-${item.id}" class="checklist-dropdown">
-                    <option value="">Velg KG...</option>
-                    ${optionsHTML}
-                </select>
-            </div>
+        <div class="form-group">
+            <label>${item.label}</label>
+            <select id="select-${item.id}" class="form-control checklist-dropdown">
+                <option value="">Velg konsekvensgrad</option>
+                <option value="0">KG0 - Ingen konsekvens</option>
+                <option value="1">KG1 - Liten konsekvens</option>
+                <option value="2">KG2 - Middels konsekvens</option>
+                <option value="3">KG3 - Stor konsekvens</option>
+            </select>
         </div>
     `;
 }
@@ -2050,13 +2062,7 @@ function clearAllImageContainers() {
 function resetAndLoadForm(isEditing = false) {
     console.log('🔄 Resetting form...');
     
-    // KOMMENTER UT:
-    // clearAllImageContainers();  // ← Dette kalles alt for ofte
-    
-    // NYTT: Vent litt for å sikre clearing
-    setTimeout(() => {
-        console.log('✅ Image clearing complete');
-    }, 50);
+    // clearAllImageContainers(); // Ikke nødvendig - bilder cleares kun ved behov
 
     if (!isEditing) {
         state.editingComponentIndex = null;
@@ -2126,7 +2132,7 @@ function loadExistingReportData() {
     const reportData = state.serviceReport.reportData;
     console.log('📊 Report data structure:', {
         hasChecklist: !!reportData.checklist,
-        hasSystemData: !!reportData.systemData,
+        hasSystemFields: !!reportData.systemData,
         hasProducts: !!reportData.products,
         hasAdditionalWork: !!reportData.additionalWork,
         checklistKeys: reportData.checklist ? Object.keys(reportData.checklist) : []
@@ -2134,14 +2140,12 @@ function loadExistingReportData() {
     
     // 1. LAST INN SYSTEM FIELDS
     if (reportData.systemData && state.checklistTemplate?.systemFields) {
-    console.log('📝 Loading system fields...');
     state.checklistTemplate.systemFields.forEach(field => {
-        const input = document.getElementById(`system-${field.name}`);  // ← ENDRE til .name
-        const value = reportData.systemData[field.name] || reportData.systemData[field.name];
+        const input = document.getElementById(`system-${field.name}`);
+        const value = reportData.systemData?.[field.name];
         
-        if (input && value) {
+        if (input && value !== undefined && value !== null) {
             input.value = value;
-            console.log(`  ✅ Loaded ${field.label}: ${value}`);
         }
     });
 }
@@ -2150,76 +2154,38 @@ function loadExistingReportData() {
     if (reportData.checklist && state.checklistTemplate?.checklistItems) {
         console.log('📋 Loading checklist items...');
         populateChecklistItems(state.checklistTemplate.checklistItems, reportData.checklist);
+    } else {
+        console.log('⚠️ Missing checklist data or template');
     }
     
     // 3. LAST INN PRODUKTER
-    if (reportData.products && reportData.products.length > 0) {
+    if (reportData.products && Array.isArray(reportData.products) && reportData.products.length > 0) {
         console.log(`📦 Loading ${reportData.products.length} products...`);
-        reportData.products.forEach(product => addProductLine(product));
-    }
-    
-    // 4. LAST INN TILLEGGSARBEID
-    if (reportData.additionalWork && reportData.additionalWork.length > 0) {
-        console.log(`🔧 Loading ${reportData.additionalWork.length} additional work items...`);
-        reportData.additionalWork.forEach(work => addAdditionalWorkLine(work));
-    }
-    
-    // 5. LAST INN OVERALL COMMENT
-    const overallCommentEl = document.getElementById('overall-comment');
-    if (overallCommentEl && reportData.overallComment) {
-        overallCommentEl.value = reportData.overallComment;
-        console.log('💬 Loaded overall comment');
-    }
-    
-    console.log('✅ Existing report data loaded successfully!');
-}
-function loadExistingReportData() {
-    console.log('📥 Loading existing report data into form...');
-    
-    if (!state.serviceReport?.reportData) {
-        console.log('⚠️ No existing report data to load');
-        return;
-    }
-    
-    const reportData = state.serviceReport.reportData;
-    console.log('📊 Report data structure:', {
-        hasChecklist: !!reportData.checklist,
-        hasSystemData: !!reportData.systemData,
-        hasProducts: !!reportData.products,
-        hasAdditionalWork: !!reportData.additionalWork,
-        checklistKeys: reportData.checklist ? Object.keys(reportData.checklist) : []
-    });
-    
-    // 1. LAST INN SYSTEM FIELDS
-    if (reportData.systemData && state.checklistTemplate?.systemFields) {
-        console.log('📝 Loading system fields...');
-        state.checklistTemplate.systemFields.forEach(field => {
-            const input = document.getElementById(`system-${field.id}`);
-            const value = reportData.systemData[field.id]?.value || reportData.systemData[field.id];
-            
-            if (input && value) {
-                input.value = value;
-                console.log(`  ✅ Loaded ${field.label}: ${value}`);
+        // Clear existing products first
+        const container = document.getElementById('product-lines-container');
+        if (container) container.innerHTML = '';
+        reportData.products.forEach(product => {
+            if (product && product.name) { // Validate product data
+                addProductLine(product);
             }
         });
-    }
-    
-    // 2. LAST INN CHECKLIST DATA
-    if (reportData.checklist && state.checklistTemplate?.checklistItems) {
-        console.log('📋 Loading checklist items...');
-        populateChecklistItems(state.checklistTemplate.checklistItems, reportData.checklist);
-    }
-    
-    // 3. LAST INN PRODUKTER
-    if (reportData.products && reportData.products.length > 0) {
-        console.log(`📦 Loading ${reportData.products.length} products...`);
-        reportData.products.forEach(product => addProductLine(product));
+    } else {
+        console.log('⚠️ No products to load');
     }
     
     // 4. LAST INN TILLEGGSARBEID
-    if (reportData.additionalWork && reportData.additionalWork.length > 0) {
+    if (reportData.additionalWork && Array.isArray(reportData.additionalWork) && reportData.additionalWork.length > 0) {
         console.log(`🔧 Loading ${reportData.additionalWork.length} additional work items...`);
-        reportData.additionalWork.forEach(work => addAdditionalWorkLine(work));
+        // Clear existing work items first
+        const container = document.getElementById('additional-work-lines-container');
+        if (container) container.innerHTML = '';
+        reportData.additionalWork.forEach(work => {
+            if (work && work.description) { // Validate work data
+                addAdditionalWorkLine(work);
+            }
+        });
+    } else {
+        console.log('⚠️ No additional work to load');
     }
     
     // 5. LAST INN OVERALL COMMENT
@@ -2231,6 +2197,7 @@ function loadExistingReportData() {
     
     console.log('✅ Existing report data loaded successfully!');
 }
+
 function loadChecklistForEditing(index) {
     const component = state.serviceReport.reportData.components[index];
     if (!component) return;
@@ -2651,7 +2618,7 @@ async function saveChecklist(event, showToastMessage = true) {
     if (hasSystemFields) {
         for (const field of state.checklistTemplate.systemFields) {
             if (field.required) {
-                const input = document.getElementById(`system-${field.id}`); // RIKTIG ID!
+                const input = document.getElementById(`system-${field.name}`);  // ← ENDRE HER
                 if (!input || input.value.trim() === '') {
                     if (showToastMessage) {
                         showToast(`${field.label} må fylles ut før du kan lagre.`, 'error');
@@ -2673,11 +2640,10 @@ async function saveChecklist(event, showToastMessage = true) {
         }
         
         // Oppdater kun checklist-data uten å ødelegge resten
-        state.serviceReport.reportData.systemData = componentData.detailsWithLabels;
+        state.serviceReport.reportData.systemData = componentData.systemData;  // ← ENDRE HER
         state.serviceReport.reportData.checklist = componentData.checklist;
         state.serviceReport.reportData.products = componentData.products;
-        state.serviceReport.reportData.additionalWork = componentData.additionalWork;
-        
+        state.serviceReport.reportData.additionalWork = componentData.additionalWork;        
         // Lagre til backend
         const response = await api.put(`/reports/${state.serviceReport.reportId}`, {
             orderId: state.orderId,
@@ -2713,16 +2679,13 @@ function resetForm() {
 function collectComponentData() {
     console.log('Collecting component data...');
 
-    // Samle systemFields med både ID og label
+    // Samle systemFields
     const systemFieldsData = {};
     if (state.checklistTemplate?.systemFields) {
         state.checklistTemplate.systemFields.forEach(field => {
-            const input = document.getElementById(`system-${field.id}`);
+            const input = document.getElementById(`system-${field.name}`);
             if (input && input.value) {
-                systemFieldsData[field.id] = {
-                    label: field.label,
-                    value: input.value
-                };
+                systemFieldsData[field.name] = input.value;
             }
         });
     }
@@ -2795,15 +2758,7 @@ function collectComponentData() {
             name: state.checklistTemplate.name,
             version: state.checklistTemplate.version || '1.0'
         },
-        systemData: {
-            systemtype: state.equipment?.systemtype,
-            systemnummer: state.equipment?.systemnummer,
-            systemnavn: state.equipment?.systemnavn,
-            plassering: state.equipment?.plassering,
-            betjener: state.equipment?.betjener,
-            location: state.equipment?.location
-        },
-        systemFields: systemFieldsData,  // Med labels
+        systemData: systemFieldsData,
         checklist: checklist,             // Med faktiske navn som keys
         products: products,
         additionalWork: additionalWork,
@@ -2811,8 +2766,103 @@ function collectComponentData() {
     };
 }
 
+function collectChecklistData() {
+    console.log('📋 Collecting checklist data...');
+    
+    const checklistData = {};
+    const checklistContainer = document.getElementById('checklist-items-container');
+    
+    if (!checklistContainer) {
+        console.warn('⚠️ No checklist container found');
+        return checklistData;
+    }
+    
+    // Samle inn data fra alle sjekkliste-elementer
+    const checklistItems = checklistContainer.querySelectorAll('.checklist-item, .checklist-item-fullwidth');
+    
+    checklistItems.forEach(item => {
+        const itemId = item.dataset.itemId;
+        const itemType = item.dataset.itemType;
+        
+        if (!itemId) return;
+        
+        console.log(`  🔍 Collecting item ${itemId} (type: ${itemType})`);
+        
+        switch (itemType) {
+            case 'ok_avvik':
+            case 'ok_byttet_avvik':
+                const activeStatusBtn = item.querySelector('.status-btn.active');
+                if (activeStatusBtn) {
+                    const status = activeStatusBtn.dataset.status;
+                    checklistData[itemId] = { status };
+                    
+                    // Hent avvik-kommentar hvis status er 'avvik'
+                    if (status === 'avvik') {
+                        const avvikContainer = document.getElementById(`avvik-${itemId}`);
+                        if (avvikContainer) {
+                            const textarea = avvikContainer.querySelector('textarea');
+                            if (textarea && textarea.value) {
+                                checklistData[itemId].comment = textarea.value;
+                            }
+                        }
+                    }
+                    
+                    // Hent byttet-kommentar hvis status er 'byttet'
+                    if (status === 'byttet') {
+                        const byttetContainer = document.getElementById(`byttet-${itemId}`);
+                        if (byttetContainer) {
+                            const textarea = byttetContainer.querySelector('textarea');
+                            if (textarea && textarea.value) {
+                                checklistData[itemId].comment = textarea.value;
+                            }
+                        }
+                    }
+                }
+                break;
+                
+            case 'dropdown_ok_avvik':
+            case 'dropdown_ok_avvik_comment':
+            case 'switch_select':
+            case 'dropdown':
+                const dropdownValue = document.getElementById(`select-${itemId}`);
+                if (dropdownValue && dropdownValue.value) {
+                    checklistData[itemId] = dropdownValue.value;
+                }
+                break;
+                
+            case 'tilstandsgrad_dropdown':
+            case 'konsekvensgrad_dropdown':
+                const gradeDropdown = document.getElementById(`select-${itemId}`);
+                if (gradeDropdown && gradeDropdown.value) {
+                    checklistData[itemId] = gradeDropdown.value;
+                }
+                break;
+                
+            case 'temperature':
+            case 'text':
+                const textInput = document.getElementById(itemId);
+                if (textInput && textInput.value) {
+                    checklistData[itemId] = textInput.value;
+                }
+                break;
+        }
+    });
+    
+    // Samle inn sub-items også
+    const subItems = checklistContainer.querySelectorAll('[data-group]');
+    subItems.forEach(item => {
+        const itemId = item.id;
+        const isChecked = item.querySelector('input[type="radio"]:checked');
+        if (isChecked) {
+            checklistData[itemId] = true;
+        }
+    });
+    
+    console.log('✅ Checklist data collected:', checklistData);
+    return checklistData;
+}
+
 function getChecklistItemValue(itemId) {
-    // Finn sjekkliste-elementet i DOM
     const element = document.querySelector(`[data-item-id="${itemId}"]`);
     if (!element) {
         console.warn(`Element not found for item ID: ${itemId}`);
@@ -2820,18 +2870,17 @@ function getChecklistItemValue(itemId) {
     }
     
     const itemType = element.dataset.itemType;
+    let value = null;
     
     switch (itemType) {
         case 'ok_avvik':
         case 'ok_byttet_avvik': {
-            // Sjekk hvilken status-knapp som er aktiv
             const activeButton = element.querySelector('.status-btn.active');
             if (!activeButton) return null;
             
             const status = activeButton.dataset.status;
             const result = { status };
             
-            // Hvis avvik eller byttet, hent kommentar
             if (status === 'avvik') {
                 const avvikContainer = document.getElementById(`avvik-${itemId}`);
                 if (avvikContainer && avvikContainer.classList.contains('show')) {
@@ -2852,7 +2901,6 @@ function getChecklistItemValue(itemId) {
         case 'numeric': {
             const input = element.querySelector(`#number-${itemId}, input[type="number"]`);
             if (!input) return null;
-            
             const numericValue = parseFloat(input.value);
             return isNaN(numericValue) ? null : numericValue;
         }
@@ -2885,7 +2933,6 @@ function getChecklistItemValue(itemId) {
                 dropdownValue: select ? select.value : ''
             };
             
-            // Hvis avvik, hent kommentar
             if (status === 'avvik') {
                 const avvikContainer = document.getElementById(`avvik-${itemId}`);
                 if (avvikContainer && avvikContainer.classList.contains('show')) {
@@ -2900,18 +2947,15 @@ function getChecklistItemValue(itemId) {
         case 'dropdown_ok_avvik_comment': {
             const select = element.querySelector('.checklist-dropdown');
             const activeButton = element.querySelector('.status-btn.active');
-            const commentTextarea = element.querySelector(`#comment-${itemId}`);
             
             if (!activeButton) return null;
             
             const status = activeButton.dataset.status;
             const result = { 
                 status,
-                dropdownValue: select ? select.value : '',
-                comment: commentTextarea ? commentTextarea.value : ''
+                dropdownValue: select ? select.value : ''
             };
             
-            // Hvis avvik, hent avvik-kommentar også
             if (status === 'avvik') {
                 const avvikContainer = document.getElementById(`avvik-${itemId}`);
                 if (avvikContainer && avvikContainer.classList.contains('show')) {
@@ -2932,7 +2976,6 @@ function getChecklistItemValue(itemId) {
                 status: activeButton ? activeButton.dataset.status : null
             };
             
-            // Hvis avvik, hent kommentar
             if (result.status === 'avvik') {
                 const avvikContainer = document.getElementById(`avvik-${itemId}`);
                 if (avvikContainer && avvikContainer.classList.contains('show')) {
@@ -2957,12 +3000,10 @@ function getChecklistItemValue(itemId) {
                 status: activeButton ? activeButton.dataset.status : null
             };
             
-            // Beregn virkningsgrad hvis alle verdier finnes
             if (result.t2 !== null && result.t3 !== null && result.t7 !== null) {
                 result.virkningsgrad = calculateVirkningsgrad(result.t2, result.t3, result.t7);
             }
             
-            // Hvis avvik, hent kommentar
             if (result.status === 'avvik') {
                 const avvikContainer = document.getElementById(`avvik-${itemId}`);
                 if (avvikContainer && avvikContainer.classList.contains('show')) {
@@ -2973,13 +3014,11 @@ function getChecklistItemValue(itemId) {
             
             return result;
         }
-        
+
         case 'tilstandsgrad_dropdown':
         case 'konsekvensgrad_dropdown': {
-            // Prøv først med ID, deretter med class
-            const select = element.querySelector(`#select-${itemId}`) || 
-                          element.querySelector('.checklist-dropdown');
-            return select ? select.value : null;
+            const dropdown = element.querySelector(`#select-${itemId}`);
+            return dropdown ? dropdown.value : null;
         }
         
         case 'group_selection': {
@@ -3005,7 +3044,6 @@ function getChecklistItemValue(itemId) {
         
         case 'timer': {
             const display = element.querySelector('.timer-display');
-            const timerData = element.dataset.timerData;
             return display ? display.textContent : '00:00:00';
         }
         
@@ -3015,7 +3053,6 @@ function getChecklistItemValue(itemId) {
         }
         
         case 'image_only': {
-            // Dette returnerer bare om det finnes bilder
             const images = element.querySelectorAll('.uploaded-image');
             return images.length > 0;
         }
@@ -3024,234 +3061,6 @@ function getChecklistItemValue(itemId) {
             console.warn(`Unknown input type: ${itemType} for item: ${itemId}`);
             return null;
     }
-}
-
-function collectChecklistData(items = state.checklistTemplate?.checklistItems || []) {
-    const data = {};
-    
-    items.forEach(item => {
-        // Bruk item.label som key i stedet for item.id
-        const key = item.label; // "Funksjonskontroll" i stedet for "item1"
-        let value = null;
-        
-        const element = document.querySelector(`[data-item-id="${item.id}"]`);
-        if (!element) return;
-        
-        const itemType = element.dataset.itemType;
-        
-        switch (itemType) {
-            case 'ok_avvik':
-            case 'ok_byttet_avvik': {
-                // Sjekk hvilken status-knapp som er aktiv
-                const activeButton = element.querySelector('.status-btn.active');
-                if (!activeButton) { value = null; break; }
-                
-                const status = activeButton.dataset.status;
-                value = { status };
-                
-                // Hvis avvik eller byttet, hent kommentar
-                if (status === 'avvik') {
-                    const avvikContainer = document.getElementById(`avvik-${item.id}`);
-                    if (avvikContainer && avvikContainer.classList.contains('show')) {
-                        const textarea = avvikContainer.querySelector('textarea');
-                        value.avvikComment = textarea ? textarea.value : '';
-                    }
-                } else if (status === 'byttet') {
-                    const byttetContainer = document.getElementById(`byttet-${item.id}`);
-                    if (byttetContainer && byttetContainer.classList.contains('show')) {
-                        const textarea = byttetContainer.querySelector('textarea');
-                        value.byttetComment = textarea ? textarea.value : '';
-                    }
-                }
-                break;
-            }
-            
-            case 'numeric': {
-                const input = element.querySelector(`#number-${item.id}, input[type="number"]`);
-                if (!input) { value = null; break; }
-                
-                const numericValue = parseFloat(input.value);
-                value = isNaN(numericValue) ? null : numericValue;
-                break;
-            }
-            
-            case 'text': {
-                const input = element.querySelector(`#text-${item.id}, input[type="text"]`);
-                value = input ? input.value : null;
-                break;
-            }
-            
-            case 'textarea':
-            case 'comment': {
-                const textarea = element.querySelector(`#comment-${item.id}, textarea`);
-                value = textarea ? textarea.value : null;
-                break;
-            }
-            
-            case 'checkbox': {
-                const checkbox = element.querySelector(`#checkbox-${item.id}, input[type="checkbox"]`);
-                value = checkbox ? checkbox.checked : null;
-                break;
-            }
-            
-            case 'dropdown_ok_avvik': {
-                const select = element.querySelector('.checklist-dropdown');
-                const activeButton = element.querySelector('.status-btn.active');
-                
-                if (!activeButton) { value = null; break; }
-                
-                const status = activeButton.dataset.status;
-                value = { 
-                    status,
-                    dropdownValue: select ? select.value : ''
-                };
-                
-                if (status === 'avvik') {
-                    const avvikContainer = document.getElementById(`avvik-${item.id}`);
-                    if (avvikContainer && avvikContainer.classList.contains('show')) {
-                        const textarea = avvikContainer.querySelector('textarea');
-                        value.avvikComment = textarea ? textarea.value : '';
-                    }
-                }
-                break;
-            }
-            
-            case 'dropdown_ok_avvik_comment': {
-                const select = element.querySelector('.checklist-dropdown');
-                const activeButton = element.querySelector('.status-btn.active');
-                const commentTextarea = element.querySelector(`#comment-${item.id}`);
-                
-                if (!activeButton) { value = null; break; }
-                
-                const status = activeButton.dataset.status;
-                value = { 
-                    status,
-                    dropdownValue: select ? select.value : ''
-                };
-                
-                if (status === 'avvik') {
-                    const avvikContainer = document.getElementById(`avvik-${item.id}`);
-                    if (avvikContainer && avvikContainer.classList.contains('show')) {
-                        const textarea = avvikContainer.querySelector('textarea');
-                        value.avvikComment = textarea ? textarea.value : '';
-                    }
-                }
-                break;
-            }
-            
-            case 'temperature': {
-                const tempInput = element.querySelector(`#temp-${item.id}`);
-                const activeButton = element.querySelector('.status-btn.active');
-                
-                value = {
-                    temperature: tempInput ? parseFloat(tempInput.value) : null,
-                    status: activeButton ? activeButton.dataset.status : null
-                };
-                
-                if (value.status === 'avvik') {
-                    const avvikContainer = document.getElementById(`avvik-${item.id}`);
-                    if (avvikContainer && avvikContainer.classList.contains('show')) {
-                        const textarea = avvikContainer.querySelector('textarea');
-                        value.avvikComment = textarea ? textarea.value : '';
-                    }
-                }
-                break;
-            }
-            
-            case 'virkningsgrad': {
-                const t2Input = element.querySelector(`#t2-${item.id}`);
-                const t3Input = element.querySelector(`#t3-${item.id}`);  
-                const t7Input = element.querySelector(`#t7-${item.id}`);
-                const activeButton = element.querySelector('.status-btn.active');
-                
-                value = {
-                    t2: t2Input ? parseFloat(t2Input.value) : null,
-                    t3: t3Input ? parseFloat(t3Input.value) : null,
-                    t7: t7Input ? parseFloat(t7Input.value) : null,
-                    status: activeButton ? activeButton.dataset.status : null
-                };
-                
-                if (value.t2 !== null && value.t3 !== null && value.t7 !== null) {
-                    value.virkningsgrad = calculateVirkningsgrad(value.t2, value.t3, value.t7);
-                }
-                
-                if (value.status === 'avvik') {
-                    const avvikContainer = document.getElementById(`avvik-${item.id}`);
-                    if (avvikContainer && avvikContainer.classList.contains('show')) {
-                        const textarea = avvikContainer.querySelector('textarea');
-                        value.avvikComment = textarea ? textarea.value : '';
-                    }
-                }
-                break;
-            }
-            
-            case 'tilstandsgrad_dropdown':
-            case 'konsekvensgrad_dropdown': {
-                const select = element.querySelector(`#select-${item.id}`) || 
-                              element.querySelector('.checklist-dropdown');
-                value = select ? select.value : null;
-                break;
-            }
-            
-            case 'group_selection': {
-                const checkedInputs = element.querySelectorAll('input[type="radio"]:checked');
-                value = Array.from(checkedInputs).map(input => input.value);
-                break;
-            }
-            
-            case 'switch_select': {
-                const select = element.querySelector(`#select-${item.id}`);
-                value = select ? select.value : null;
-                break;
-            }
-            
-            case 'dropdown': {
-                const select = element.querySelector(`#dropdown-${item.id}`) || 
-                              element.querySelector('.checklist-dropdown');
-                value = select ? select.value : null;
-                break;
-            }
-            
-            case 'multi_checkbox': {
-                const checkedBoxes = element.querySelectorAll('input[type="checkbox"]:checked');
-                value = Array.from(checkedBoxes).map(box => box.value);
-                break;
-            }
-            
-            case 'timer': {
-                const display = element.querySelector('.timer-display');
-                const timerData = element.dataset.timerData;
-                value = display ? display.textContent : '00:00:00';
-                break;
-            }
-            
-            case 'rengjort_ikke_rengjort': {
-                const activeButton = element.querySelector('.status-btn.active');
-                value = activeButton ? activeButton.dataset.status : null;
-                break;
-            }
-            
-            case 'image_only': {
-                const images = element.querySelectorAll('.uploaded-image');
-                value = images.length > 0;
-                break;
-            }
-            
-            default:
-                console.warn(`Unknown input type: ${itemType} for item: ${item.id}`);
-                value = null;
-        }
-        
-        if (value !== null) {
-            data[key] = value;
-        }
-        
-        if (item.hasSubpoints && item.subpoints) {
-            Object.assign(data, collectChecklistData(item.subpoints));
-        }
-    });
-    
-    return data;
 }
 
 function collectProductData() {
@@ -3271,12 +3080,24 @@ function collectProductData() {
 function collectAdditionalWorkData() {
     const work = [];
     document.querySelectorAll('#additional-work-lines-container .work-item').forEach(item => {
-        const description = item.querySelector('.work-description').value;
-        const hours = item.querySelector('.work-hours').value;
-        const price = item.querySelector('.work-price').value;
+        const descriptionInput = item.querySelector('.work-description');
+        const hoursInput = item.querySelector('.work-hours');
+        const priceInput = item.querySelector('.work-price');
         
-        if (description && hours) {
-            work.push({ description, hours, price });
+        const description = descriptionInput?.value?.trim();
+        const hours = hoursInput?.value?.trim();
+        const price = priceInput?.value?.trim();
+        
+        // Valider at vi har minst beskrivelse og timer
+        if (description && hours && !isNaN(hours) && parseFloat(hours) > 0) {
+            work.push({ 
+                description, 
+                hours: parseFloat(hours), 
+                price: price ? parseFloat(price) : 0 
+            });
+        } else if (description || hours) {
+            // Warn hvis delvis utfylt
+            console.warn('Delvis utfylt tilleggsarbeid ignorert:', { description, hours, price });
         }
     });
     return work;
@@ -3468,90 +3289,6 @@ async function finalizeAnlegg() {
     } finally {
         setLoading(false);
     }
-}
-
-function showFinalizeConfirmationModal() {
-    return new Promise((resolve) => {
-        const modal = document.createElement('div');
-        modal.className = 'modal-overlay';
-        modal.innerHTML = `
-            <div class="modal-content" style="max-width: 90vw; margin: 20px;">
-                <h3>Ferdigstill anlegg?</h3>
-                <p>Er du sikker på at du vil ferdigstille anlegget?</p>
-                <p><strong>Du kan ikke endre anlegget igjen etter ferdigstilling.</strong></p>
-                <div class="modal-actions" style="display: flex; gap: 12px; margin-top: 20px;">
-                    <button id="confirm-finalize" class="btn-primary" style="flex: 1;">
-                        OK
-                    </button>
-                    <button id="cancel-finalize" class="btn-secondary" style="flex: 1;">
-                        Avbryt
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        document.getElementById('confirm-finalize').addEventListener('click', () => {
-            modal.remove();
-            resolve(true);
-        });
-        
-        document.getElementById('cancel-finalize').addEventListener('click', () => {
-            modal.remove();
-            resolve(false);
-        });
-        
-        // Lukk ved klikk utenfor
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.remove();
-                resolve(false);
-            }
-        });
-    });
-}
-
-function showFinalizeConfirmationModal() {
-    return new Promise((resolve) => {
-        const modal = document.createElement('div');
-        modal.className = 'modal-overlay';
-        modal.innerHTML = `
-            <div class="modal-content" style="max-width: 90vw; margin: 20px;">
-                <h3>Ferdigstill anlegg?</h3>
-                <p>Er du sikker på at du vil ferdigstille anlegget?</p>
-                <p><strong>Du kan ikke endre anlegget igjen etter ferdigstilling.</strong></p>
-                <div class="modal-actions" style="display: flex; gap: 12px; margin-top: 20px;">
-                    <button id="confirm-finalize" class="btn-primary" style="flex: 1;">
-                        OK
-                    </button>
-                    <button id="cancel-finalize" class="btn-secondary" style="flex: 1;">
-                        Avbryt
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        document.getElementById('confirm-finalize').addEventListener('click', () => {
-            modal.remove();
-            resolve(true);
-        });
-        
-        document.getElementById('cancel-finalize').addEventListener('click', () => {
-            modal.remove();
-            resolve(false);
-        });
-        
-        // Lukk ved klikk utenfor
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.remove();
-                resolve(false);
-            }
-        });
-    });
 }
 
 function setLoading(isLoading) {
@@ -3915,9 +3652,7 @@ async function loadAndRenderImages() {
 async function renderAvvikImagesForChecklist(currentReportId) {
     console.log('🖼️ Rendering avvik images for checklist items');
     
-    // KRITISK: ALLTID tøm containere først
-    console.log('🧹 Force clearing all image containers before render...');
-    clearAllImageContainers();
+    // clearAllImageContainers(); // ← KOMMENTER UT - ikke nødvendig her
     
     // NYTT: Kort pause for å sikre clearing er fullført
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -4631,3 +4366,74 @@ function debugChecklistItemIds() {
     console.log('   Current photo context:', window.currentPhotoContext);
 }
 
+function showFinalizeConfirmationModal() {
+    return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.className = 'finalize-confirm-modal';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+        
+        modal.innerHTML = `
+            <div style="background: white; border-radius: 16px; max-width: 400px; width: 90%; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.3);">
+                <div style="padding: 24px 24px 16px; border-bottom: 1px solid #E5E7EB;">
+                    <h3 style="margin: 0; font-size: 20px; font-weight: 600; color: #111827;">Ferdigstill anlegg?</h3>
+                </div>
+                
+                <div style="padding: 20px 24px;">
+                    <p style="margin: 0 0 12px 0; color: #374151; font-size: 15px; line-height: 1.6;">
+                        Er du sikker på at du vil ferdigstille anlegget?
+                    </p>
+                    <p style="margin: 0; color: #DC2626; font-weight: 500; font-size: 14px; line-height: 1.5;">
+                        Du kan ikke endre anlegget igjen etter ferdigstilling.
+                    </p>
+                </div>
+                
+                <div style="padding: 16px 24px; background: #F9FAFB; border-top: 1px solid #E5E7EB; display: flex; gap: 12px;">
+                    <button id="cancel-finalize" style="flex: 1; padding: 12px; border-radius: 10px; font-weight: 600; font-size: 15px; border: 1px solid #D1D5DB; background: white; color: #374151; cursor: pointer;">
+                        Avbryt
+                    </button>
+                    <button id="confirm-finalize" style="flex: 1; padding: 12px; border-radius: 10px; font-weight: 600; font-size: 15px; border: none; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: white; cursor: pointer; box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);">
+                        OK
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        document.getElementById('confirm-finalize').onclick = () => {
+            modal.remove();
+            resolve(true);
+        };
+        
+        document.getElementById('cancel-finalize').onclick = () => {
+            modal.remove();
+            resolve(false);
+        };
+        
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                modal.remove();
+                resolve(false);
+            }
+        };
+    });
+}
+function updateStatusDisplay() {
+    const statusBadge = document.querySelector('.status-badge');
+    if (!statusBadge) return;
+    
+    const status = state.serviceReport?.status || 'not_started';
+    
+    // Map status til norsk tekst og CSS-klasser
+    const statusMap = {
+        'not_started': { text: 'Ikke startet', class: 'status-not-started' },
+        'in_progress': { text: 'Under arbeid', class: 'status-in-progress' },
+        'completed': { text: 'Ferdig', class: 'status-completed' }
+    };
+    
+    const statusInfo = statusMap[status] || statusMap['not_started'];
+    
+    // Oppdater tekst og klasser
+    statusBadge.textContent = statusInfo.text;
+    statusBadge.className = `status-badge ${statusInfo.class}`;
+}

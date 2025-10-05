@@ -305,7 +305,7 @@ function renderEquipmentList() {
     let equipmentHTML = `<button class="add-system-btn" data-action="add-equipment">+ Legg til Anlegg</button>`;
     
     if (pageState.equipment.length > 0) {
-        equipmentHTML += pageState.equipment.map(createEquipmentCardHTML).join('');
+        equipmentHTML += pageState.equipment.map(createEquipmentCard).join('');
     } else {
         equipmentHTML += `<p class="placeholder-text">Ingen anlegg funnet på kunde.</p>`;
     }
@@ -319,21 +319,25 @@ function renderEquipmentList() {
     container.innerHTML = `<div class="section-header"><h3>🏭 Anlegg for service</h3></div>` + equipmentHTML;
 }
 
-function createEquipmentCardHTML(eq) {
-    const statusMap = {
-        'not_started': 'Planlagt',
-        'in_progress': 'Pågår',
-        'completed': 'Ferdig'
-    };
-    const statusText = statusMap[eq.serviceStatus || 'not_started'] || 'Planlagt';
-    const statusClass = eq.serviceStatus || 'not_started';
+function createEquipmentCard(eq) {
     const isSelected = pageState.selectedEquipmentIds.includes(eq.id);
-
+    
+    // Map status correctly
+    const statusMap = {
+        'not_started': { text: 'Ikke startet', class: 'status-not-started' },
+        'in_progress': { text: 'Under arbeid', class: 'status-in-progress' }, 
+        'completed': { text: 'Ferdig', class: 'status-completed' }
+    };
+    
+    const serviceStatus = eq.serviceStatus || eq.serviceReportStatus || 'not_started';
+    const status = statusMap[serviceStatus] || statusMap['not_started'];
+    const statusClass = status.class;
+    const statusText = status.text;
+    
     return `
-        <article class="anlegg-kort ${statusClass} ${!isSelected ? 'not-selected' : ''}" 
-                 data-equipment-id="${eq.id}" 
-                 onclick="navigateToServicePage(${eq.id})">
-            <div class="kort-topp">
+        <article class="system-item ${serviceStatus} ${!isSelected ? 'not-selected' : ''}" 
+                 data-equipment-id="${eq.id}">
+            <div class="kort-topp" onclick="event.stopPropagation();">
                 <label class="checkbox-wrapper">
                     <input type="checkbox"
                            class="equipment-select-checkbox"
@@ -344,7 +348,7 @@ function createEquipmentCardHTML(eq) {
                 <span class="status-badge ${statusClass}">${statusText}</span>
             </div>
 
-            <div class="kort-innhold">
+            <div class="kort-innhold" onclick="navigateToServicePage(${eq.id})">
                 <div class="kolonne-venstre">
                     <div class="tittel-gruppe">
                         <h3 class="anlegg-tittel">${eq.systemnavn || 'Ikke navngitt'}</h3>
@@ -366,78 +370,65 @@ function createEquipmentCardHTML(eq) {
                     </div>
                     ` : '<div class="kommentar-boks tom">Ingen kommentar</div>'}
                     
-                    <button class="slett-knapp" data-action="delete-start" onclick="event.stopPropagation();">
+                    <button class="slett-knapp" onclick="event.stopPropagation(); startDeleteProcess(this);">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                     </button>
                 </div>
             </div>
             
-            <div class="confirm-delete-container" style="display: none;">
+            <div class="confirm-delete-container" style="display: none;" onclick="event.stopPropagation();">
+                <p>Er du sikker på at du vil deaktivere dette anlegget?</p>
+                <div class="form-group">
+                    <label>Årsak for deaktivering:</label>
+                    <textarea 
+                        id="deactivation-reason-${eq.id}"
+                        class="deactivation-reason" 
+                        placeholder="Oppgi årsak..."
+                        rows="2"
+                        onclick="event.stopPropagation();"
+                    ></textarea>
                 </div>
+                <div class="confirm-delete-actions">
+                    <button class="btn-cancel-delete" onclick="event.stopPropagation(); cancelDeleteProcess(this);">
+                        Avbryt
+                    </button>
+                    <button class="btn-delete-final" onclick="event.stopPropagation(); confirmDeleteEquipment(${eq.id});">
+                        Deaktiver anlegg
+                    </button>
+                </div>
+            </div>
         </article>
     `;
 }
 
-    function renderActionButtons() {
+function renderActionButtons() {
     const footer = document.querySelector('.action-buttons');
     if (!footer || !pageState.order) return;
     
-    // Finn kun valgte anlegg (de som har checkbox avkrysset)
     const selectedEquipment = pageState.equipment.filter(eq => 
         pageState.selectedEquipmentIds.includes(eq.id)
     );
     
-    // Sjekk om alle VALGTE anlegg er ferdigstilt
     const allSelectedCompleted = selectedEquipment.length > 0 && 
-        selectedEquipment.every(eq => eq.serviceStatus === 'completed');
+        selectedEquipment.every(eq => eq.serviceStatus === 'completed' || eq.serviceReportStatus === 'completed');
     
-    // Sjekk om ordren allerede er ferdigstilt
-    const isOrderCompleted = pageState.order.status === 'completed';
+    const orderCompleted = pageState.order.status === 'completed';
     
-    console.log('Action button status:', {
-        totalEquipment: pageState.equipment.length,
-        selectedCount: selectedEquipment.length,
-        allSelectedCompleted,
-        isOrderCompleted,
-        selectedIds: pageState.selectedEquipmentIds
-    });
-    
-    // Hvis ordre er ferdigstilt, vis kun klikbar status for rapport-regenerering
-    if (isOrderCompleted) {
+    if (orderCompleted) {
         footer.innerHTML = `
-            <button class="order-completed-button" onclick="handleRegenerateReport()">
-                <div class="order-completed-message">
-                    <i data-lucide="check-circle" style="color: #10b981;"></i>
-                    <span>Ordre er fullført</span>
-                </div>
+            <button class="primary-action-btn" disabled style="background-color: #10b981;">
+                <i data-lucide="check-circle"></i>
+                Ordre er fullført
             </button>
         `;
     } else {
-        // Ordre ikke ferdigstilt - vis ferdigstill-knappen
-        let buttonClass = 'btn-disabled';
-        let buttonText = 'Fullfør alle valgte anlegg først';
-        let disabled = true;
-        
-        if (selectedEquipment.length === 0) {
-            // Ingen anlegg valgt
-            buttonText = 'Velg anlegg som skal inkluderes i rapporten';
-        } else if (allSelectedCompleted) {
-            // Alle valgte anlegg er ferdigstilt
-            buttonClass = 'btn-success';
-            buttonText = `Ferdigstill ordre (${selectedEquipment.length} anlegg)`;
-            disabled = false;
-        } else {
-            // Noen valgte anlegg er ikke ferdigstilt ennå
-            const notCompleted = selectedEquipment.filter(eq => eq.serviceStatus !== 'completed').length;
-            buttonText = `${notCompleted} av ${selectedEquipment.length} valgte anlegg ikke ferdig`;
-        }
+        const buttonText = allSelectedCompleted ? 'Ferdigstill ordre' : 'Alle valgte anlegg må ferdigstilles først';
+        const buttonDisabled = !allSelectedCompleted;
         
         footer.innerHTML = `
-            <button 
-                class="btn ${buttonClass}" 
-                onclick="handleCompleteOrder()"
-                ${disabled ? 'disabled' : ''}
-            >
+            <button class="primary-action-btn" 
+                    onclick="handleCompleteOrder()" 
+                    ${buttonDisabled ? 'disabled' : ''}>
                 <i data-lucide="check-circle"></i>
                 ${buttonText}
             </button>
@@ -863,11 +854,11 @@ async function handleSaveEquipment(event) {
     const newEquipmentData = {
         customerId: customerId,
         systemtype: pageState.selectedEquipmentType,
-        systemnummer: `${pageState.selectedEquipmentType.slice(0,2).toUpperCase()}-${Date.now().toString().slice(-3)}`,
-        systemnavn: document.getElementById('plassering').value,
+        systemnummer: document.getElementById('systemnummer').value || `${pageState.selectedEquipmentType.slice(0,2).toUpperCase()}-${Date.now().toString().slice(-3)}`,
+        systemnavn: document.getElementById('systemnavn').value,
         plassering: document.getElementById('plassering').value,
-        betjener: null,
-        location: document.getElementById('plassering').value,
+        betjener: document.getElementById('betjener')?.value || null,
+        location: null, // ALLTID null - vi bruker ikke dette feltet
         notater: document.getElementById('internalNotes')?.value || '',
         status: 'active'
     };

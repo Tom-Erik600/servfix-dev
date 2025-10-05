@@ -2049,3 +2049,31 @@ button[type="submit"].action-btn.primary:hover {
         padding: 1px 6px;
     }
 }
+/* Status badges */
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.not_started,
+.status-badge.status-not-started {
+    background-color: #e5e7eb;
+    color: #6b7280;
+}
+
+.status-badge.in_progress,
+.status-badge.status-in-progress,
+.status-badge.draft {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.status-badge.completed,
+.status-badge.status-completed {
+    background-color: #dcfce7;
+    color: #16a34a;
+}
+

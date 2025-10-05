@@ -45,7 +45,7 @@ function splitReportDataForDB(reportData) {
   const dbData = {
     checklist_data: {
       checklist: reportData.checklist || {},
-      systemFields: reportData.systemFields || {},
+      systemFields: reportData.systemFields || {},  // ← FIX: Match frontend naming
       overallComment: reportData.overallComment || '',
       metadata: {
         version: '2.0',
@@ -67,81 +67,49 @@ function splitReportDataForDB(reportData) {
   return dbData;
 }
 
-// Helper funksjon for å kombinere database kolonner tilbake til frontend format
-function mergeDBDataToFrontendFormat(dbRow) {
-  if (!dbRow) return null;
-
-  const reportData = {
-    components: [],
-    overallComment: ''
-  };
-
-  // Hent base checklist data
-  const checklistData = dbRow.checklist_data || {};
-  reportData.overallComment = checklistData.overallComment || '';
-
-  // Lag map for å finne produkter og arbeid per komponent
-  const productsByComponent = {};
-  const workByComponent = {};
-
-  // Grupper produkter etter komponent detaljer
-  if (dbRow.products_used && Array.isArray(dbRow.products_used)) {
-    dbRow.products_used.forEach(product => {
-      const key = JSON.stringify(product.componentDetails || {});
-      if (!productsByComponent[key]) productsByComponent[key] = [];
-      productsByComponent[key].push({
-        name: product.name,
-        price: product.price
-      });
-    });
-  }
-
-  // Grupper tilleggsarbeid etter komponent detaljer
-  if (dbRow.additional_work && Array.isArray(dbRow.additional_work)) {
-    dbRow.additional_work.forEach(work => {
-      const key = JSON.stringify(work.componentDetails || {});
-      if (!workByComponent[key]) workByComponent[key] = [];
-      workByComponent[key].push({
-        description: work.description,
-        hours: work.hours,
-        price: work.price
-      });
-    });
-  }
-
-  // Rekonstruer komponenter med deres produkter og arbeid
-  if (checklistData.components && Array.isArray(checklistData.components)) {
-    checklistData.components.forEach(component => {
-      const key = JSON.stringify(component.details || {});
-      const fullComponent = {
-        ...component,
-        products: productsByComponent[key] || [],
-        additionalWork: workByComponent[key] || []
-      };
-      reportData.components.push(fullComponent);
-    });
-  }
-
-  // Legg til bilder hvis de finnes
-  if (dbRow.photos && Array.isArray(dbRow.photos) && dbRow.photos.length > 0) {
-    reportData.photos = dbRow.photos;
-  }
-
-  return reportData;
-}
-
-// Helper funksjon for å transformere database rad til frontend format
 function transformDbRowToFrontend(row) {
   if (!row) return null;
   
-  // Kombiner data fra separate kolonner tilbake til reportData format
-  const reportData = mergeDBDataToFrontendFormat(row);
+  let checklistData = row.checklist_data;
+  if (typeof checklistData === 'string') {
+    checklistData = JSON.parse(checklistData);
+  }
+  
+  // Map database status to frontend status
+  let frontendStatus = row.status;
+  if (row.status === 'draft' && (!checklistData?.checklist || Object.keys(checklistData.checklist).length === 0)) {
+    frontendStatus = 'not_started';
+  } else if (row.status === 'draft') {
+    frontendStatus = 'in_progress';
+  }
+  
+  const reportData = {
+    checklist: checklistData?.checklist || {},
+    systemFields: checklistData?.systemFields || {},
+    overallComment: checklistData?.overallComment || '',
+    metadata: checklistData?.metadata || {},
+    systemData: checklistData?.systemData || {},
+    products: row.products_used || [],
+    additionalWork: row.additional_work || []
+  };
+  
+  console.log('📦 transformDbRowToFrontend OUTPUT:', {
+    dbStatus: row.status,
+    frontendStatus: frontendStatus,
+    hasProducts: !!reportData.products?.length,
+    hasAdditionalWork: !!reportData.additionalWork?.length
+  });
   
   return {
-    ...row,
-    report_data: reportData,
+    id: row.id,
+    reportId: row.id,
+    orderId: row.order_id,
+    equipmentId: row.equipment_id,
     reportData: reportData,
-    // Map database navn til frontend navn
+    photos: row.photos || [],
+    status: frontendStatus,  // ← Bruk mapped status
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
     sentToCustomer: row.sent_til_fakturering || false
   };
 }
@@ -204,48 +172,15 @@ router.get('/equipment/:equipmentId', async (req, res) => {
     console.log(`✅ Query returned ${result.rows.length} rows`);
     
     if (result.rows.length > 0) {
-      // Legg til systemData fra equipment
-      const row = result.rows[0];
-      // JSONB blir automatisk parsed av pg-driver, ikke parse igjen
-      let reportData = row.checklist_data || {};
-
-      // Sikkerhetssjekk: hvis det av en eller annen grunn ER en string, parse den
-      if (typeof reportData === 'string') {
-        try {
-          reportData = JSON.parse(reportData);
-        } catch (e) {
-          console.error('Failed to parse reportData:', e);
-          reportData = {};
-        }
-      }
-
-
-      reportData.systemData = {
-        systemtype: row.systemtype,
-        systemnummer: row.systemnummer,
-        systemnavn: row.systemnavn,
-        plassering: row.plassering,
-        betjener: row.betjener,
-        location: row.location
-      };
-
-      const transformedData = {
-        id: row.id,
-        reportId: row.id,
-        orderId: row.order_id,
-        equipmentId: row.equipment_id,
-        reportData: reportData,
-        productsUsed: row.products_used || [],
-        additionalWork: row.additional_work || [],
-        photos: row.photos || [],
-        status: row.status,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at
-      };
-      
-      console.log('✅ Returning existing report');
-      res.json(transformedData);
-    } else {
+  const transformed = transformDbRowToFrontend(result.rows[0]);
+  console.log('📦 TRANSFORMED OUTPUT:', {
+    hasProducts: !!transformed.reportData?.products?.length,
+    hasAdditionalWork: !!transformed.reportData?.additionalWork?.length,
+    productsCount: transformed.reportData?.products?.length || 0,
+    workCount: transformed.reportData?.additionalWork?.length || 0
+  });
+  res.json(transformed);
+} else {
       console.log('ℹ️ No existing report found - returning empty template');
       res.json({
         id: null,
@@ -404,38 +339,39 @@ router.put('/:reportId', async (req, res) => {
     );
 
     const currentStatus = currentStatusResult.rows[0]?.status || 'draft';
-    const hasComponents = reportData.components && reportData.components.length > 0;
+// Automatisk sett status til 'in_progress' hvis data lagres første gang
+const hasChecklistData = reportData.checklist && Object.keys(reportData.checklist).length > 0;
+const hasSystemFieldData = reportData.systemFields && Object.keys(reportData.systemFields).length > 0;
+const hasAnyData = hasChecklistData || hasSystemFieldData;
 
-    // Automatisk sett status til 'in_progress' hvis:
-    // 1. Current status er 'draft' eller 'not_started'
-    // 2. Vi har minst én sjekkliste-komponent
-    let newStatus = reportData.status;
-    if (!newStatus && hasComponents && (currentStatus === 'draft' || currentStatus === 'not_started')) {
-      newStatus = 'in_progress';
-    }
+let newStatus = reportData.status;
+if (!newStatus && hasAnyData && (currentStatus === 'draft' || currentStatus === 'not_started')) {
+  newStatus = 'in_progress';
+  console.log('📝 Auto-setting status to in_progress because data was saved');
+}
 
     const result = await pool.query(
       `UPDATE service_reports 
-       SET checklist_data = $1, 
-           products_used = $2, 
-           additional_work = $3,
+       SET checklist_data = $1::jsonb, 
+           products_used = $2::jsonb, 
+           additional_work = $3::jsonb,
            photos = $4
-           ${newStatus ? ', status = $6' : ''}
-       WHERE id = $5 
+           ${newStatus ? ', status = $5' : ''}
+       WHERE id = ${newStatus ? '$6' : '$5'}
        RETURNING *`,
       newStatus ? 
       [
-        dbData.checklist_data,
-        dbData.products_used,
-        dbData.additional_work,
+        JSON.stringify(dbData.checklist_data),
+        JSON.stringify(dbData.products_used),
+        JSON.stringify(dbData.additional_work),
         dbData.photos,
-        reportId,
-        newStatus
+        newStatus,
+        reportId
       ] :
       [
-        dbData.checklist_data,
-        dbData.products_used,
-        dbData.additional_work,
+        JSON.stringify(dbData.checklist_data),
+        JSON.stringify(dbData.products_used),
+        JSON.stringify(dbData.additional_work),
         dbData.photos,
         reportId
       ]

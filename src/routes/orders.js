@@ -191,39 +191,32 @@ router.get('/:id', async (req, res) => {
     const order = orderResult.rows[0];
     console.log('✅ Order found:', order.id);
 
-    // 2. Hent equipment
-    let equipment = [];
-    
-    if (order.included_equipment_ids && Array.isArray(order.included_equipment_ids) && order.included_equipment_ids.length > 0) {
-      console.log('🔧 Fetching equipment with IDs:', order.included_equipment_ids);
-      
-      try {
-        // FIKSET: Konverter strings til integers først
-        const equipmentIds = order.included_equipment_ids.map(id => parseInt(id));
-        
-        const equipmentResult = await pool.query(
-          `SELECT 
-            id,
-            customer_id,
-            systemtype,
-            systemnummer,
-            systemnavn,
-            plassering,
-            betjener,
-            notater,
-            created_at
-           FROM equipment 
-           WHERE id = ANY($1::integer[])`,
-          [equipmentIds]  // ← Bruker konverterte integers
-        );
-        
-        equipment = equipmentResult.rows;
-        console.log(`✅ Found ${equipment.length} equipment`);
-        
-      } catch (eqError) {
-        console.error('⚠️ Equipment fetch failed:', eqError.message);
-      }
-    }
+// Hent equipment for denne kunden med service status
+const equipmentResult = await pool.query(
+    `SELECT 
+        e.id, 
+        e.systemtype, 
+        e.systemnummer, 
+        e.systemnavn, 
+        e.plassering, 
+        e.betjener, 
+        e.location, 
+        e.status as equipment_status,
+        e.notater,
+        COALESCE(sr.status, 'not_started') as service_status,
+        COALESCE(sr.status, 'not_started') as service_report_status
+    FROM equipment e
+    LEFT JOIN service_reports sr ON (sr.equipment_id = e.id::varchar AND sr.order_id = $2)
+    WHERE e.customer_id = $1 AND e.status = 'active'`,
+    [parseInt(order.customer_id), order.id]
+);
+
+// Map equipment med status
+const equipment = equipmentResult.rows.map(eq => ({
+    ...eq,
+    serviceStatus: eq.service_status === 'draft' ? 'in_progress' : eq.service_status,
+    serviceReportStatus: eq.service_report_status === 'draft' ? 'in_progress' : eq.service_report_status
+}));
 
     // 3. Send response i riktig format for frontend
     res.json({

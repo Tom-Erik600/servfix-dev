@@ -604,3 +604,8 @@
         align-items: stretch;
     }
 }
+
+.group-last {
+    border-bottom: 2px solid #e5e7eb;
+    margin-bottom: 8px;
+}

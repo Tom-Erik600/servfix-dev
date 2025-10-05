@@ -1648,3 +1648,85 @@
     white-space: normal; /* Tillater tekst å bryte over flere linjer */
     line-height: 1.4;
 }
+
+/* Status badge colors - EQUIPMENT CARDS */
+.status-badge {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-radius: 12px;
+    letter-spacing: 0.5px;
+}
+
+.status-badge.status-not-started {
+    background-color: #e5e7eb;
+    color: #6b7280;
+}
+
+.status-badge.status-in-progress {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.status-badge.status-completed {
+    background-color: #dcfce7;
+    color: #16a34a;
+}
+
+/* Equipment card border colors based on status */
+.system-item {
+    border-left: 4px solid transparent;
+}
+
+.system-item.not_started {
+    border-left-color: #6b7280;
+}
+
+.system-item.in_progress {
+    border-left-color: #fbbf24;
+}
+
+.system-item.completed {
+    border-left-color: #10b981;
+    background-color: #f0fdf4;
+}
+
+/* When equipment is completed AND selected */
+.system-item.completed .kort-topp {
+    background-color: #dcfce7;
+}
+
+.system-item.completed .status-badge {
+    font-weight: 700;
+}
+/* Clickable area styling */
+.kort-innhold {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.kort-innhold:hover {
+    background-color: rgba(74, 144, 226, 0.05);
+    border-radius: 8px;
+}
+
+/* Non-clickable areas */
+.kort-topp {
+    cursor: default;
+}
+
+.confirm-delete-container {
+    cursor: default;
+}
+
+/* Delete button specific */
+.slett-knapp {
+    z-index: 10;
+    position: relative;
+}
+
+/* Textarea in delete confirmation */
+.deactivation-reason {
+    cursor: text;
+}
