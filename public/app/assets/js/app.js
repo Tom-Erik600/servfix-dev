@@ -187,6 +187,65 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
+// Sjekk om siden ble lastet med reload parameter (fra ordre-ferdigstilling)
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.has('reload')) {
+    console.log('🔄 Forced reload detected, cleaning URL...');
+    // Fjern reload parameter fra URL uten å reloade siden
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+}
+
+// Refresh data når brukeren kommer tilbake til siden
+window.addEventListener('pageshow', async (event) => {
+    // Kun reload hvis det er bfcache (back-forward cache) navigering
+    if (event.persisted || performance.getEntriesByType('navigation')[0]?.type === 'back_forward') {
+        console.log('🔄 Page returned from cache, reloading orders...');
+        
+        // Sjekk at vi er på index.html
+        const currentPath = window.location.pathname;
+        const isIndexPage = currentPath.endsWith('index.html') || 
+                           currentPath === '/' || 
+                           currentPath.endsWith('/app/');
+        
+        if (!isIndexPage) return;
+        
+        // Reload ordre
+        try {
+            const orders = await AirTechAPI.getOrders();
+            
+            // Oppdater state med nye ordre
+            appState.orders = orders.map(order => {
+                const normalizeDate = (dateValue) => {
+                    if (!dateValue) return null;
+                    return toISODateString(dateValue);
+                };
+                
+                return {
+                    ...order,
+                    id: order.id,
+                    scheduledDate: normalizeDate(order.scheduled_date || order.scheduledDate),
+                    scheduledTime: order.scheduled_time || order.scheduledTime || null,
+                    serviceType: order.service_type || order.serviceType || 'Service',
+                    customerId: order.customer_id || order.customerId || null,
+                    customerName: order.customer_name || order.customerName || 'Ukjent Kunde',
+                    customerData: order.customer_data || order.customerData || null,
+                    technicianId: order.technician_id || order.technicianId || null,
+                    orderNumber: order.order_number || order.orderNumber || order.id,
+                    status: order.status || 'scheduled',
+                    description: order.description || null
+                };
+            });
+            
+            // Re-render UI
+            renderAll();
+            console.log('✅ Orders reloaded successfully');
+        } catch (error) {
+            console.error('❌ Failed to reload orders:', error);
+        }
+    }
+});
+
 function renderAll() {
     // Ekstra sikkerhet - sjekk at elementene finnes
     if (!document.getElementById('calendar-days')) {

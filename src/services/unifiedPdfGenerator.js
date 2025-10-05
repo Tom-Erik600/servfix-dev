@@ -484,8 +484,8 @@ class UnifiedPDFGenerator {
         o.customer_data->>'email' as company_email, o.customer_data->>'phone' as company_phone,
         o.customer_data->>'address' as company_address,
         o.customer_data->>'contact_person' as contact_person,
-        e.name as equipment_name, e.type as equipment_type, e.location as equipment_location,
-        e.serial_number as equipment_serial, e.data as equipment_data,
+        e.systemnavn as equipment_name, e.systemtype as equipment_type, e.location as equipment_location,
+        e.systemnummer as equipment_serial,
         t.name as technician_name, t.initials as technician_initials
       FROM service_reports sr
       LEFT JOIN orders o ON sr.order_id = o.id

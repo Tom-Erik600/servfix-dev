@@ -18,69 +18,39 @@ router.use((req, res, next) => {
   next();
 });
 
-// Nytt endpoint for å hente spesifikt equipment basert på equipment ID
-router.get('/by-id/:equipmentId', async (req, res) => {
-  console.log('=== EQUIPMENT BY-ID ENDPOINT CALLED ===');
+// DENNE MÅ KOMME FØRST:
+router.get('/:id', async (req, res) => {
+  const { id } = req.params;
+  console.log(`=== GETTING EQUIPMENT BY ID: ${id} ===`);
+  
   try {
-    // Valider at ID er gyldig før SQL-query
-    const equipmentId = parseInt(req.params.equipmentId);
-    
-    if (!equipmentId || isNaN(equipmentId) || req.params.equipmentId === 'undefined') {
-      console.error('Invalid equipment ID received:', req.params.equipmentId);
-      return res.status(400).json({ 
-        error: 'Ugyldig anlegg-ID',
-        detail: `Mottok: "${req.params.equipmentId}". Forventet: gyldig heltall.`,
-        hint: 'Sjekk at URL inneholder riktig equipmentId parameter'
-      });
-    }
     const pool = await db.getTenantConnection(req.session.tenantId);
     
-    // ✅ OPPDATERT QUERY: Bruk nye kolonnenavn
-    const result = await pool.query(`
-      SELECT id, customer_id, systemtype, systemnummer, systemnavn, 
-             plassering, betjener, location, status, notater,
-             created_at, updated_at
-      FROM equipment 
-      WHERE id = $1
-    `, [equipmentId]);
-    
-    console.log('Query result rows:', result.rows.length);
+    const result = await pool.query(
+      `SELECT id, customer_id, systemtype, systemnummer, systemnavn, 
+              plassering, betjener, location, status, notater
+       FROM equipment 
+       WHERE id = $1`,
+      [parseInt(id)]
+    );
     
     if (result.rows.length === 0) {
-      console.log('No equipment found with ID:', equipmentId);
       return res.status(404).json({ error: 'Equipment not found' });
     }
     
-    const equipment = result.rows[0];
+    res.json(result.rows[0]);
     
-    // ✅ OPPDATERT TRANSFORM: Bruk nye kolonnenavn
-    const transformedEquipment = {
-      id: equipment.id,
-      customerId: equipment.customer_id,
-      type: equipment.systemtype,           // Map systemtype -> type
-      name: equipment.systemnavn,           // Map systemnavn -> name
-      location: equipment.location,
-      systemNumber: equipment.systemnummer,
-      systemPlacement: equipment.plassering,
-      betjener: equipment.betjener,
-      status: equipment.status,
-      internalNotes: equipment.notater,
-      serviceStatus: 'not_started' // Default value
-    };
-    
-    console.log('Returning equipment:', transformedEquipment.id);
-    res.json(transformedEquipment);
   } catch (error) {
-    console.error('Error in by-id endpoint:', error);
+    console.error('Error fetching equipment by ID:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 // ✅ OPPDATERT: GET equipment by customer ID
-router.get('/:customerId', async (req, res) => {
+router.get('/', async (req, res) => {
   console.log('=== EQUIPMENT BY CUSTOMER ID ENDPOINT CALLED ===');
   try {
-    const { customerId } = req.params;
+    const { customerId } = req.query;
     const includeInactive = req.query.includeInactive === 'true';
     
     const pool = await db.getTenantConnection(req.session.tenantId);

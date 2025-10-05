@@ -488,7 +488,6 @@ function escapeHtml(unsafe) {
     }
 }
 
-// Ny funksjon for å vise modal for å opprette anlegg
 async function showAddEquipmentModal(customer) {
     try {
         console.log('showAddEquipmentModal started with customer:', customer);
@@ -510,23 +509,21 @@ async function showAddEquipmentModal(customer) {
             throw new Error('Ingen anleggstyper funnet');
         }
         
-        // Opprett en overlay modal for anleggsoppretting
+        // Opprett en overlay modal for anleggsoppretting - BRUK CSS-KLASSER
         const equipmentModal = document.createElement('div');
         equipmentModal.className = 'modal-overlay equipment-modal show';
-        equipmentModal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 9999;';
         
         equipmentModal.innerHTML = `
-            <div class="modal-content" style="background: white; padding: 20px; border-radius: 8px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;">
+            <div class="modal-content">
                 <div class="modal-header">
                     <h3>Velg type anlegg</h3>
-                    <button type="button" class="close-btn" style="float: right; background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+                    <button type="button" class="close-btn">&times;</button>
                 </div>
                 
                 <div class="modal-body">
-                    <div class="type-selection-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 20px;">
+                    <div class="type-selection-grid">
                         ${data.facilityTypes.map(type => `
-                            <button type="button" class="type-btn" data-type="${type.id}" 
-                                    style="padding: 15px; border: 1px solid #ccc; border-radius: 5px; background: white; cursor: pointer; transition: all 0.2s; text-align: center;">
+                            <button type="button" class="type-btn" data-type="${type.id}">
                                 ${type.name}
                             </button>
                         `).join('')}
@@ -549,22 +546,8 @@ async function showAddEquipmentModal(customer) {
             }
         });
         
-        // Type selection med hover effekt
+        // Type selection - hover og klikk
         equipmentModal.querySelectorAll('.type-btn').forEach(btn => {
-            // Hover effekt
-            btn.addEventListener('mouseenter', () => {
-                btn.style.backgroundColor = '#f3f4f6';
-                btn.style.borderColor = '#3b82f6';
-                btn.style.color = '#3b82f6';
-            });
-            
-            btn.addEventListener('mouseleave', () => {
-                btn.style.backgroundColor = 'white';
-                btn.style.borderColor = '#ccc';
-                btn.style.color = 'black';
-            });
-            
-            // Klikk handler
             btn.addEventListener('click', () => {
                 console.log('Type button clicked!');
                 const selectedType = btn.dataset.type;

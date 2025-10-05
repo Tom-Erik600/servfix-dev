@@ -134,17 +134,12 @@ router.get('/equipment/:equipmentId', async (req, res) => {
   const { equipmentId } = req.params;
   const { orderId } = req.query;
   
-  // KRITISK FIX: Bruk req.session.tenantId i stedet for req.tenantId
   const tenantId = req.session.tenantId;
   
   console.log('=== GET REPORT BY EQUIPMENT ===');
   console.log('Equipment ID:', equipmentId);
   console.log('Order ID:', orderId);
   console.log('Tenant ID:', tenantId);
-  console.log('Session:', { 
-    technicianId: req.session.technicianId,
-    tenantId: req.session.tenantId 
-  });
   
   // Valider input
   if (!tenantId) {
@@ -160,27 +155,27 @@ router.get('/equipment/:equipmentId', async (req, res) => {
   try {
     const pool = await db.getTenantConnection(tenantId);
     
-    // ✅ KRITISK FIX: equipmentId must be a string as service_reports.equipment_id is VARCHAR
+    // ✅ FIX: Cast både sr.equipment_id og parameter til VARCHAR
     const result = await pool.query(`
       SELECT sr.*, 
              e.systemtype, e.systemnummer, e.systemnavn, e.plassering, e.betjener, e.location
       FROM service_reports sr
-      LEFT JOIN equipment e ON sr.equipment_id = e.id::varchar
-      WHERE sr.equipment_id = $1 AND sr.order_id = $2
+      LEFT JOIN equipment e ON sr.equipment_id::varchar = e.id::varchar
+      WHERE sr.equipment_id::varchar = $1::varchar AND sr.order_id = $2
     `, [String(equipmentId), orderId]);
     
     console.log(`✅ Query returned ${result.rows.length} rows`);
     
     if (result.rows.length > 0) {
-  const transformed = transformDbRowToFrontend(result.rows[0]);
-  console.log('📦 TRANSFORMED OUTPUT:', {
-    hasProducts: !!transformed.reportData?.products?.length,
-    hasAdditionalWork: !!transformed.reportData?.additionalWork?.length,
-    productsCount: transformed.reportData?.products?.length || 0,
-    workCount: transformed.reportData?.additionalWork?.length || 0
-  });
-  res.json(transformed);
-} else {
+      const transformed = transformDbRowToFrontend(result.rows[0]);
+      console.log('📦 TRANSFORMED OUTPUT:', {
+        hasProducts: !!transformed.reportData?.products?.length,
+        hasAdditionalWork: !!transformed.reportData?.additionalWork?.length,
+        productsCount: transformed.reportData?.products?.length || 0,
+        workCount: transformed.reportData?.additionalWork?.length || 0
+      });
+      res.json(transformed);
+    } else {
       console.log('ℹ️ No existing report found - returning empty template');
       res.json({
         id: null,

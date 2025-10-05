@@ -10,6 +10,22 @@ let pageState = {
 };
 
 /**
+ * Nullstiller pageState eksplisitt for å unngå at gammel state vises
+ * Dette er kritisk for å forhindre race conditions ved navigering
+ */
+function resetPageState() {
+    console.log('🔄 Resetting page state completely...');
+    pageState = { 
+        order: null, 
+        customer: null, 
+        equipment: [],  // TØM array
+        technician: null,
+        quotes: [],
+        selectedEquipmentIds: []
+    };
+}
+
+/**
  * Escapes HTML special characters in a string to prevent XSS.
  * @param {string | null | undefined} str The string to escape.
  * @returns {string} The escaped string.
@@ -84,7 +100,10 @@ function clearAllImageContainers() {
 
 async function initializePage() {
     setLoading(true);
-    // NYTT: Rydd opp bilder fra forrige sjekkliste FØRST
+    
+    // VIKTIG: Nullstill state FØRST for å unngå gammel cached data
+    resetPageState();
+    
     clearAllImageContainers();
     const orderId = new URLSearchParams(window.location.search).get('id');
     if (!orderId) {
@@ -116,11 +135,27 @@ async function initializePage() {
         pageState.technician = data.technician;
         pageState.quotes = data.quotes || [];
         
-        // VIKTIG: Overskriver equipment arrayet helt for å unngå duplikater
-        pageState.equipment = (data.equipment || []).map(eq => ({
+        // ✅ KRITISK: Filtrer ut inaktive anlegg EKSPLISITT
+        const activeEquipment = (data.equipment || []).filter(eq => {
+            // Sjekk både equipment_status OG status feltet
+            const status = eq.equipment_status || eq.status;
+            const isActive = !status || status === 'active';
+            
+            if (!isActive) {
+                console.warn(`⚠️ Filtering out inactive equipment: ${eq.id} (status: ${status})`);
+            }
+            
+            return isActive;
+        });
+
+        console.log(`✅ Filtered equipment: ${data.equipment?.length || 0} -> ${activeEquipment.length} active`);
+
+        // Map equipment med korrekt struktur
+        pageState.equipment = activeEquipment.map(eq => ({
             ...eq,
+            id: parseInt(eq.id),
             serviceStatus: eq.serviceStatus || eq.serviceReportStatus || 'not_started',
-            internalNotes: eq.internalNotes || eq.data?.internalNotes || ''
+            internalNotes: eq.internalNotes || eq.notater || ''
         }));
 
         // Sjekk for duplikater og fjern dem (backup sjekk)
@@ -302,12 +337,24 @@ function getStatusText(status) {
 
 function renderEquipmentList() {
     const container = document.getElementById('equipment-list');
+    
+    // ✅ EKSTRA SIKKERHET: Filtrer ut inaktive anlegg her også (dobbeltsjekk)
+    const activeEquipment = pageState.equipment.filter(eq => {
+        const status = eq.equipment_status || eq.status;
+        return !status || status === 'active';
+    });
+    
+    if (activeEquipment.length !== pageState.equipment.length) {
+        console.warn(`⚠️ renderEquipmentList: Filtered ${pageState.equipment.length - activeEquipment.length} inactive items`);
+        pageState.equipment = activeEquipment;
+    }
+    
     let equipmentHTML = `<button class="add-system-btn" data-action="add-equipment">+ Legg til Anlegg</button>`;
     
     if (pageState.equipment.length > 0) {
         equipmentHTML += pageState.equipment.map(createEquipmentCard).join('');
     } else {
-        equipmentHTML += `<p class="placeholder-text">Ingen anlegg funnet på kunde.</p>`;
+        equipmentHTML += `<p class="placeholder-text">Ingen aktive anlegg funnet på kunde.</p>`;
     }
     
     // Legg til tilbud-seksjonen
@@ -377,7 +424,7 @@ function createEquipmentCard(eq) {
             </div>
             
             <div class="confirm-delete-container" style="display: none;" onclick="event.stopPropagation();">
-                <p>Er du sikker på at du vil deaktivere dette anlegget?</p>
+                <p class="confirm-delete-text">Er du sikker på at du vil deaktivere dette anlegget?</p>
                 <div class="form-group">
                     <label>Årsak for deaktivering:</label>
                     <textarea 
@@ -401,45 +448,66 @@ function createEquipmentCard(eq) {
     `;
 }
 
+
 function renderActionButtons() {
     const footer = document.querySelector('.action-buttons');
     if (!footer || !pageState.order) return;
     
+    // Finn alle INKLUDERTE (checked) anlegg
     const selectedEquipment = pageState.equipment.filter(eq => 
         pageState.selectedEquipmentIds.includes(eq.id)
     );
     
-    const allSelectedCompleted = selectedEquipment.length > 0 && 
-        selectedEquipment.every(eq => eq.serviceStatus === 'completed' || eq.serviceReportStatus === 'completed');
+    console.log('Selected equipment:', selectedEquipment.length);
+    console.log('Selected IDs:', pageState.selectedEquipmentIds);
     
+    // Sjekk om alle INKLUDERTE anlegg er ferdigstilt
+    const allSelectedCompleted = selectedEquipment.length > 0 && 
+        selectedEquipment.every(eq => {
+            const isCompleted = eq.serviceStatus === 'completed' || 
+                               eq.serviceReportStatus === 'completed';
+            console.log(`Equipment ${eq.id}: status=${eq.serviceStatus}, reportStatus=${eq.serviceReportStatus}, completed=${isCompleted}`);
+            return isCompleted;
+        });
+    
+    console.log('All selected completed:', allSelectedCompleted);
+    
+    // Sjekk om ordren allerede er ferdigstilt
     const orderCompleted = pageState.order.status === 'completed';
     
     if (orderCompleted) {
+        // Ordren er allerede ferdigstilt - vis grønn melding
         footer.innerHTML = `
-            <button class="primary-action-btn" disabled style="background-color: #10b981;">
-                <i data-lucide="check-circle"></i>
-                Ordre er fullført
-            </button>
+            <div class="order-completed-container">
+                <div class="order-completed-button">
+                    <span style="font-size: 18px;">✓</span>
+                    Ordre er fullført
+                </div>
+            </div>
         `;
     } else {
-        const buttonText = allSelectedCompleted ? 'Ferdigstill ordre' : 'Alle valgte anlegg må ferdigstilles først';
-        const buttonDisabled = !allSelectedCompleted;
+        // Ordren er ikke ferdigstilt - vis knapp
+        const canComplete = allSelectedCompleted && selectedEquipment.length > 0;
+        
+        // Tekst avhengig av om knappen er klar eller ikke
+        const buttonText = canComplete 
+            ? 'Ferdigstill ordre' 
+            : 'Alle inkluderte anlegg må ferdigstilles først';
+        
+        // Legg til "ready" class hvis alle er ferdige (gjør knappen grønn)
+        const readyClass = canComplete ? 'ready' : '';
         
         footer.innerHTML = `
-            <button class="primary-action-btn" 
+            <button class="btn-complete-order ${readyClass}" 
                     onclick="handleCompleteOrder()" 
-                    ${buttonDisabled ? 'disabled' : ''}>
-                <i data-lucide="check-circle"></i>
+                    ${!canComplete ? 'disabled' : ''}>
+                ${canComplete ? '<span style="font-size: 18px;">✓</span>' : ''}
                 ${buttonText}
             </button>
         `;
     }
-    
-    // Re-initialize lucide icons
-    if (window.lucide) {
-        lucide.createIcons();
-    }
 }
+
 
 function setupEventListeners() {
     // Eksisterende kode...
@@ -501,14 +569,22 @@ function setupEventListeners() {
 
 // Håndter checkbox endringer for anleggsvalg
 async function handleEquipmentSelectionChange(equipmentId, isChecked) {
-    console.log('Equipment selection changed:', equipmentId, '=', isChecked);
+    // VIKTIG: Konverter equipmentId til integer for konsistent sammenligning
+    const equipmentIdInt = parseInt(equipmentId);
     
-    if (isChecked && !pageState.selectedEquipmentIds.includes(equipmentId)) {
+    console.log('Equipment selection changed:', equipmentIdInt, '=', isChecked);
+    console.log('Current selected IDs:', pageState.selectedEquipmentIds);
+    
+    if (isChecked && !pageState.selectedEquipmentIds.includes(equipmentIdInt)) {
         // Legg til i valgte anlegg
-        pageState.selectedEquipmentIds.push(equipmentId);
+        pageState.selectedEquipmentIds.push(equipmentIdInt);
+        console.log('✅ Added equipment to selection');
     } else if (!isChecked) {
-        // Fjern fra valgte anlegg
-        pageState.selectedEquipmentIds = pageState.selectedEquipmentIds.filter(id => id !== equipmentId);
+        // Fjern fra valgte anlegg - sammenlign både string og int for sikkerhet
+        pageState.selectedEquipmentIds = pageState.selectedEquipmentIds.filter(id => 
+            id !== equipmentIdInt && id !== equipmentId
+        );
+        console.log('❌ Removed equipment from selection');
     }
     
     console.log('Updated selectedEquipmentIds:', pageState.selectedEquipmentIds);
@@ -528,7 +604,19 @@ function updateEquipmentCardStyles() {
     pageState.equipment.forEach(eq => {
         const card = document.querySelector(`[data-equipment-id="${eq.id}"]`);
         if (card) {
-            if (pageState.selectedEquipmentIds.includes(eq.id)) {
+            const checkbox = card.querySelector('.equipment-select-checkbox');
+            
+            // Dobbeltsjekk: oppdater checkbox state først
+            if (checkbox) {
+                const shouldBeChecked = pageState.selectedEquipmentIds.includes(parseInt(eq.id));
+                if (checkbox.checked !== shouldBeChecked) {
+                    checkbox.checked = shouldBeChecked;
+                    console.log(`Synced checkbox for equipment ${eq.id} to ${shouldBeChecked}`);
+                }
+            }
+            
+            // Oppdater visuell stil
+            if (pageState.selectedEquipmentIds.includes(parseInt(eq.id))) {
                 card.classList.remove('not-selected');
             } else {
                 card.classList.add('not-selected');
@@ -608,12 +696,21 @@ async function confirmDeleteEquipment(equipmentId) {
         systemItem.classList.add('fade-out');
         
         setTimeout(async () => {
-            // Fjern fra equipment array
-            pageState.equipment = pageState.equipment.filter(eq => eq.id.toString() !== equipmentId.toString());
+            // ✅ VIKTIG: Fjern fra ALLE state-arrays med konsistent ID-håndtering
+            const equipmentIdInt = parseInt(equipmentId);
             
-            // Fjern fra selectedEquipmentIds og oppdater backend
-            const wasSelected = pageState.selectedEquipmentIds.includes(equipmentId);
-            pageState.selectedEquipmentIds = pageState.selectedEquipmentIds.filter(id => id !== equipmentId);
+            // Fjern fra equipment array
+            pageState.equipment = pageState.equipment.filter(eq => 
+                parseInt(eq.id) !== equipmentIdInt
+            );
+            
+            // Fjern fra selectedEquipmentIds
+            const wasSelected = pageState.selectedEquipmentIds.includes(equipmentIdInt);
+            pageState.selectedEquipmentIds = pageState.selectedEquipmentIds.filter(id => 
+                parseInt(id) !== equipmentIdInt
+            );
+            
+            console.log(`✅ Removed from state. Remaining: ${pageState.equipment.length} equipment`);
             
             if (wasSelected) {
                 await saveSelectedEquipment();
@@ -634,33 +731,35 @@ async function confirmDeleteEquipment(equipmentId) {
 }
 
 async function handleCompleteOrder() {
-    // Dobbeltsjekk at alle valgte anlegg er ferdigstilt
+    // Finn alle INKLUDERTE (checked) anlegg
     const selectedEquipment = pageState.equipment.filter(eq => 
         pageState.selectedEquipmentIds.includes(eq.id)
     );
     
+    // Dobbeltsjekk at alle inkluderte anlegg er ferdigstilt
     const allSelectedCompleted = selectedEquipment.length > 0 && 
-        selectedEquipment.every(eq => eq.serviceStatus === 'completed');
+        selectedEquipment.every(eq => 
+            eq.serviceStatus === 'completed' || 
+            eq.serviceReportStatus === 'completed'
+        );
     
     if (!allSelectedCompleted) {
-        showToast('Alle valgte anlegg må være ferdigstilt før ordre kan ferdigstilles', 'error');
+        showToast('Alle inkluderte anlegg må være ferdigstilt før ordre kan ferdigstilles', 'error');
         return;
     }
     
+    // Tell ikke-inkluderte anlegg
+    const notIncludedCount = pageState.equipment.length - selectedEquipment.length;
+    
     // Bekreft med bruker og vis hvilke anlegg som inkluderes
-    const confirmMessage = `Er du sikker på at du vil ferdigstille denne ordren?
-
-${selectedEquipment.length} anlegg vil inkluderes i rapporten:
-${selectedEquipment.map(eq => `• ${eq.name || eq.type}`).join('\n')}
-
-${pageState.equipment.length - selectedEquipment.length > 0 ? `
-${pageState.equipment.length - selectedEquipment.length} anlegg er ikke valgt og vil ikke inkluderes.` : ''}`;
+    const confirmMessage = `Er du sikker på at du vil ferdigstille denne ordren?\n\n${selectedEquipment.length} anlegg vil inkluderes i rapporten:\n${selectedEquipment.map(eq => `• ${eq.systemnavn || eq.systemtype || 'Ukjent anlegg'}`).join('\n')}\n${notIncludedCount > 0 ? `\n${notIncludedCount} anlegg er ikke inkludert og vil ikke være med i rapporten.` : ''}`;
     
     if (!confirm(confirmMessage)) {
         return;
     }
     
     setLoading(true, 'Ferdigstiller ordre og genererer rapporter...');
+    
     try {
         const response = await fetch(`/api/orders/${pageState.order.id}/complete`, {
             method: 'POST',
@@ -684,16 +783,21 @@ ${pageState.equipment.length - selectedEquipment.length} anlegg er ikke valgt og
         // Oppdater lokal state
         pageState.order.status = 'completed';
         
-        // Re-render action buttons
+        // Re-render action buttons for å vise "Ordre er fullført"
         renderActionButtons();
         
-        // Vis suksessmelding med rapport-info
+        // Vis suksessmelding
         const reportCount = result.generatedPDFs ? result.generatedPDFs.length : selectedEquipment.length;
-        showToast(`Ordre ferdigstilt! ${reportCount} servicerapporter generert.`, 'success');
+        showToast(`Ordre ferdigstilt! ${reportCount} ${reportCount === 1 ? 'rapport' : 'rapporter'} generert.`, 'success');
+        
+        // Vent litt før navigering slik at bruker ser suksessmeldingen
+        setTimeout(() => {
+            window.location.href = 'index.html';
+        }, 2000);
         
     } catch (error) {
-        console.error('Error completing order:', error);
-        showToast(`Feil ved ferdigstilling: ${error.message}`, 'error');
+        console.error('Complete order error:', error);
+        showToast(`Kunne ikke ferdigstille ordre: ${error.message}`, 'error');
     } finally {
         setLoading(false);
     }

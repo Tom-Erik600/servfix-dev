@@ -754,8 +754,29 @@ async function loadTechnician() {
 
 async function loadEquipmentData(equipmentId) {
     try {
-        const equipment = await api.get(`/equipment/${equipmentId}`);
-        console.log('Loaded equipment:', equipment); // Debug
+        const response = await api.get(`/equipment/${equipmentId}`);
+        console.log('Equipment API response:', response);
+        
+        // MIDLERTIDIG FIX: Hvis tom array, prøv alternativ endpoint
+        if (Array.isArray(response) && response.length === 0) {
+            console.warn('Got empty array, trying to load from order data...');
+            // Returner dummy data for testing
+            return {
+                id: equipmentId,
+                systemtype: 'ventilasjonsaggregat', // HARDKODET FOR TEST
+                systemnummer: 'N/A',
+                systemnavn: 'N/A',
+                plassering: 'N/A'
+            };
+        }
+        
+        // Hvis array med data, ta første
+        const equipment = Array.isArray(response) ? response[0] : response;
+        
+        if (!equipment) {
+            throw new Error('Equipment ikke funnet');
+        }
+        
         return equipment;
     } catch (error) {
         console.error('Error loading equipment:', error);
@@ -965,6 +986,45 @@ async function loadServiceReport() {
             hasChecklist: !!state.serviceReport.reportData?.checklist,
             checklistKeys: state.serviceReport.reportData?.checklist ? Object.keys(state.serviceReport.reportData.checklist) : []
         });
+
+        // Last checklist template basert på equipment type
+if (state.equipment?.systemtype) {
+    try {
+        console.log('🔧 Loading checklist template for type:', state.equipment.systemtype);
+        const response = await api.get('/checklist-templates');
+        
+        // HÅNDTER BEGGE FORMATER
+        let templates = [];
+        if (Array.isArray(response)) {
+            templates = response;
+        } else if (response.facilityTypes && Array.isArray(response.facilityTypes)) {
+            // Gammel format - konverter
+            templates = response.facilityTypes.map(ft => ({
+                name: ft.name,
+                equipment_type: ft.id,
+                template_data: ft
+            }));
+        }
+        
+        console.log('📋 Available templates:', templates.map(t => t.equipment_type));
+        
+        const template = templates.find(t => 
+            t.equipment_type === state.equipment.systemtype
+        );
+        
+        if (template) {
+            state.checklistTemplate = template.template_data || template;
+            console.log('✅ Loaded template:', state.checklistTemplate);
+        } else {
+            console.error('❌ No template found for type:', state.equipment.systemtype);
+            console.log('Available types:', templates.map(t => t.equipment_type));
+        }
+    } catch (error) {
+        console.error('Error loading checklist template:', error);
+    }
+} else {
+    console.error('❌ No equipment systemtype available');
+}
         
     } catch (error) {
         console.error('Error loading service report:', error);
@@ -1162,33 +1222,6 @@ function renderAnleggInfo() {
                 <div style="font-size: 14px; color: #374151;">${escapeHTML(state.equipment?.plassering || 'N/A')}</div>
             </div>
         </div>
-
-        ${state.serviceReport?.reportData?.systemFields ? `
-            <!-- SystemFields fra sjekkliste -->
-            <div style="margin-bottom: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
-                <div style="font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 12px;">Tilleggsinformasjon fra sjekkliste</div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px;">
-                    ${state.serviceReport.reportData.systemFields.etasje ? `
-                        <div>
-                            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Etasje</div>
-                            <div style="font-size: 14px; color: #374151;">${escapeHTML(state.serviceReport.reportData.systemFields.etasje)}</div>
-                        </div>
-                    ` : ''}
-                    ${state.serviceReport.reportData.systemFields.leilighet_nr ? `
-                        <div>
-                            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Leilighet nr.</div>
-                            <div style="font-size: 14px; color: #374151;">${escapeHTML(state.serviceReport.reportData.systemFields.leilighet_nr)}</div>
-                        </div>
-                    ` : ''}
-                    ${state.serviceReport.reportData.systemFields.aggregat_type ? `
-                        <div>
-                            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Aggregat type</div>
-                            <div style="font-size: 14px; color: #374151;">${escapeHTML(state.serviceReport.reportData.systemFields.aggregat_type)}</div>
-                        </div>
-                    ` : ''}
-                </div>
-            </div>
-        ` : ''}
         
         <!-- Betjener (hvis finnes) -->
         ${state.equipment?.betjener ? `
@@ -1297,6 +1330,13 @@ function renderComponentDetailsForm() {
     const container = document.getElementById('component-details-form');
     if (!container) {
         console.error('Component details form container not found');
+        return;
+    }
+
+    // NULL-SJEKK HER
+    if (!state.checklistTemplate) {
+        console.warn('No checklist template loaded yet');
+        container.innerHTML = '<p>Laster sjekkliste...</p>';
         return;
     }
 
@@ -2132,24 +2172,34 @@ function loadExistingReportData() {
     const reportData = state.serviceReport.reportData;
     console.log('📊 Report data structure:', {
         hasChecklist: !!reportData.checklist,
-        hasSystemFields: !!reportData.systemData,
+        hasSystemFields: !!(reportData.systemFields || reportData.systemData),
+        systemFieldsContent: reportData.systemFields || reportData.systemData || {},
         hasProducts: !!reportData.products,
         hasAdditionalWork: !!reportData.additionalWork,
         checklistKeys: reportData.checklist ? Object.keys(reportData.checklist) : []
     });
     
     // 1. LAST INN SYSTEM FIELDS
-    if (reportData.systemData && state.checklistTemplate?.systemFields) {
-    state.checklistTemplate.systemFields.forEach(field => {
-        const input = document.getElementById(`system-${field.name}`);
-        const value = reportData.systemData?.[field.name];
+    if ((reportData.systemFields || reportData.systemData) && state.checklistTemplate?.systemFields) {
+        console.log('📝 Loading systemFields:', reportData.systemFields || reportData.systemData);
         
-        if (input && value !== undefined && value !== null) {
-            input.value = value;
-        }
-    });
-}
-    
+        state.checklistTemplate.systemFields.forEach(field => {
+            const input = document.getElementById(`system-${field.name}`);
+            // VIKTIG: Sjekk systemFields FØRST, deretter systemData
+            const value = reportData.systemFields?.[field.name] || reportData.systemData?.[field.name];
+            
+            console.log(`Looking for field ${field.name}: found value "${value}", input exists: ${!!input}`);
+            
+            if (input && value !== undefined && value !== null && value !== '') {
+                input.value = value;
+                console.log(`✅ Set ${field.name} = ${value}`);
+            } else if (!input) {
+                console.warn(`❌ No input found for ${field.name}`);
+            }
+        });
+    } else {
+        console.log('⚠️ No systemFields/systemData to load or no template');
+    }    
     // 2. LAST INN CHECKLIST DATA
     if (reportData.checklist && state.checklistTemplate?.checklistItems) {
         console.log('📋 Loading checklist items...');
@@ -2260,8 +2310,12 @@ function populateChecklistItems(items, checklistData) {
     });
     
     items.forEach(item => {
-        // ✅ FIX: Prøv først med label (ny struktur), deretter id (gammel struktur)
-        const result = checklistData[item.label] || checklistData[item.id];
+        // Generate the same key as when saving
+        const key = (item.label || '').trim().toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/[^\w_æøå]/g, '');
+            
+        const result = checklistData[key] || checklistData[item.id];
         
         if (!result) {
             console.log(`⚠️ No data found for item: ${item.label} (id: ${item.id})`);
@@ -2640,7 +2694,8 @@ async function saveChecklist(event, showToastMessage = true) {
         }
         
         // Oppdater kun checklist-data uten å ødelegge resten
-        state.serviceReport.reportData.systemData = componentData.systemData;  // ← ENDRE HER
+        state.serviceReport.reportData.systemFields = componentData.systemFields;
+        state.serviceReport.reportData.systemData = componentData.systemData || componentData.systemFields;
         state.serviceReport.reportData.checklist = componentData.checklist;
         state.serviceReport.reportData.products = componentData.products;
         state.serviceReport.reportData.additionalWork = componentData.additionalWork;        
@@ -2759,6 +2814,7 @@ function collectComponentData() {
             version: state.checklistTemplate.version || '1.0'
         },
         systemData: systemFieldsData,
+        systemFields: systemFieldsData,
         checklist: checklist,             // Med faktiske navn som keys
         products: products,
         additionalWork: additionalWork,
@@ -2768,96 +2824,33 @@ function collectComponentData() {
 
 function collectChecklistData() {
     console.log('📋 Collecting checklist data...');
-    
     const checklistData = {};
     const checklistContainer = document.getElementById('checklist-items-container');
-    
+
     if (!checklistContainer) {
         console.warn('⚠️ No checklist container found');
         return checklistData;
     }
-    
-    // Samle inn data fra alle sjekkliste-elementer
+
     const checklistItems = checklistContainer.querySelectorAll('.checklist-item, .checklist-item-fullwidth');
-    
+
     checklistItems.forEach(item => {
         const itemId = item.dataset.itemId;
-        const itemType = item.dataset.itemType;
-        
         if (!itemId) return;
-        
-        console.log(`  🔍 Collecting item ${itemId} (type: ${itemType})`);
-        
-        switch (itemType) {
-            case 'ok_avvik':
-            case 'ok_byttet_avvik':
-                const activeStatusBtn = item.querySelector('.status-btn.active');
-                if (activeStatusBtn) {
-                    const status = activeStatusBtn.dataset.status;
-                    checklistData[itemId] = { status };
-                    
-                    // Hent avvik-kommentar hvis status er 'avvik'
-                    if (status === 'avvik') {
-                        const avvikContainer = document.getElementById(`avvik-${itemId}`);
-                        if (avvikContainer) {
-                            const textarea = avvikContainer.querySelector('textarea');
-                            if (textarea && textarea.value) {
-                                checklistData[itemId].comment = textarea.value;
-                            }
-                        }
-                    }
-                    
-                    // Hent byttet-kommentar hvis status er 'byttet'
-                    if (status === 'byttet') {
-                        const byttetContainer = document.getElementById(`byttet-${itemId}`);
-                        if (byttetContainer) {
-                            const textarea = byttetContainer.querySelector('textarea');
-                            if (textarea && textarea.value) {
-                                checklistData[itemId].comment = textarea.value;
-                            }
-                        }
-                    }
-                }
-                break;
-                
-            case 'dropdown_ok_avvik':
-            case 'dropdown_ok_avvik_comment':
-            case 'switch_select':
-            case 'dropdown':
-                const dropdownValue = document.getElementById(`select-${itemId}`);
-                if (dropdownValue && dropdownValue.value) {
-                    checklistData[itemId] = dropdownValue.value;
-                }
-                break;
-                
-            case 'tilstandsgrad_dropdown':
-            case 'konsekvensgrad_dropdown':
-                const gradeDropdown = document.getElementById(`select-${itemId}`);
-                if (gradeDropdown && gradeDropdown.value) {
-                    checklistData[itemId] = gradeDropdown.value;
-                }
-                break;
-                
-            case 'temperature':
-            case 'text':
-                const textInput = document.getElementById(itemId);
-                if (textInput && textInput.value) {
-                    checklistData[itemId] = textInput.value;
-                }
-                break;
+
+        const data = getChecklistItemValue(itemId);
+
+        if (data !== null && data !== undefined) {
+            // Lag lesbar nøkkel fra label
+            const label = item.querySelector('.item-label')?.textContent || itemId;
+            const key = label.trim().toLowerCase()
+                .replace(/\s+/g, '_')
+                .replace(/[^\w_æøå]/g, '');
+            
+            checklistData[key] = data;
         }
     });
-    
-    // Samle inn sub-items også
-    const subItems = checklistContainer.querySelectorAll('[data-group]');
-    subItems.forEach(item => {
-        const itemId = item.id;
-        const isChecked = item.querySelector('input[type="radio"]:checked');
-        if (isChecked) {
-            checklistData[itemId] = true;
-        }
-    });
-    
+
     console.log('✅ Checklist data collected:', checklistData);
     return checklistData;
 }

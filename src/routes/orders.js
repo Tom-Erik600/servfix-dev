@@ -206,7 +206,7 @@ const equipmentResult = await pool.query(
         COALESCE(sr.status, 'not_started') as service_status,
         COALESCE(sr.status, 'not_started') as service_report_status
     FROM equipment e
-    LEFT JOIN service_reports sr ON (sr.equipment_id = e.id::varchar AND sr.order_id = $2)
+    LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
     WHERE e.customer_id = $1 AND e.status = 'active'`,
     [parseInt(order.customer_id), order.id]
 );
@@ -368,10 +368,18 @@ router.post('/:orderId/complete', async (req, res) => {
     }
     
     // Oppdater ordre status til completed
-    await pool.query(
-      'UPDATE orders SET status = $1 WHERE id = $2',
+    console.log(`📝 Attempting to UPDATE order ${orderId} to completed...`);
+    const statusUpdate = await pool.query(
+      'UPDATE orders SET status = $1 WHERE id = $2 RETURNING id, status',
       ['completed', orderId]
     );
+
+    if (statusUpdate.rows.length === 0) {
+      console.error(`❌ UPDATE returned 0 rows! Order ${orderId} not found?`);
+      throw new Error('Order not found for status update');
+    }
+
+    console.log(`✅ Order status UPDATED in transaction:`, statusUpdate.rows[0]);
    
     // Hent service rapporter - filtrer på inkluderte anlegg hvis spesifisert
     let serviceReportsQuery = `
@@ -425,8 +433,23 @@ router.post('/:orderId/complete', async (req, res) => {
       }
     }
     
+    // Verify status before commit
+    const verifyQuery = await pool.query(
+      'SELECT id, status FROM orders WHERE id = $1',
+      [orderId]
+    );
+    console.log(`🔍 Status BEFORE COMMIT:`, verifyQuery.rows[0]);
+
     // Commit transaksjon
     await pool.query('COMMIT');
+    console.log(`✅ COMMIT successful!`);
+
+    // Verify after commit
+    const afterCommit = await pool.query(
+      'SELECT id, status FROM orders WHERE id = $1',
+      [orderId]
+    );
+    console.log(`🔍 Status AFTER COMMIT:`, afterCommit.rows[0]);
     
     console.log(`✅ Ordre ${orderId} ferdigstilt med ${generatedPDFs.length} PDF-er generert`);
     
