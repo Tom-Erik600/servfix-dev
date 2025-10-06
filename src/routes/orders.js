@@ -150,19 +150,29 @@ router.get('/all', async (req, res) => {
        ORDER BY scheduled_date DESC, scheduled_time DESC`
     );
     
-    // Legg til orderNumber for frontend og normaliser feltnavn
-    const ordersWithNumber = result.rows.map(order => ({
-      ...order,
-      orderNumber: `SO-${order.id.split('-')[1]}-${order.id.split('-')[2].slice(-6)}`,
-      // Map database fields til frontend format
-      technicianId: order.technician_id,
-      customerId: order.customer_id,
-      plannedDate: order.scheduled_date,
-      type: order.service_type
-    }));
+    // Parse customer_data for alle ordrer
+    const ordersWithNumber = result.rows.map(order => {
+        // Parse customer_data hvis det er string
+        if (order.customer_data && typeof order.customer_data === 'string') {
+            try {
+                order.customer_data = JSON.parse(order.customer_data);
+            } catch (e) {
+                console.error('Failed to parse customer_data for order:', order.id);
+                order.customer_data = {};
+            }
+        }
+        
+        return {
+            ...order,
+            orderNumber: `SO-${order.id.split('-')[1]}-${order.id.split('-')[2].slice(-6)}`,
+            technicianId: order.technician_id,
+            customerId: order.customer_id,
+            plannedDate: order.scheduled_date,
+            type: order.service_type
+        };
+    });
     
     console.log(`Found ${ordersWithNumber.length} total orders`);
-    
     res.json(ordersWithNumber);
     
   } catch (error) {
@@ -189,68 +199,71 @@ router.get('/:id', async (req, res) => {
     }
 
     const order = orderResult.rows[0];
+    
+    // KRITISK FIX: Parse customer_data hvis det er en string
+    if (order.customer_data && typeof order.customer_data === 'string') {
+        try {
+            order.customer_data = JSON.parse(order.customer_data);
+            console.log('✅ Parsed customer_data:', order.customer_data);
+        } catch (e) {
+            console.error('❌ Failed to parse customer_data:', e);
+            order.customer_data = {};
+        }
+    }
+    
     console.log('✅ Order found:', order.id);
+    console.log('📦 Customer name:', order.customer_data?.name);
+    console.log('📍 Physical address:', order.customer_data?.physicalAddress);
 
-// Hent equipment for denne kunden med service status
-const equipmentResult = await pool.query(
-    `SELECT 
-        e.id, 
-        e.systemtype, 
-        e.systemnummer, 
-        e.systemnavn, 
-        e.plassering, 
-        e.betjener, 
-        e.location, 
-        e.status as equipment_status,
-        e.notater,
-        COALESCE(sr.status, 'not_started') as service_status,
-        COALESCE(sr.status, 'not_started') as service_report_status
-    FROM equipment e
-    LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
-    WHERE e.customer_id = $1 AND e.status = 'active'`,
-    [parseInt(order.customer_id), order.id]
-);
-
-// Map equipment med status
-const equipment = equipmentResult.rows.map(eq => ({
-    ...eq,
-    serviceStatus: eq.service_status === 'draft' ? 'in_progress' : eq.service_status,
-    serviceReportStatus: eq.service_report_status === 'draft' ? 'in_progress' : eq.service_report_status
-}));
-
-    // 3. Send response i riktig format for frontend
-    // Hent tekniker-info
-let technician = null;
-if (order.technician_id) {
-  try {
-    const techResult = await pool.query(
-      'SELECT id, name, initials FROM technicians WHERE id = $1',
-      [order.technician_id]
+    // 2. Hent equipment for denne kunden med service status
+    const equipmentResult = await pool.query(
+        `SELECT 
+            e.id, 
+            e.systemtype, 
+            e.systemnummer, 
+            e.systemnavn, 
+            e.plassering, 
+            e.betjener, 
+            e.location, 
+            e.status as equipment_status,
+            e.notater,
+            COALESCE(sr.status, 'not_started') as service_status,
+            COALESCE(sr.status, 'not_started') as service_report_status
+        FROM equipment e
+        LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
+        WHERE e.customer_id = $1 AND e.status = 'active'`,
+        [parseInt(order.customer_id), order.id]
     );
-    technician = techResult.rows[0] || null;
-  } catch (error) {
-    console.error('Could not load technician:', error);
-  }
-}
 
-res.json({
-  order: order,
-  equipment: equipment,
-  customer: {
-    id: order.customer_id,
-    name: order.customer_name,
-    ...order.customer_data
-  },
-  technician: technician
-});
+    // 3. Map equipment med status
+    const equipment = equipmentResult.rows.map(eq => ({
+        ...eq,
+        serviceStatus: eq.service_status === 'draft' ? 'in_progress' : eq.service_status,
+        serviceReportStatus: eq.service_report_status === 'draft' ? 'in_progress' : eq.service_report_status
+    }));
 
-  } catch (error) {
-    console.error('❌ ORDERS GET /:id ERROR:', error);
-    console.error('Stack:', error.stack);
-    res.status(500).json({ 
-      error: 'Feil ved henting av ordre',
-      details: error.message 
+    // 4. Parse included_equipment_ids hvis det er string
+    if (order.included_equipment_ids && typeof order.included_equipment_ids === 'string') {
+        try {
+            order.included_equipment_ids = JSON.parse(order.included_equipment_ids);
+        } catch (e) {
+            console.error('Failed to parse included_equipment_ids:', e);
+            order.included_equipment_ids = [];
+        }
+    }
+
+    // 5. Send final response MED PARSED customer_data
+    res.json({
+        ...order,
+        orderNumber: `SO-${order.id.split('-')[1]}-${order.id.split('-')[2].slice(-6)}`,
+        equipment: equipment,
+        // CRITICAL: Sørg for at customer_data er inkludert og parsed
+        customer_data: order.customer_data || {}
     });
+    
+  } catch (error) {
+    console.error('Error fetching order:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 

@@ -386,6 +386,52 @@ const state = {
     editingComponentIndex: null
 };
 
+// DEDIKERT FUNKSJON FOR Å OPPDATERE KUNDE OG ADRESSE
+function updateCustomerInfo() {
+    console.log('🔄 updateCustomerInfo() called');
+    console.log('📊 state.order:', state.order);
+    console.log('👤 state.order?.customer_data:', state.order?.customer_data);
+    
+    // Finn elementene
+    const customerNameEl = document.getElementById('customer-name');
+    const customerAddressEl = document.getElementById('customer-address');
+    
+    console.log('🔍 Element check:', {
+        customerNameEl: !!customerNameEl,
+        customerAddressEl: !!customerAddressEl
+    });
+    
+    // Hent verdiene
+    const customerName = state.order?.customer_data?.name || 
+                        state.order?.customer_name || 
+                        'Ukjent kunde';
+    
+    const address = state.order?.customer_data?.physicalAddress || 
+                   state.order?.customer_data?.postalAddress || 
+                   'Ikke registrert';
+    
+    console.log('💾 Values to set:', {
+        customerName: customerName,
+        address: address
+    });
+    
+    // Oppdater elementene
+    if (customerNameEl) {
+        customerNameEl.textContent = customerName;
+        console.log('✅ customerNameEl updated to:', customerNameEl.textContent);
+    } else {
+        console.error('❌ customer-name element NOT FOUND in DOM!');
+        console.log('📍 Available elements with id:', Array.from(document.querySelectorAll('[id]')).map(el => el.id));
+    }
+    
+    if (customerAddressEl) {
+        customerAddressEl.textContent = address;
+        console.log('✅ customerAddressEl updated to:', customerAddressEl.textContent);
+    } else {
+        console.error('❌ customer-address element NOT FOUND in DOM!');
+    }
+}
+
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return;
@@ -678,21 +724,19 @@ function generateReportId() {
     return `RPT-${state.orderId}-${state.equipmentId}-${timestamp}-${random}`;
 }
 
-// Main initialization function
-// Main initialization function
 async function initializePage() {
     try {
+        setLoading(true);
         clearAllImageContainers();
         
-        const urlParams = new URLSearchParams(window.location.search);
-        const rawOrderId = urlParams.get('orderId');
-        const rawEquipmentId = urlParams.get('equipmentId');
+        // Parse URL params
+        const params = new URLSearchParams(window.location.search);
+        state.orderId = params.get('orderId');
+        state.equipmentId = parseInt(params.get('equipmentId'));
         
-        state.orderId = rawOrderId;
-        state.equipmentId = rawEquipmentId ? parseInt(rawEquipmentId) : null;
-        
-        console.log('Raw URL params:', { rawOrderId, rawEquipmentId });
-        console.log('Parsed params:', { orderId: state.orderId, equipmentId: state.equipmentId });
+        console.log('🚀 Starting initialization...');
+        console.log('📍 OrderId:', state.orderId);
+        console.log('📍 EquipmentId:', state.equipmentId);
         
         if (!state.orderId) {
             throw new Error('Mangler ordre-ID i URL. Bruk: service.html?orderId=XXX&equipmentId=YYY');
@@ -702,17 +746,38 @@ async function initializePage() {
             throw new Error('Mangler eller ugyldig anlegg-ID i URL. Bruk: service.html?orderId=XXX&equipmentId=YYY');
         }
         
-        console.log('Initializing with:', { orderId: state.orderId, equipmentId: state.equipmentId });
-        
-        state.order = {
-            id: state.orderId,
-            orderNumber: state.orderId,
-            customer: {
-                name: 'Laster...' // Will be updated in loadEquipmentData
-            }
-        };
+        // STEP 1: Last ordre-data FØRST
+        console.log('📡 Loading order data...');
+        try {
+            const orderResponse = await api.get(`/orders/${state.orderId}`);
 
-        // Load all necessary data in parallel
+// SAFETY: Parse customer_data på frontend hvis backend ikke gjorde det
+if (orderResponse.customer_data && typeof orderResponse.customer_data === 'string') {
+    try {
+        orderResponse.customer_data = JSON.parse(orderResponse.customer_data);
+        console.log('✅ Parsed customer_data on frontend');
+    } catch (e) {
+        console.error('❌ Failed to parse customer_data:', e);
+        orderResponse.customer_data = {};
+    }
+}
+
+state.order = orderResponse;
+console.log('✅ Order data loaded:', state.order);
+console.log('📦 Customer data:', state.order.customer_data);
+console.log('🏢 Customer name:', state.order.customer_data?.name);
+console.log('📍 Physical address:', state.order.customer_data?.physicalAddress);
+
+// NYTT: Prøv å oppdatere umiddelbart (hvis elementer allerede eksisterer)
+console.log('🔄 Attempting immediate customer info update...');
+updateCustomerInfo();
+        } catch (orderError) {
+            console.error('❌ Failed to load order:', orderError);
+            throw new Error('Kunne ikke laste ordre-data');
+        }
+        
+        // STEP 2: Last equipment og technician
+        console.log('📡 Loading equipment and technician...');
         const [equipment, technician] = await Promise.all([
             loadEquipmentData(state.equipmentId),
             loadTechnician()
@@ -721,23 +786,34 @@ async function initializePage() {
         state.equipment = equipment;
         state.technician = technician;
         
-        // FLYTT renderHeader HIT - ETTER at state.equipment er satt
+        console.log('✅ Equipment loaded:', state.equipment);
+        console.log('✅ Technician loaded:', state.technician);
+        
+        // STEP 3: Render header
+        console.log('🎨 Rendering header...');
         renderHeader();
         
-        // Load or create service report
+        // STEP 4: Load service report
+        console.log('📋 Loading service report...');
         await loadServiceReport();
         
-        // Setup event listeners
+        // STEP 5: Setup listeners
+        console.log('🎧 Setting up event listeners...');
         setupEventListeners();
         
-        // Render everything
+        // STEP 6: Render everything
+        console.log('🎨 Rendering all components...');
         renderAll();
         
-        // Setup auto-save listeners
+        // STEP 7: Setup auto-save
+        console.log('💾 Setting up auto-save...');
         setupAutoSaveListeners();
         
+        console.log('✅ Initialization complete!');
+        setLoading(false);
+        
     } catch (error) {
-        console.error('Initialization error:', error);
+        console.error('❌ Initialization error:', error);
         showToast(error.message || 'Kunne ikke laste siden', 'error');
         setLoading(false);
     }
@@ -985,6 +1061,8 @@ async function loadServiceReport() {
             reportId: state.serviceReport.reportId,
             hasChecklist: !!state.serviceReport.reportData?.checklist,
             checklistKeys: state.serviceReport.reportData?.checklist ? Object.keys(state.serviceReport.reportData.checklist) : []
+
+        
         });
 
         // Last checklist template basert på equipment type
@@ -1022,75 +1100,102 @@ if (state.equipment?.systemtype) {
     } catch (error) {
         console.error('Error loading checklist template:', error);
     }
-} else {
-    console.error('❌ No equipment systemtype available');
-}
+        } else {
+            console.error('❌ No equipment systemtype available');
+        }
         
     } catch (error) {
         console.error('Error loading service report:', error);
         throw error;
     }
-}
-
-function renderAll() {
-    console.log("Rendering all components...");
-    // clearAllImageContainers(); // Ikke nødvendig - cleares allerede i initialize()
-    
-    try { renderHeader(); } catch (e) { console.error('Error in renderHeader:', e); }
-    try { renderAnleggInfo(); } catch (e) { console.error('Error in renderAnleggInfo:', e); }
-    try { renderComponentList(); } catch (e) { console.error('Error in renderComponentList:', e); }
-    try { renderComponentDetailsForm(); } catch (e) { console.error('Error in renderComponentDetailsForm:', e); }
-    try { renderChecklist(); } catch (e) { console.error('Error in renderChecklist:', e); }
-    try { renderSectionVisibility(); } catch (e) { console.error('Error in renderSectionVisibility:', e); }
-    try { renderDriftScheduleSection(); } catch (e) { console.error('Error in renderDriftScheduleSection:', e); }
-    try { resetAndLoadForm(); } catch (e) { console.error('Error in resetAndLoadForm:', e); }
-    try { setupOverallCommentDetection(); } catch (e) { console.error('Error in setupOverallCommentDetection:', e); }
-    
-    // NYTT: Last inn eksisterende data ETTER at alt er rendret
-    try { 
-        // Vent litt slik at DOM er fullstendig rendret
-        setTimeout(() => {
-            loadExistingReportData();
-        }, 100);
-    } catch (e) { console.error('Error in loadExistingReportData:', e); }
-    
-    // Set overall comment if exists
-    try {
-        const overallCommentEl = document.getElementById('overall-comment');
-        if (overallCommentEl) {
-            overallCommentEl.value = state.serviceReport.reportData.overallComment || '';
-        }
-    } catch (e) { console.error('Error setting overall comment:', e); }
-    
-    // VIS ALLTID attachments og overall comment sections
-    try {
-        const attachmentsSection = document.getElementById('attachments-section');
-        const overallCommentSection = document.getElementById('overall-comment-section');
-        
-        if (attachmentsSection) {
-            attachmentsSection.style.display = 'block';
-            console.log('✅ Attachments section made visible');
-        }
-        
-        if (overallCommentSection) {
-            overallCommentSection.style.display = 'block';
-            console.log('✅ Overall comment section made visible');
-        }
-    } catch (e) { console.error('Error showing sections:', e); }
-    
-    try { updateFinalizeButtonState(); } catch (e) { console.error('Error in updateFinalizeButtonState:', e); }
-    try { updatePageFooterVisibility(); } catch (e) { console.error('Error in updatePageFooterVisibility:', e); }
-    try { renderGeneralImages(); } catch (e) { console.error('Error in renderGeneralImages:', e); }
-    
-    // NYTT: Last også avvik-bilder for eksisterende sjekklister
+    // ============================================
+    // BACKUP: Oppdater kundeinfo etter rapport er lastet
+    // ============================================
+    console.log('🔄 [CUSTOMER FIX] Triggering customer info update after report load...');
     setTimeout(() => {
-        try { 
-            renderAvvikImagesForChecklist(); 
-            console.log('✅ Avvik images rendered for existing checklist');
-        } catch (e) { 
-            console.error('Error in renderAvvikImagesForChecklist:', e); 
+        const customerNameEl = document.getElementById('customer-name');
+        const customerAddressEl = document.getElementById('customer-address');
+        
+        if (customerNameEl && customerAddressEl && state.order && state.order.customer_data) {
+            const customerName = state.order.customer_data.name || 
+                                state.order.customer_name || 
+                                'Ukjent kunde';
+            const address = state.order.customer_data.physicalAddress || 
+                           state.order.customer_data.postalAddress || 
+                           'Ikke registrert';
+            
+            customerNameEl.textContent = customerName;
+            customerAddressEl.textContent = address;
+            console.log('✅ [CUSTOMER FIX] Updated from loadServiceReport:', {
+                name: customerName,
+                address: address
+            });
         }
-    }, 500);
+    }, 100);
+}
+function renderAll() {
+    console.log('🎨 renderAll() called');
+    
+    // ============================================
+    // NYTT: OPPDATER KUNDEINFO FØRST - GARANTERT
+    // ============================================
+    console.log('👤 [CUSTOMER FIX] Updating customer info...');
+    console.log('👤 [CUSTOMER FIX] state.order:', state.order);
+    console.log('👤 [CUSTOMER FIX] state.order?.customer_data:', state.order?.customer_data);
+    
+    // Finn elementene
+    const customerNameEl = document.getElementById('customer-name');
+    const customerAddressEl = document.getElementById('customer-address');
+    
+    console.log('👤 [CUSTOMER FIX] Elements found:', {
+        customerNameEl: !!customerNameEl,
+        customerAddressEl: !!customerAddressEl
+    });
+    
+    // Hent verdiene
+    if (state.order && state.order.customer_data) {
+        const customerName = state.order.customer_data.name || 
+                            state.order.customer_name || 
+                            'Ukjent kunde';
+        
+        const address = state.order.customer_data.physicalAddress || 
+                       state.order.customer_data.postalAddress || 
+                       'Ikke registrert';
+        
+        console.log('👤 [CUSTOMER FIX] Values to set:', {
+            customerName: customerName,
+            address: address
+        });
+        
+        // Oppdater elementene
+        if (customerNameEl) {
+            customerNameEl.textContent = customerName;
+            console.log('✅ [CUSTOMER FIX] Customer name updated:', customerNameEl.textContent);
+        } else {
+            console.error('❌ [CUSTOMER FIX] customer-name element NOT FOUND!');
+        }
+        
+        if (customerAddressEl) {
+            customerAddressEl.textContent = address;
+            console.log('✅ [CUSTOMER FIX] Address updated:', customerAddressEl.textContent);
+        } else {
+            console.error('❌ [CUSTOMER FIX] customer-address element NOT FOUND!');
+        }
+    } else {
+        console.warn('⚠️ [CUSTOMER FIX] state.order or customer_data not available yet');
+    }
+    // ============================================
+    // SLUTT PÅ CUSTOMER FIX
+    // ============================================
+    
+    // Resten av eksisterende renderAll() kode fortsetter her...
+    renderAnleggInfo();
+    renderDriftScheduleSection();
+    renderSystemFields();
+    renderChecklist();
+    renderComponentList();
+    renderDynamicLines();
+    renderAdditionalWorkTable();
 }
 
 async function renderHeader() {
@@ -1114,111 +1219,115 @@ function navigateBack() {
 }
 
 function renderAnleggInfo() {
+    console.log('🎨 renderAnleggInfo called');
+    
     const container = document.getElementById('anlegg-info');
-    if (!container) return;
+    if (!container) {
+        console.error('Anlegg info container not found');
+        return;
+    }
 
-    // Status badge mapping
-    const getStatusBadge = (status) => {
-        const statusMap = {
-            'not_started': { text: 'IKKE STARTET', class: 'status-not-started' },
-            'draft': { text: 'UNDER ARBEID', class: 'status-in-progress' },
-            'in_progress': { text: 'UNDER ARBEID', class: 'status-in-progress' },
-            'completed': { text: 'FERDIG', class: 'status-completed' }
-        };
-        const info = statusMap[status] || statusMap['not_started'];
-        return `<span class="status-badge ${info.class}">${info.text}</span>`;
-    };
-
-    const statusBadge = state.serviceReport?.status ? 
-        getStatusBadge(state.serviceReport.status) : 
-        getStatusBadge('not_started');
-
-    // Hent kundeinfo fra order
-    const customerName = state.order?.customer_name || state.order?.customer?.name || 'Laster...';
+    // Hent alle verdier
+    const orderNumber = state.order?.orderNumber || state.order?.id?.split('-').slice(-2).join('-') || 'N/A';
+    const customerName = state.order?.customer_data?.name || state.order?.customer_name || 'Ikke registrert';
     const visitAddress = state.order?.customer_data?.physicalAddress || 
-                        state.order?.customer_data?.address || 
-                        state.order?.visit_address || 
+                        state.order?.customer_data?.postalAddress || 
                         'Ikke registrert';
+    const phone = state.order?.customer_data?.phone || 'Ikke registrert';
+    const contact = state.order?.customer_data?.contact || 'Ikke registrert';
+    
+    const systemType = state.equipment?.systemtype || 'Ikke angitt';
+    const systemNumber = state.equipment?.systemnummer || 'N/A';
+    const systemName = state.equipment?.systemnavn || 'Ikke angitt';
+    const placement = state.equipment?.plassering || 'Ikke angitt';
+    const operator = state.equipment?.betjener || 'Ikke angitt';
+    const internalNotes = state.equipment?.notater || state.equipment?.internalNotes || '';
 
-    // Helper for escaping HTML
-    const escapeHTML = (str) => {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
-    };
-
+    // JUSTERT LAYOUT - HEADING OG ORDRENUMMER SIDE BY SIDE
     container.innerHTML = `
-        <!-- Ordrenummer øverst i liten skrift -->
-        <div style="font-size: 11px; color: #6b7280; margin-bottom: 8px;">
-            Ordrenummer: ${escapeHTML(state.orderId || 'N/A')}
-        </div>
-        
-        <!-- Header med tittel og status badge -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <h3 style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;">Anleggsinformasjon</h3>
-            ${statusBadge}
-        </div>
-        
-        <!-- Kunde og besøksadresse (full bredde) -->
-        <div style="margin-bottom: 16px;">
-            <div style="margin-bottom: 12px;">
-                <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Kunde</div>
-                <div style="font-size: 14px; font-weight: 500; color: #111827;">${escapeHTML(customerName)}</div>
-            </div>
-            <div>
-                <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Besøksadresse</div>
-                <div style="font-size: 14px; color: #374151;">${escapeHTML(visitAddress)}</div>
-            </div>
-        </div>
-        
-        <!-- Anleggsinfo i to kolonner -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin-bottom: 16px;">
-            <!-- Anleggstype -->
-            <div>
-                <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Anleggstype</div>
-                <div style="font-size: 14px; font-weight: 500; color: #111827;">${escapeHTML(state.equipment?.systemtype || 'N/A')}</div>
+        <div class="info-card anlegg-card" style="padding-top: 8px !important;">
+            <!-- Header og Ordrenummer side by side OVER streken -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #e9ecef;">
+                <div class="info-header" style="margin-bottom: 0 !important;">
+                    <h2 style="margin: 0 !important;">Anleggsinformasjon</h2>
+                </div>
+                <div style="font-size: 11px; color: #6c757d; white-space: nowrap;">
+                    Ordrenummer: ${orderNumber}
+                </div>
             </div>
             
-            <!-- Systemnummer -->
-            <div>
-                <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Systemnummer</div>
-                <div style="font-size: 14px; color: #374151;">${escapeHTML(state.equipment?.systemnummer || 'N/A')}</div>
+            <!-- Systemtype (grå tekst) -->
+            <div class="equipment-type-text">${systemType}</div>
+            
+            <!-- Kunde (full bredde med bold label) -->
+            <div class="info-single-bold">
+                <span class="info-label-bold">KUNDE:</span>
+                <span class="info-value">${customerName}</span>
             </div>
             
-            <!-- Systemnavn -->
-            <div>
-                <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Systemnavn</div>
-                <div style="font-size: 14px; color: #374151;">${escapeHTML(state.equipment?.systemnavn || 'N/A')}</div>
+            <!-- Besøksadresse (full bredde med bold label) -->
+            <div class="info-single-bold">
+                <span class="info-label-bold">BESØKSADRESSE:</span>
+                <span class="info-value">${visitAddress}</span>
             </div>
             
-            <!-- Plassering -->
-            <div>
-                <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Plassering</div>
-                <div style="font-size: 14px; color: #374151;">${escapeHTML(state.equipment?.plassering || 'N/A')}</div>
+            <!-- FLEXBOX TO-KOLONNE LAYOUT -->
+            <div style="margin-top: 10px;">
+                <!-- Rad 1: Telefon og Kontaktperson -->
+                <div style="display: flex; gap: 10px; margin-bottom: 6px;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+                        <span class="info-label">TELEFONNUMMER</span>
+                        <span class="info-value">${phone}</span>
+                    </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+                        <span class="info-label">KONTAKTPERSON</span>
+                        <span class="info-value">${contact}</span>
+                    </div>
+                </div>
+                
+                <!-- Rad 2: Systemnummer og Systemnavn -->
+                <div style="display: flex; gap: 10px; margin-bottom: 6px;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+                        <span class="info-label">SYSTEMNUMMER</span>
+                        <span class="info-value">${systemNumber}</span>
+                    </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+                        <span class="info-label">SYSTEMNAVN</span>
+                        <span class="info-value">${systemName}</span>
+                    </div>
+                </div>
+                
+                <!-- Rad 3: Plassering og Betjener -->
+                <div style="display: flex; gap: 10px; margin-bottom: 6px;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+                        <span class="info-label">PLASSERING</span>
+                        <span class="info-value">${placement}</span>
+                    </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+                        <span class="info-label">BETJENER</span>
+                        <span class="info-value">${operator}</span>
+                    </div>
+                </div>
             </div>
+            
+            <!-- Intern kommentar (dynamisk, tilpasser seg lengden) -->
+            ${internalNotes ? `
+                <div class="internal-comment-section" style="margin-top: 20px !important; padding-top: 16px !important;">
+                    <div class="comment-header">
+                        <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Intern kommentar</span>
+                    </div>
+                    <div class="comment-text" style="white-space: pre-wrap; word-wrap: break-word;">${internalNotes}</div>
+                </div>
+            ` : ''}
         </div>
-        
-        <!-- Betjener (hvis finnes) -->
-        ${state.equipment?.betjener ? `
-        <div style="margin-bottom: 16px;">
-            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">Betjener</div>
-            <div style="font-size: 14px; color: #374151;">${escapeHTML(state.equipment.betjener)}</div>
-        </div>
-        ` : ''}
-        
-        <!-- Intern kommentar (hvis finnes) -->
-        ${state.equipment?.notater ? `
-        <div style="padding: 12px; background-color: #fffbeb; border-radius: 6px; border: 1px solid #fef3c7;">
-            <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
-                <span style="color: #f59e0b;">⚠️</span>
-                <span style="font-size: 12px; font-weight: 600; color: #92400e;">Intern kommentar</span>
-            </div>
-            <div style="font-size: 13px; color: #78350f; line-height: 1.4;">${escapeHTML(state.equipment.notater)}</div>
-        </div>
-        ` : ''}
     `;
+
+    console.log('✅ Anleggsinformasjon rendered');
 }
+
 
 function renderComponentList() {
     const container = document.getElementById('component-list-container');
@@ -2034,6 +2143,21 @@ function renderDriftScheduleSection() {
         container.innerHTML = '';
         container.style.display = 'none';
     }
+}
+
+function renderSystemFields() {
+    console.log('ℹ️ renderSystemFields called (system fields rendered in component details)');
+    return;
+}
+
+function renderDynamicLines() {
+    console.log('ℹ️ renderDynamicLines called (products/work rendered elsewhere)');
+    return;
+}
+
+function renderAdditionalWorkTable() {
+    console.log('ℹ️ renderAdditionalWorkTable called (work table rendered elsewhere)');
+    return;
 }
 
 // NYTT: Rydd opp alle bildecontainere

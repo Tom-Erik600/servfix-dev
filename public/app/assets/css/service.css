@@ -2077,3 +2077,255 @@ button[type="submit"].action-btn.primary:hover {
     color: #16a34a;
 }
 
+/* ============================================
+   NY CSS for smartere Anleggsinformasjon layout
+   ERSTATT ALL eksisterende anlegg CSS med dette
+   ============================================ */
+
+/* Kompakt styling for hele kortet */
+.anlegg-card {
+    padding: 12px !important;
+}
+
+.anlegg-card .info-header {
+    margin-bottom: 10px !important;
+}
+
+.anlegg-card .info-header h2 {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    color: #212529 !important;
+    margin: 0 !important;
+}
+
+/* Ordrenummer */
+.order-meta {
+    font-size: 11px;
+    color: #6c757d;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+/* Anleggstype under header - svart/grå tekst */
+.equipment-type-text {
+    font-size: 13px;
+    color: #6c757d;
+    margin-bottom: 12px;
+    font-weight: 400;
+}
+
+/* Full bredde items (kunde, besøksadresse) */
+.info-single {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 8px;
+}
+
+/* Info rows - hver rad har to kolonner */
+.anlegg-info-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.info-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.info-col {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.info-label {
+    font-size: 10px !important;
+    color: #6c757d !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.3px !important;
+    font-weight: 600 !important;
+    line-height: 1.2 !important;
+}
+
+.info-value {
+    font-size: 13px !important;
+    color: #212529 !important;
+    font-weight: 500 !important;
+    word-break: break-word !important;
+    line-height: 1.3 !important;
+}
+
+/* Intern kommentar section */
+.internal-comment-section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e9ecef;
+}
+
+.comment-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+    color: #f59e0b;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.comment-header svg {
+    color: #f59e0b;
+}
+
+.comment-text {
+    font-size: 12px;
+    color: #495057;
+    background-color: #fffbeb;
+    padding: 8px 10px;
+    border-radius: 4px;
+    border-left: 3px solid #f59e0b;
+    line-height: 1.4;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .info-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .anlegg-header-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+}
+
+/* ============================================
+   KOMPAKT KUNDEKORT LAYOUT - FUNGERENDE VERSJON
+   ============================================ */
+
+/* Kompakt padding på hele kortet */
+.anlegg-card {
+    padding: 10px !important;
+}
+
+.anlegg-card .info-header {
+    margin-bottom: 6px !important;
+}
+
+.anlegg-card .info-header h2 {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    color: #212529 !important;
+    margin: 0 !important;
+}
+
+/* Ordrenummer - liten grå tekst */
+.anlegg-card .order-meta {
+    font-size: 11px;
+    color: #6c757d;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+/* Systemtype - grå tekst under header */
+.anlegg-card .equipment-type-text {
+    font-size: 12px;
+    color: #6c757d;
+    margin-bottom: 10px;
+    font-weight: 400;
+}
+
+/* Full bredde items MED BOLD LABEL (Kunde og Adresse) */
+.anlegg-card .info-single-bold {
+    display: flex !important;
+    gap: 6px;
+    margin-bottom: 6px;
+    align-items: baseline;
+}
+
+.anlegg-card .info-label-bold {
+    font-size: 11px !important;
+    color: #212529 !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.3px !important;
+    white-space: nowrap;
+}
+
+/* To-kolonne grid - KOMPAKT - MED FORCE */
+.anlegg-card .anlegg-info-grid-compact {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px 10px !important;
+    margin-top: 10px;
+}
+
+.anlegg-card .anlegg-info-grid-compact .info-col {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 2px;
+    min-width: 0;
+}
+
+.anlegg-card .info-col .info-label {
+    font-size: 9px !important;
+    color: #6c757d !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.3px !important;
+    font-weight: 600 !important;
+    line-height: 1.2 !important;
+}
+
+.anlegg-card .info-col .info-value {
+    font-size: 12px !important;
+    color: #212529 !important;
+    font-weight: 500 !important;
+    word-break: break-word !important;
+    line-height: 1.3 !important;
+}
+
+/* Intern kommentar section */
+.anlegg-card .internal-comment-section {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e9ecef;
+}
+
+.anlegg-card .comment-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+    color: #f59e0b;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.anlegg-card .comment-header svg {
+    color: #f59e0b;
+}
+
+.anlegg-card .comment-text {
+    font-size: 11px;
+    color: #495057;
+    background-color: #fffbeb;
+    padding: 6px 8px;
+    border-radius: 4px;
+    border-left: 3px solid #f59e0b;
+    line-height: 1.3;
+}
+
+/* Responsive - collapse til 1 kolonne på små skjermer */
+@media (max-width: 600px) {
+    .anlegg-card .anlegg-info-grid-compact {
+        grid-template-columns: 1fr !important;
+        gap: 6px !important;
+    }
+}

@@ -119,20 +119,21 @@ async function initializePage() {
             throw new Error(`Server-feil: ${response.status}`);
         }
         const data = await response.json();
+        const orderData = data.order || data;
 
         // Debug logging
         console.log('Order data loaded:', {
-            order: data.order,
-            customerId: data.order?.customer_id,
+            orderData: orderData,
+            customerId: orderData?.customer_id,
             customer: data.customer,
             equipment: data.equipment,
             equipmentCount: data.equipment?.length
         });
 
         // Oppdater pageState DIREKTE uten å nullstille først
-        pageState.order = data.order;
-        pageState.customer = data.customer;
-        pageState.technician = data.technician;
+        pageState.order = orderData;
+        pageState.customer = data.customer || {};
+        pageState.technician = data.technician || {};
         pageState.quotes = data.quotes || [];
         
         // ✅ KRITISK: Filtrer ut inaktive anlegg EKSPLISITT
@@ -172,6 +173,9 @@ async function initializePage() {
         pageState.equipment = uniqueEquipment;
         
         // Håndter inkluderte anlegg
+        if (!pageState.order) {
+            throw new Error('Order data mangler i API response');
+        }
         if (pageState.order.included_equipment_ids && pageState.order.included_equipment_ids.length > 0) {
             // Konverter til integers for sammenligning
             pageState.selectedEquipmentIds = pageState.order.included_equipment_ids.map(id => parseInt(id));

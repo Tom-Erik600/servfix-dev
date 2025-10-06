@@ -814,3 +814,33 @@ main {
         font-size: 13px;
     }
 }
+/* Kalender status-prikker - konsistent med ordre-kort */
+.service-indicator { 
+    position: absolute; 
+    bottom: 5px; 
+    width: 6px; 
+    height: 6px; 
+    border-radius: 50%; 
+    /* FJERNET: background-color: #FF6B35; - bruker status-klasser nå */
+}
+
+/* Grå prikk = Bare planlagte ordre */
+.service-indicator.scheduled { 
+    background-color: #6c757d;
+}
+
+/* Gul prikk = Minst én ordre pågår */
+.service-indicator.in-progress { 
+    background-color: #ffc107;
+}
+
+/* Grønn prikk = Alle ordre fullført */
+.service-indicator.completed { 
+    background-color: #28a745;
+}
+
+/* Hvit prikk når dag er valgt (for å se mot blå bakgrunn) */
+.calendar-day.selected .service-indicator,
+.month-day.selected .service-indicator { 
+    background-color: white; 
+}

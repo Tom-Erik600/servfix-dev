@@ -131,6 +131,37 @@ router.get('/:customerId/addresses', async (req, res) => {
   }
 });
 
+// Hent servfixmail kontakt for kunde
+router.get('/:customerId/servfixmail', async (req, res) => {
+  const { customerId } = req.params;
+  console.log(`📧 [ADMIN CUSTOMERS] GET servfixmail contact for customer ${customerId}`);
+  
+  try {
+    const tripletexService = require('../../services/tripletexService');
+    
+    const servfixContact = await tripletexService.getServfixmailContact(customerId);
+    
+    if (servfixContact && servfixContact.email) {
+      console.log(`✅ [ADMIN CUSTOMERS] Found servfixmail email: ${servfixContact.email}`);
+      res.json({ 
+        email: servfixContact.email,
+        firstName: servfixContact.firstName,
+        lastName: servfixContact.lastName
+      });
+    } else {
+      console.log(`⚠️ [ADMIN CUSTOMERS] No servfixmail contact found for customer ${customerId}`);
+      res.json({ email: null });
+    }
+    
+  } catch (error) {
+    console.error(`❌ [ADMIN CUSTOMERS] Error fetching servfixmail:`, error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch servfixmail contact',
+      details: error.message 
+    });
+  }
+});
+
 console.log('✅ [ADMIN CUSTOMERS] Route module loaded');
 
 module.exports = router;

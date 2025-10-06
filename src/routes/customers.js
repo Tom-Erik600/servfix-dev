@@ -1,22 +1,22 @@
 const express = require('express');
 const router = express.Router();
 
-console.log('🟢 [ADMIN CUSTOMERS] Route loading...');
+console.log('🟢 [CUSTOMERS] Route loading...');
 
-// Middleware - sjekk ADMIN auth
+// Middleware - sjekk tekniker ELLER admin auth
 router.use((req, res, next) => {
-  if (!req.session.isAdmin) {
-    return res.status(401).json({ error: 'Admin authentication required' });
+  if (!req.session.technicianId && !req.session.isAdmin) {
+    return res.status(401).json({ error: 'Authentication required' });
   }
   next();
 });
 
 // GET all customers (UTEN adresser for å unngå rate limiting)
 router.get('/', async (req, res) => {
-  console.log('🟢 [ADMIN CUSTOMERS] GET all customers');
+  console.log('🟢 [CUSTOMERS] GET all customers');
   
   try {
-    const tripletexService = require('../../services/tripletexService');
+    const tripletexService = require('../services/tripletexService');
     
     // Hent kunder UTEN å fetche adresser
     const client = await tripletexService.getApiClient();
@@ -61,7 +61,7 @@ router.get('/', async (req, res) => {
     res.json(transformed);
     
   } catch (error) {
-    console.error('❌ [ADMIN CUSTOMERS] Error:', error.message);
+    console.error('❌ [CUSTOMERS] Error:', error.message);
     res.status(500).json({ 
       error: 'Failed to fetch customers',
       details: error.message 
@@ -72,10 +72,10 @@ router.get('/', async (req, res) => {
 // NY ENDPOINT: Hent adresser for EN spesifikk kunde (LAZY LOADING)
 router.get('/:customerId/addresses', async (req, res) => {
   const { customerId } = req.params;
-  console.log(`🟢 [ADMIN CUSTOMERS] GET addresses for customer ${customerId}`);
+  console.log(`🟢 [CUSTOMERS] GET addresses for customer ${customerId}`);
   
   try {
-    const tripletexService = require('../../services/tripletexService');
+    const tripletexService = require('../services/tripletexService');
     
     // Hent kunde for å få address IDs
     const customer = await tripletexService.getCustomer(customerId);
@@ -115,7 +115,7 @@ router.get('/:customerId/addresses', async (req, res) => {
       }
     }
     
-    console.log(`✅ [ADMIN CUSTOMERS] Fetched addresses for ${customerId}:`, {
+    console.log(`✅ [CUSTOMERS] Fetched addresses for ${customerId}:`, {
       physicalAddress: addresses.physicalAddress || 'none',
       postalAddress: addresses.postalAddress || 'none'
     });
@@ -123,7 +123,7 @@ router.get('/:customerId/addresses', async (req, res) => {
     res.json(addresses);
     
   } catch (error) {
-    console.error(`❌ [ADMIN CUSTOMERS] Error fetching addresses:`, error.message);
+    console.error(`❌ [CUSTOMERS] Error fetching addresses:`, error.message);
     res.status(500).json({ 
       error: 'Failed to fetch addresses',
       details: error.message 
@@ -131,6 +131,6 @@ router.get('/:customerId/addresses', async (req, res) => {
   }
 });
 
-console.log('✅ [ADMIN CUSTOMERS] Route module loaded');
+console.log('✅ [CUSTOMERS] Route module loaded');
 
 module.exports = router;

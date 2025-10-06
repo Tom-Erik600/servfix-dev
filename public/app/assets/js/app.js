@@ -485,6 +485,8 @@ function toggleOrderCard(cardKey) {
     updateStatusCards();
 }
 
+// ERSTATT funksjonen createCalendarDay i public/app/assets/js/app.js
+
 function createCalendarDay(date, isMonthView = false) {
     const technicianOrders = appState.orders; // Already filtered by the backend
     
@@ -500,15 +502,27 @@ function createCalendarDay(date, isMonthView = false) {
     
     // Finn alle ordre for denne datoen
     const allOrdersForDate = technicianOrders.filter(o => o.scheduledDate === dateStr);
-    const uncompletedOrdersForDate = allOrdersForDate.filter(o => deriveOrderStatus(o) !== 'completed');
-
-    // Hvis det finnes ordre som ikke er ferdig, vis orange prikk
-    if (uncompletedOrdersForDate.length > 0) {
-        classes.push('has-orders');
-    } 
-    // Hvis det finnes ordre men ALLE er ferdige, vis grønn prikk
-    else if (allOrdersForDate.length > 0 && uncompletedOrdersForDate.length === 0) {
-        classes.push('all-completed');
+    
+    // Bestem prikk-type basert på status
+    let indicatorClass = '';
+    if (allOrdersForDate.length > 0) {
+        const statuses = allOrdersForDate.map(o => deriveOrderStatus(o));
+        const hasInProgress = statuses.some(s => s === 'in_progress');
+        const allCompleted = statuses.every(s => s === 'completed');
+        
+        if (allCompleted) {
+            // Alle ordre fullført - grønn prikk
+            classes.push('all-completed');
+            indicatorClass = 'completed';
+        } else if (hasInProgress) {
+            // Minst én ordre pågår - gul prikk
+            classes.push('has-in-progress');
+            indicatorClass = 'in-progress';
+        } else {
+            // Bare planlagte ordre - grå prikk
+            classes.push('has-scheduled');
+            indicatorClass = 'scheduled';
+        }
     }
     
     if (isMonthView && date.getMonth() !== appState.currentPeriod.getMonth()) {
@@ -517,8 +531,7 @@ function createCalendarDay(date, isMonthView = false) {
     
     return `<div class="${classes.join(' ')}" data-date="${dateStr}">
         <span class="day-number">${date.getDate()}</span>
-        ${uncompletedOrdersForDate.length > 0 ? `<span class="service-indicator"></span>` : 
-  allOrdersForDate.length > 0 ? `<span class="service-indicator completed"></span>` : ''}
+        ${indicatorClass ? `<span class="service-indicator ${indicatorClass}"></span>` : ''}
     </div>`;
 }
 

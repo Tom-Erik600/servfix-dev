@@ -111,8 +111,8 @@
         try {
             console.log('📋 Loading customers from Tripletex...');
             
-            // Bruk tekniker-kompatibelt Tripletex endpoint
-            const response = await fetch('/api/customers/tripletex', {
+            // Bruk samme endpoint som search-orders.js
+            const response = await fetch('/api/customers', {
                 credentials: 'include'
             });
             

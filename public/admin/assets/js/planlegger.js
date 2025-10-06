@@ -1,10 +1,5 @@
-// air-tech-adminweb/assets/js/planlegger.js - Med equipment selection
-
-// ========== LEGG TIL DISSE VARIABLENE ØVERST I FILEN ==========
 let allCustomersForSearch = [];
 let customerSearchTimeout = null;
-
-// ========== LEGG TIL DISSE FUNKSJONENE (IKKE ERSTATT EKSISTERENDE) ==========
 
 // Last alle kunder for søk (kjøres parallelt med eksisterende loadData)
 async function loadAllCustomersForSearch() {
@@ -355,9 +350,10 @@ function escapeHtml(unsafe) {
             console.log('✅ 4. Tekniker navn:', technician);
             
             targetCustomer = { 
+                ...customer,
                 technicianId, 
                 customerId: customer.id,
-                customerName: customer.name 
+                customerName: customer.name
             };
             
             console.log('✅ 5. targetCustomer satt:', targetCustomer);
@@ -870,6 +866,52 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
     // OPPDATERT: Lagre ordre med valgte anlegg
     // Finn og erstatt saveOrderWithEquipment funksjonen i planlegger.js med denne:
 
+    async function fetchCompleteCustomerData(customerId) {
+    console.log('📦 Fetching complete customer data for:', customerId);
+    
+    try {
+        // Hent adresser
+        const addressResponse = await fetch(`/api/admin/customers/${customerId}/addresses`, {
+            credentials: 'include'
+        });
+        
+        let addresses = {
+            physicalAddress: null,
+            postalAddress: null
+        };
+        
+        if (addressResponse.ok) {
+            addresses = await addressResponse.json();
+            console.log('✅ Addresses fetched:', addresses);
+        }
+        
+        // Hent servfixmail kontakt
+        const contactResponse = await fetch(`/api/admin/customers/${customerId}/servfixmail`, {
+            credentials: 'include'
+        });
+        
+        let servfixEmail = null;
+        if (contactResponse.ok) {
+            const contactData = await contactResponse.json();
+            servfixEmail = contactData.email;
+            console.log('✅ Servfixmail contact found:', servfixEmail);
+        }
+        
+        return {
+            ...addresses,
+            servfixEmail: servfixEmail
+        };
+        
+    } catch (error) {
+        console.error('❌ Error fetching complete customer data:', error);
+        return {
+            physicalAddress: null,
+            postalAddress: null,
+            servfixEmail: null
+        };
+    }
+}
+
     async function saveOrderWithEquipment() {
     console.log('saveOrderWithEquipment called');
     
@@ -893,6 +935,11 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
     }
     
     try {
+        // NYTT: Hent komplette kundedata først
+        console.log('📡 Fetching complete customer data...');
+        const completeData = await fetchCompleteCustomerData(targetCustomer.customerId);
+        console.log('📦 Complete data received:', completeData);
+        
         // Hent valgte anlegg
         const selectedCheckboxes = document.querySelectorAll('.equipment-checkbox:checked');
         const selectedEquipment = Array.from(selectedCheckboxes).map(cb => cb.value);
@@ -905,17 +952,29 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
         const orderData = {
             customerId: targetCustomer.customerId,
             customerName: customerName,
-            description: description,  // Bruk description fra input-feltet
+            description: description,
             serviceType: 'Generell service',
             technicianId: targetCustomer.technicianId,
-            scheduledDate: scheduledDate
+            scheduledDate: scheduledDate,
+            // OPPDATERT: Bruk komplette data
+            customerData: {
+                id: targetCustomer.customerId,
+                name: customerName,
+                physicalAddress: completeData.physicalAddress || targetCustomer.physicalAddress || null,
+                postalAddress: completeData.postalAddress || targetCustomer.postalAddress || null,
+                email: completeData.servfixEmail || targetCustomer.email || null,  // VIKTIG: Bruk servfixmail først
+                organizationNumber: targetCustomer.organizationNumber || null,
+                contact: targetCustomer.contact || null,
+                phone: targetCustomer.phone || null
+            }
         };
         
-        // Legg til includedEquipmentIds BARE hvis det er valgte anlegg
+        // Legg til includedEquipmentIds hvis valgt
         if (selectedEquipment.length > 0) {
             orderData.includedEquipmentIds = selectedEquipment;
         }
         
+        console.log('📦 Customer data being sent:', orderData.customerData);
         console.log('Sending order data:', orderData);
         
         const response = await fetch('/api/admin/orders', {

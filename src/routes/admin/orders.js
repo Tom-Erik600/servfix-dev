@@ -160,18 +160,18 @@ router.post('/', async (req, res) => {
     
     console.log('Equipment IDs as JSON string:', equipmentIdsJsonString);
     
-    const params = [
-      orderId,                                    // $1 - character varying
-      parseInt(customerId),                       // $2 - integer
-      String(customerName),                       // $3 - character varying
-      JSON.stringify(customer_data),              // $4 - jsonb (som string)
-      description || null,                        // $5 - text
-      serviceType || 'Generell service',         // $6 - character varying
-      technicianId || null,                       // $7 - character varying
-      scheduledDate || null,                      // $8 - date
-      technicianId ? 'scheduled' : 'pending',     // $9 - character varying
-      equipmentIdsJsonString                      // $10 - jsonb (som string eller null)
-    ];
+const params = [
+  orderId,
+  parseInt(customerId),
+  String(customerName),
+  JSON.stringify(customer_data),
+  description || null,
+  serviceType || 'Generell service',
+  technicianId || null,
+  scheduledDate || null,
+  technicianId ? 'scheduled' : 'pending',
+  equipmentIdsJsonString
+];
     
     console.log('INSERT params:');
     params.forEach((param, index) => {
