@@ -23,7 +23,7 @@ class TripletexService {
         }
 
         try {
-            const expirationDate = new Date(new Date().getFullYear() + 1, 0, 1) // Jan 1st next year
+            const expirationDate = new Date(new Date().getFullYear() + 1, 0, 1)
                 .toISOString().slice(0, 10);
 
             const tokenResponse = await axios({
@@ -62,13 +62,27 @@ class TripletexService {
         return this.apiClient;
     }
 
+    // Hent en enkelt adresse
+    async getAddress(addressId) {
+        try {
+            if (!addressId) return null;
+            
+            const client = await this.getApiClient();
+            const response = await client.get(`/address/${addressId}`);
+            return response.data.value;
+        } catch (error) {
+            console.error(`Error fetching address ${addressId}:`, error.message);
+            return null;
+        }
+    }
+
     async getCustomers(params = {}) {
         try {
             const client = await this.getApiClient();
             const response = await client.get('/customer', {
                 params: {
                     from: params.from || 0,
-                    count: params.count || 100, // Default to 100 customers
+                    count: params.count || 100,
                     ...params
                 }
             });
@@ -78,6 +92,7 @@ class TripletexService {
             throw new Error('Failed to fetch customers from Tripletex.');
         }
     }
+
     async getCustomer(customerId) {
         try {
             const client = await this.getApiClient();
@@ -89,76 +104,54 @@ class TripletexService {
         }
     }
 
-    // LEGG TIL: Hent alle kontakter for en kunde
-    // Hent kontakter for en kunde via riktig endpoint
-async getCustomerContacts(customerId) {
-    try {
-        console.log(`📧 FETCHING CONTACTS for customer ${customerId} via /contact endpoint`);
-        
-        const client = await this.getApiClient();
-        
-        // RETT API-KALL: Bruk /contact med customerId parameter
-        const response = await client.get('/contact', {
-            params: {
-                customerId: customerId,
-                from: 0,
-                count: 100
-            }
-        });
-        
-        console.log(`📧 API response status: ${response.status}`);
-        console.log(`📧 API response data:`, JSON.stringify(response.data, null, 2));
-        
-        if (response.data && response.data.values) {
-            console.log(`📧 Found ${response.data.values.length} contacts`);
-            return response.data.values;
-        }
-        
-        return [];
-        
-    } catch (error) {
-        console.error(`📧 ERROR fetching contacts for customer ${customerId}:`, error.message);
-        if (error.response) {
-            console.error(`📧 Error response:`, error.response.data);
-            console.error(`📧 Error status:`, error.response.status);
-        }
-        return [];
-    }
-}
-
-// Finn KUN servfixmail-kontakten
-async getServfixmailContact(customerId) {
-    try {
-        const contacts = await this.getCustomerContacts(customerId);
-        console.log(`📧 Searching ${contacts.length} contacts for firstName="servfixmail"`);
-        
-        // Log alle kontakter for debugging
-        contacts.forEach((contact, index) => {
-            console.log(`📧 Contact ${index + 1}:`, {
-                firstName: contact.firstName,
-                lastName: contact.lastName,
-                email: contact.email
+    async getCustomerContacts(customerId) {
+        try {
+            console.log(`📧 FETCHING CONTACTS for customer ${customerId}`);
+            
+            const client = await this.getApiClient();
+            const response = await client.get('/contact', {
+                params: {
+                    customerId: customerId,
+                    from: 0,
+                    count: 100
+                }
             });
-        });
-        
-        // Søk etter EKSAKT match på firstName = "servfixmail"
-        const servfixContact = contacts.find(contact => 
-            contact.firstName && contact.firstName.toLowerCase() === 'servfixmail'
-        );
-        
-        if (servfixContact && servfixContact.email) {
-            console.log(`📧 SUCCESS: Found servfixmail contact with email: ${servfixContact.email}`);
-            return servfixContact;
+            
+            if (response.data && response.data.values) {
+                console.log(`📧 Found ${response.data.values.length} contacts`);
+                return response.data.values;
+            }
+            
+            return [];
+            
+        } catch (error) {
+            console.error(`📧 ERROR fetching contacts for customer ${customerId}:`, error.message);
+            return [];
         }
-        
-        console.log(`📧 ERROR: No contact with firstName="servfixmail" found for customer ${customerId}`);
-        return null;
-        
-    } catch (error) {
-        console.error(`📧 Error searching for servfixmail contact:`, error.message);
-        return null;
     }
-}
+
+    async getServfixmailContact(customerId) {
+        try {
+            const contacts = await this.getCustomerContacts(customerId);
+            console.log(`📧 Searching ${contacts.length} contacts for firstName="servfixmail"`);
+            
+            const servfixContact = contacts.find(contact => 
+                contact.firstName && contact.firstName.toLowerCase() === 'servfixmail'
+            );
+            
+            if (servfixContact && servfixContact.email) {
+                console.log(`📧 SUCCESS: Found servfixmail contact with email: ${servfixContact.email}`);
+                return servfixContact;
+            }
+            
+            console.log(`📧 ERROR: No contact with firstName="servfixmail" found for customer ${customerId}`);
+            return null;
+            
+        } catch (error) {
+            console.error(`📧 Error searching for servfixmail contact:`, error.message);
+            return null;
+        }
+    }
 }
 
 module.exports = new TripletexService();

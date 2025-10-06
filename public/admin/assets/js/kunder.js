@@ -1,7 +1,3 @@
-/**
- * Kunder.js - Air-Tech AdminWeb
- * FULLSTENDIG implementasjon med detaljert visning
- */
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Starter kundesystem (fullstendig versjon)...');
@@ -134,33 +130,60 @@ document.addEventListener('DOMContentLoaded', function() {
         `).join('');
     }
 
-    /**
-     * Velger og viser en kunde
-     */
-    window.selectCustomer = function(customerId) {
-        // Konverter til string for sikker sammenligning
-        const customerIdStr = String(customerId);
-        
-        const customer = allCustomers.find(c => String(c.id) === customerIdStr);
-        
-        if (!customer) {
-            console.error('Kunde ikke funnet:', customerIdStr);
-            return;
-        }
+/**
+ * Velger og viser en kunde - MED lazy loading av adresser
+ */
+window.selectCustomer = async function(customerId) {
+    const customerIdStr = String(customerId);
+    
+    const customer = allCustomers.find(c => String(c.id) === customerIdStr);
+    
+    if (!customer) {
+        console.error('Kunde ikke funnet:', customerIdStr);
+        return;
+    }
 
-        // Oppdater valgt rad
-        const rows = customerTableBody.querySelectorAll('tr');
-        rows.forEach(row => row.classList.remove('selected'));
-        
-        const selectedRow = customerTableBody.querySelector(`[data-customer-id="${customerIdStr}"]`);
-        if (selectedRow) {
-            selectedRow.classList.add('selected');
-        }
+    // Oppdater valgt rad
+    const rows = customerTableBody.querySelectorAll('tr');
+    rows.forEach(row => row.classList.remove('selected'));
+    
+    const selectedRow = customerTableBody.querySelector(`[data-customer-id="${customerIdStr}"]`);
+    if (selectedRow) {
+        selectedRow.classList.add('selected');
+    }
 
-        currentSelectedCustomer = customer;
-        renderCustomerDetails(customer);
-        renderServiceHistory(customer);
-    };
+    currentSelectedCustomer = customer;
+    
+    // Render med placeholder-adresser først
+    renderCustomerDetails(customer);
+    renderServiceHistory(customer);
+    
+    // NYTT: Hent adresser i bakgrunnen hvis de ikke allerede er hentet
+    if (!customer.physicalAddress || !customer.postalAddress) {
+        console.log(`📍 Henter adresser for ${customer.name}...`);
+        try {
+            const response = await fetch(`/api/admin/customers/${customerId}/addresses`, {
+                credentials: 'include'
+            });
+            
+            if (response.ok) {
+                const addresses = await response.json();
+                
+                // Oppdater customer-objektet
+                customer.physicalAddress = addresses.physicalAddress;
+                customer.postalAddress = addresses.postalAddress;
+                
+                // Re-render med faktiske adresser
+                renderCustomerDetails(customer);
+                console.log('✅ Adresser hentet og oppdatert');
+            } else {
+                console.error('Feil ved henting av adresser:', response.status);
+            }
+        } catch (error) {
+            console.error('Feil ved henting av adresser:', error);
+        }
+    }
+};
 
     /**
      * Rendrer detaljert kundeinfo (uten servicehistorikk)

@@ -1,102 +1,136 @@
 const express = require('express');
-const db = require('../config/database');
-
 const router = express.Router();
 
-// Middleware - sjekk auth
+console.log('🟢 [ADMIN CUSTOMERS] Route loading...');
+
+// Middleware - sjekk ADMIN auth
 router.use((req, res, next) => {
-  if (!req.session.technicianId) {
-    return res.status(401).json({ error: 'Not authenticated' });
+  if (!req.session.isAdmin) {
+    return res.status(401).json({ error: 'Admin authentication required' });
   }
   next();
 });
 
-// GET all customers from Tripletex (for teknikere)
-router.get('/tripletex', async (req, res) => {
+// GET all customers (UTEN adresser for å unngå rate limiting)
+router.get('/', async (req, res) => {
+  console.log('🟢 [ADMIN CUSTOMERS] GET all customers');
+  
   try {
-    const tripletexService = require('../services/tripletexService');
+    const tripletexService = require('../../services/tripletexService');
     
-    console.log('🔍 Technician requesting Tripletex customers...');
-    
-    const customers = await tripletexService.getCustomers({
-      from: 0,
-      count: 1000
+    // Hent kunder UTEN å fetche adresser
+    const client = await tripletexService.getApiClient();
+    const response = await client.get('/customer', {
+      params: {
+        from: 0,
+        count: 1000
+      }
     });
     
-    // Transform Tripletex data til forventet format (samme som admin endpoint)
-    const transformedCustomers = customers.map(customer => ({
-      id: String(customer.id), // Konverter alltid til string
-      name: customer.name,
-      customerNumber: customer.customerNumber,
-      organizationNumber: customer.organizationNumber,
+    const customers = response.data.values;
+    console.log(`✅ Got ${customers.length} customers from Tripletex`);
+    
+    // Transform uten å hente adresser
+    const transformed = customers.map(c => ({
+      id: String(c.id),
+      name: c.name || '',
+      customerNumber: c.customerNumber || '',
+      organizationNumber: c.organizationNumber || '',
+      contact: c.customerContact ? 
+        `${c.customerContact.firstName || ''} ${c.customerContact.lastName || ''}`.trim() : '',
+      email: c.email || c.customerContact?.email || '',
+      phone: c.phoneNumber || c.phoneNumberMobile || '',
       
-      // Kontaktinfo
-      contact: customer.customerContact 
-        ? `${customer.customerContact.firstName || ''} ${customer.customerContact.lastName || ''}`.trim()
-        : '',
-      email: customer.email || customer.customerContact?.email || '',
-      phone: customer.phoneNumber || customer.phoneNumberMobile || '',
+      // Bare lagre ID-ene, hent faktisk adresse senere (lazy loading)
+      physicalAddressId: c.physicalAddress?.id || null,
+      postalAddressId: c.postalAddress?.id || null,
+      physicalAddress: '', // Tom til den hentes
+      postalAddress: '', // Tom til den hentes
       
-      // Adresser
-      physicalAddress: customer.physicalAddress 
-        ? `${customer.physicalAddress.addressLine1 || ''} ${customer.physicalAddress.addressLine2 || ''}, ${customer.physicalAddress.postalCode || ''} ${customer.physicalAddress.city || ''}`.trim()
-        : '',
-      postalAddress: customer.postalAddress 
-        ? `${customer.postalAddress.addressLine1 || ''} ${customer.postalAddress.addressLine2 || ''}, ${customer.postalAddress.postalCode || ''} ${customer.postalAddress.city || ''}`.trim()
-        : '',
-      
-      // Andre felter
-      currency: customer.currency?.id || 'NOK',
-      language: customer.language?.id || 'NO',
-      isCustomer: customer.isCustomer,
-      isSupplier: customer.isSupplier,
-      isPrivate: customer.isPrivateIndividual || false,
-      customerAccountManager: customer.accountManager?.name || '',
-      
-      // Ekstra data
-      invoiceEmail: customer.invoiceEmail || '',
-      overdueNoticeEmail: customer.overdueNoticeEmail || ''
+      currency: c.currency?.id || 'NOK',
+      language: c.language?.id || 'NO',
+      isCustomer: c.isCustomer || false,
+      isSupplier: c.isSupplier || false,
+      isPrivate: c.isPrivateIndividual || false,
+      customerAccountManager: c.accountManager?.name || '',
+      invoiceEmail: c.invoiceEmail || '',
+      overdueNoticeEmail: c.overdueNoticeEmail || ''
     }));
     
-    console.log(`✅ Loaded ${transformedCustomers.length} customers from Tripletex for technician`);
-    res.json(transformedCustomers);
+    console.log(`✅ Transformed ${transformed.length} customers`);
+    res.json(transformed);
     
   } catch (error) {
-    console.error('Error fetching customers from Tripletex for technician:', error);
-    res.status(500).json({ error: 'Kunne ikke hente kunder fra Tripletex' });
+    console.error('❌ [ADMIN CUSTOMERS] Error:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch customers',
+      details: error.message 
+    });
   }
 });
 
-// POST create new order (for teknikere)
-
-// Hent ALLE unike kunder fra orders (ikke filtrert på tekniker)
-router.get('/', async (req, res) => {
+// NY ENDPOINT: Hent adresser for EN spesifikk kunde (LAZY LOADING)
+router.get('/:customerId/addresses', async (req, res) => {
+  const { customerId } = req.params;
+  console.log(`🟢 [ADMIN CUSTOMERS] GET addresses for customer ${customerId}`);
+  
   try {
-    const pool = await db.getTenantConnection(req.session.tenantId);
+    const tripletexService = require('../../services/tripletexService');
     
-    const result = await pool.query(
-      `SELECT DISTINCT 
-        customer_id as id,
-        customer_name as name,
-        customer_data
-       FROM orders 
-       WHERE customer_id IS NOT NULL
-       ORDER BY customer_name`
-    );
+    // Hent kunde for å få address IDs
+    const customer = await tripletexService.getCustomer(customerId);
     
-    const customers = result.rows.map(row => ({
-      id: row.id,
-      name: row.name || 'Ukjent kunde',
-      ...(row.customer_data || {})
-    }));
+    const addresses = {
+      physicalAddress: '',
+      postalAddress: ''
+    };
     
-    res.json(customers);
+    // Hent physical address hvis den finnes
+    if (customer.physicalAddress?.id) {
+      const addr = await tripletexService.getAddress(customer.physicalAddress.id);
+      if (addr) {
+        const parts = [];
+        if (addr.addressLine1) parts.push(addr.addressLine1);
+        if (addr.addressLine2) parts.push(addr.addressLine2);
+        const loc = [];
+        if (addr.postalCode) loc.push(addr.postalCode);
+        if (addr.city) loc.push(addr.city);
+        if (loc.length) parts.push(loc.join(' '));
+        addresses.physicalAddress = parts.join(', ');
+      }
+    }
+    
+    // Hent postal address hvis den finnes
+    if (customer.postalAddress?.id) {
+      const addr = await tripletexService.getAddress(customer.postalAddress.id);
+      if (addr) {
+        const parts = [];
+        if (addr.addressLine1) parts.push(addr.addressLine1);
+        if (addr.addressLine2) parts.push(addr.addressLine2);
+        const loc = [];
+        if (addr.postalCode) loc.push(addr.postalCode);
+        if (addr.city) loc.push(addr.city);
+        if (loc.length) parts.push(loc.join(' '));
+        addresses.postalAddress = parts.join(', ');
+      }
+    }
+    
+    console.log(`✅ [ADMIN CUSTOMERS] Fetched addresses for ${customerId}:`, {
+      physicalAddress: addresses.physicalAddress || 'none',
+      postalAddress: addresses.postalAddress || 'none'
+    });
+    
+    res.json(addresses);
     
   } catch (error) {
-    console.error('Error fetching customers:', error);
-    // Returner tom array i stedet for 500 for å holde appen kjørende
-    res.json([]); 
+    console.error(`❌ [ADMIN CUSTOMERS] Error fetching addresses:`, error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch addresses',
+      details: error.message 
+    });
   }
 });
+
+console.log('✅ [ADMIN CUSTOMERS] Route module loaded');
 
 module.exports = router;
