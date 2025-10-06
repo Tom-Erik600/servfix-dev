@@ -356,30 +356,7 @@
     <div id="toast-container"></div>
 
     <div class="app-container">
-        <header class="app-header">
-            <a href="#" class="header-nav-button" onclick="event.preventDefault(); window.authManager?.logout() || (window.location.href='/login.html');" title="Logg ut" style="color: white; font-size: 28px;">‹</a>
-            <div class="header-main-content">
-                <div class="logo-circle">
-                    <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="16" cy="16" r="14" stroke="white" stroke-width="2" fill="none"/>
-                        <circle cx="16" cy="16" r="8" stroke="white" stroke-width="2" fill="none"/>
-                        <circle cx="16" cy="16" r="3" fill="white"/>
-                        <path d="M16 2 L16 8" stroke="white" stroke-width="2"/>
-                        <path d="M16 24 L16 30" stroke="white" stroke-width="2"/>
-                        <path d="M30 16 L24 16" stroke="white" stroke-width="2"/>
-                        <path d="M8 16 L2 16" stroke="white" stroke-width="2"/>
-                    </svg>
-                </div>
-                <div class="company-info">
-                    <h1>AIR-TECH AS</h1>
-                    <span class="app-subtitle">Hovedmeny</span>
-                </div>
-            </div>
-            <div class="header-user-info">
-                <div class="technician-avatar" id="technician-initials"></div>
-                <span id="current-date"></span>
-            </div>
-        </header>
+        <header class="app-header" id="app-header"></header>
         
         <main class="main-content">
             <div class="welcome-section">
@@ -440,35 +417,31 @@
     
     <script src="https://unpkg.com/lucide-icons"></script>
     <script src="./assets/js/auth-check.js"></script>
+    <script src="./assets/js/header.js"></script>
     <script src="./assets/js/dashboard.js"></script>
     <script>
-            
-        // Oppdater header med brukerinfo når DOM er klar
-        document.addEventListener('DOMContentLoaded', async () => {
-            // Vent på auth
-            if (window.authManager) {
-                await window.authManager.waitForInitialization();
-            }
-            
-            // Hent brukerinfo
-            const user = window.authManager?.getCurrentUser();
-            const tech = user?.technician;
-            
-            // Sett initialer
-            const techInitialsEl = document.getElementById('technician-initials');
-            if (techInitialsEl && tech) {
-                const initials = tech.initials || tech.name.split(' ').map(n => n[0]).join('');
-                techInitialsEl.textContent = initials;
-            }
-            
-            // Sett dato
-            const currentDateEl = document.getElementById('current-date');
-            if (currentDateEl) {
-                const today = new Date();
-                const dateString = `${today.getDate()}. ${today.toLocaleString('no-NO', { month: 'short' })} ${today.getFullYear()}`;
-                currentDateEl.textContent = dateString;
-            }
+    // Render header med felles funksjon
+    document.addEventListener('DOMContentLoaded', async () => {
+        // Vent på auth
+        if (window.authManager) {
+            await window.authManager.waitForInitialization();
+        }
+        
+        // Hent brukerinfo
+        const user = window.authManager?.getCurrentUser();
+        if (!user || !user.technician) {
+            console.warn('Ingen bruker funnet for header');
+            return;
+        }
+        
+        // Bruk den felles renderAppHeader funksjonen
+        await renderAppHeader({
+            backUrl: null,  // Ingen tilbakeknapp på home.html
+            subtitle: 'Hovedmeny',
+            technician: user.technician,
+            showDate: true
         });
-    </script>
+    });
+</script>
 </body>
 </html>

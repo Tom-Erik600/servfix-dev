@@ -259,23 +259,7 @@ function renderAll() {
     updateHeaderInfo(); // <-- LEGG TIL DENNE LINJEN
 }
 
-function renderHeader() {
-    const techInitialsEl = document.getElementById('technician-initials');
-    const currentDateEl = document.getElementById('current-date');
 
-    if (appState.currentTechnician) {
-        if (techInitialsEl) {
-            const initials = appState.currentTechnician.initials || 
-                             appState.currentTechnician.name.split(' ').map(n => n[0]).join('');
-            techInitialsEl.textContent = initials;
-        }
-        if (currentDateEl) {
-            const today = new Date();
-            const dateString = `${today.getDate()}. ${norwegianMonths[today.getMonth()].substring(0, 3)}. ${today.getFullYear()}`;
-            currentDateEl.textContent = dateString;
-        }
-    }
-}
 
 
 function deriveOrderStatus(order) {
@@ -705,31 +689,17 @@ function showToast(message, type = 'info') {
 
 // Oppdater header med initialer og dato
 function updateHeaderInfo() {
-    const header = document.getElementById('app-header');
-    if (!header) return;
-    
-    // Sjekk om vi har tekniker-info
     if (!appState.currentTechnician) {
-        console.warn('Ingen tekniker-info tilgjengelig');
+        console.warn('Ingen tekniker-info tilgjengelig for header');
         return;
     }
-    
-    const tech = appState.currentTechnician;
-    const today = new Date();
-    const norwegianMonths = ['jan', 'feb', 'mar', 'apr', 'mai', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'des'];
-    const dateString = `${today.getDate()}. ${norwegianMonths[today.getMonth()]} ${today.getFullYear()}`;
-    
-    // Oppdater initialer
-    const techInitialsEl = document.getElementById('technician-initials');
-    if (techInitialsEl) {
-        const initials = tech.initials || tech.name.split(' ').map(n => n[0]).join('');
-        techInitialsEl.textContent = initials;
-    }
-    
-    // Oppdater dato
-    const currentDateEl = document.getElementById('current-date');
-    if (currentDateEl) {
-        currentDateEl.textContent = dateString;
-    }
+
+    // Async funksjon for header-rendering, kjøres uten await for ikke å blokkere UI-tråden
+    renderAppHeader({
+        backUrl: 'home.html',
+        subtitle: 'Planlagte service',
+        technician: appState.currentTechnician,
+        showDate: true
+    });
 }
 })();

@@ -219,15 +219,30 @@ const equipment = equipmentResult.rows.map(eq => ({
 }));
 
     // 3. Send response i riktig format for frontend
-    res.json({
-      order: order,           // ← Frontend forventer 'order' property
-      equipment: equipment,
-      customer: {
-        id: order.customer_id,
-        name: order.customer_name,
-        ...order.customer_data
-      }
-    });
+    // Hent tekniker-info
+let technician = null;
+if (order.technician_id) {
+  try {
+    const techResult = await pool.query(
+      'SELECT id, name, initials FROM technicians WHERE id = $1',
+      [order.technician_id]
+    );
+    technician = techResult.rows[0] || null;
+  } catch (error) {
+    console.error('Could not load technician:', error);
+  }
+}
+
+res.json({
+  order: order,
+  equipment: equipment,
+  customer: {
+    id: order.customer_id,
+    name: order.customer_name,
+    ...order.customer_data
+  },
+  technician: technician
+});
 
   } catch (error) {
     console.error('❌ ORDERS GET /:id ERROR:', error);

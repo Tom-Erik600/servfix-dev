@@ -1093,38 +1093,14 @@ function renderAll() {
     }, 500);
 }
 
-function renderHeader() {
-    const header = document.getElementById('app-header');
-    if (!header) return;
-    
-    const tech = state.technician;
-    const today = new Date();
-    const dateString = `${today.getDate()}. ${today.toLocaleString('no-NO', { month: 'short' })} ${today.getFullYear()}`;
-
-    header.innerHTML = `
-        <a href="orders.html?id=${state.orderId}" class="header-nav-button" title="Tilbake til ordre">‹</a>
-        <div class="header-main-content">
-            <div class="logo-circle">
-                <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="16" cy="16" r="14" stroke="white" stroke-width="2" fill="none"/>
-                    <circle cx="16" cy="16" r="8" stroke="white" stroke-width="2" fill="none"/>
-                    <circle cx="16" cy="16" r="3" fill="white"/>
-                    <path d="M16 2 L16 8" stroke="white" stroke-width="2"/>
-                    <path d="M16 24 L16 30" stroke="white" stroke-width="2"/>
-                    <path d="M30 16 L24 16" stroke="white" stroke-width="2"/>
-                    <path d="M8 16 L2 16" stroke="white" stroke-width="2"/>
-                </svg>
-            </div>
-            <div class="company-info">
-                <h1>AIR-TECH AS</h1>
-                <span class="app-subtitle">Service - ${state.equipment?.systemnavn || 'Anlegg'}</span>
-            </div>
-        </div>
-        <div class="header-user-info">
-            ${tech ? `<div class="technician-avatar">${tech.initials}</div>` : ''}
-            <span>${dateString}</span>
-        </div>
-    `;
+async function renderHeader() {
+    const anleggsnavn = state.equipment?.systemnavn || 'Anlegg';
+    await renderAppHeader({
+        backUrl: `orders.html?id=${state.orderId}`,
+        subtitle: `Service - ${anleggsnavn}`,
+        technician: state.technician,
+        showDate: true
+    });
 }
 
 function navigateBack() {
