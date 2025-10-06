@@ -48,7 +48,7 @@ router.get('/', async (req, res) => {
         t.name as technician_name
       FROM service_reports sr
       LEFT JOIN orders o ON sr.order_id = o.id
-      LEFT JOIN equipment e ON sr.equipment_id = CAST(e.id AS VARCHAR)
+      LEFT JOIN equipment e ON sr.equipment_id::varchar = e.id::varchar
       LEFT JOIN technicians t ON o.technician_id = t.id
       ${whereClause}
       ORDER BY sr.created_at DESC
