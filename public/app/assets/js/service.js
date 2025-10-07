@@ -211,7 +211,12 @@ async function saveComponent() {
     }
     
     try {
-        // VIKTIG: Ikke send photos med i PUT request for komponenter
+        // FIX: Oppdater overallComment fra DOM før lagring
+        const overallCommentEl = document.getElementById('overall-comment');
+        if (overallCommentEl) {
+            state.serviceReport.reportData.overallComment = overallCommentEl.value.trim();
+        }
+
         const updateData = {
             components: state.serviceReport.reportData.components,
             overallComment: state.serviceReport.reportData.overallComment || ''
@@ -1075,6 +1080,20 @@ function renderAll() {
     renderComponentList();
     renderDynamicLines();
     renderAdditionalWorkTable();
+    
+    // FIX: Vis alltid overall comment og attachments sections
+    const overallCommentSection = document.getElementById('overall-comment-section');
+    const attachmentsSection = document.getElementById('attachments-section');
+    
+    if (overallCommentSection) {
+        overallCommentSection.style.display = 'block';
+        console.log('✅ Overall comment section made visible');
+    }
+    
+    if (attachmentsSection) {
+        attachmentsSection.style.display = 'block';
+        console.log('✅ Attachments section made visible');
+    }
 }
 
 async function renderHeader() {
@@ -1800,8 +1819,8 @@ function createVirkningsgradItemHTML(item) {
 
 function createTilstandsgradDropdownItemHTML(item) {
     return `
-        <div class="form-group">
-            <label>${item.label}</label>
+        <div class="form-group" data-item-id="${item.id}" data-item-type="tilstandsgrad_dropdown">
+            <label class="item-label">${item.label}</label>
             <select id="select-${item.id}" class="form-control checklist-dropdown">
                 <option value="">Velg tilstandsgrad</option>
                 <option value="0">TG0 - Ingen symptomer</option>
@@ -1815,14 +1834,14 @@ function createTilstandsgradDropdownItemHTML(item) {
 
 function createKonsekvensgradDropdownItemHTML(item) {
     return `
-        <div class="form-group">
-            <label>${item.label}</label>
+        <div class="form-group" data-item-id="${item.id}" data-item-type="konsekvensgrad_dropdown">
+            <label class="item-label">${item.label}</label>
             <select id="select-${item.id}" class="form-control checklist-dropdown">
                 <option value="">Velg konsekvensgrad</option>
                 <option value="0">KG0 - Ingen konsekvens</option>
-                <option value="1">KG1 - Liten konsekvens</option>
+                <option value="1">KG1 - Lav konsekvens</option>
                 <option value="2">KG2 - Middels konsekvens</option>
-                <option value="3">KG3 - Stor konsekvens</option>
+                <option value="3">KG3 - Høy konsekvens</option>
             </select>
         </div>
     `;
@@ -2157,7 +2176,9 @@ function loadExistingReportData() {
         systemFieldsContent: reportData.systemFields || reportData.systemData || {},
         hasProducts: !!reportData.products,
         hasAdditionalWork: !!reportData.additionalWork,
-        checklistKeys: reportData.checklist ? Object.keys(reportData.checklist) : []
+        checklistKeys: reportData.checklist ? Object.keys(reportData.checklist) : [],
+        overallComment: reportData.overallComment || '(EMPTY)',  // <-- NYTT!
+        overallCommentLength: reportData.overallComment?.length || 0  // <-- NYTT!
     });
     
     // 1. LAST INN SYSTEM FIELDS
@@ -2221,12 +2242,38 @@ function loadExistingReportData() {
     
     // 5. LAST INN OVERALL COMMENT
     const overallCommentEl = document.getElementById('overall-comment');
-    if (overallCommentEl && reportData.overallComment) {
-        overallCommentEl.value = reportData.overallComment;
-        console.log('💬 Loaded overall comment');
+    console.log('🔍 Overall comment element:', overallCommentEl ? 'FOUND' : 'NOT FOUND');
+    console.log('🔍 Overall comment data:', reportData.overallComment);
+
+    if (overallCommentEl) {
+        if (reportData.overallComment) {
+            overallCommentEl.value = reportData.overallComment;
+            console.log(`💬 Loaded overall comment: "${reportData.overallComment.substring(0, 50)}..."`);
+        } else {
+            console.log('⚠️ No overall comment in data');
+        }
+    } else {
+        console.error('❌ Overall comment element not found in DOM!');
     }
     
     console.log('✅ Existing report data loaded successfully!');
+
+// FIX: Last inn bilder etter at data er lastet
+setTimeout(async () => {
+    try {
+        console.log('📸 Starting to load images...');
+        
+        // Last avvik-bilder
+        await renderAvvikImagesForChecklist();
+        
+        // Last generelle bilder  
+        await renderGeneralImages();
+        
+        console.log('✅ Images loaded successfully!');
+    } catch (error) {
+        console.error('❌ Error loading images:', error);
+    }
+}, 600);
 }
 
 function loadChecklistForEditing(index) {
@@ -2291,14 +2338,21 @@ function populateChecklistItems(items, checklistData) {
     });
     
     items.forEach(item => {
-        // Generate the same key as when saving
-        const key = (item.label || '').trim().toLowerCase()
-            .replace(/\s+/g, '_')
-            .replace(/[^\w_æøå]/g, '');
-            
-        const result = checklistData[key] || checklistData[item.id];
+        let result;
         
-        if (!result) {
+        // FIX: For tilstandsgrad og konsekvensgrad, bruk alltid itemId direkte
+        if (item.inputType === 'tilstandsgrad_dropdown' || item.inputType === 'konsekvensgrad_dropdown') {
+            result = checklistData[item.id];  // tilstand1, konsekvens1
+        } else {
+            // Generate the same key as when saving for andre typer
+            const key = (item.label || '').trim().toLowerCase()
+                .replace(/\s+/g, '_')
+                .replace(/[^\w_æøå]/g, '');
+                
+            result = checklistData[key] || checklistData[item.id];
+        }
+        
+        if (!result && result !== 0) {  // FIX: 0 er en gyldig verdi for TG/KG
             console.log(`⚠️ No data found for item: ${item.label} (id: ${item.id})`);
             return;
         }
@@ -2312,28 +2366,31 @@ function populateChecklistItems(items, checklistData) {
         }
         
         switch (item.inputType) {
-            case 'ok_avvik':
-            case 'ok_byttet_avvik':
-                if (result.status) {
-                    const statusButton = element.querySelector(`[data-status="${result.status}"]`);
-                    if (statusButton) {
-                        statusButton.click();
-                        console.log(`  ✅ Set status: ${result.status}`);
-                        
-                        if (result.status === 'avvik' && result.comment) {
-                            const avvikContainer = element.nextElementSibling;
-                            if (avvikContainer && avvikContainer.classList.contains('avvik-container')) {
-                                const textarea = avvikContainer.querySelector('textarea');
-                                if (textarea) {
-                                    textarea.value = result.comment;
-                                    avvikContainer.classList.add('show');
-                                    avvikContainer.style.display = 'block';
-                                }
-                            }
-                        }
+case 'ok_avvik':
+case 'ok_byttet_avvik':
+    if (result.status) {
+        const statusButton = element.querySelector(`[data-status="${result.status}"]`);
+        if (statusButton) {
+            statusButton.click();
+            console.log(`  ✅ Set status: ${result.status}`);
+            
+            // FIX: Sjekk BÅDE result.comment OG result.avvikComment
+            const avvikText = result.avvikComment || result.comment;
+            if (result.status === 'avvik' && avvikText) {
+                const avvikContainer = element.nextElementSibling;
+                if (avvikContainer && avvikContainer.classList.contains('avvik-container')) {
+                    const textarea = avvikContainer.querySelector('textarea');
+                    if (textarea) {
+                        textarea.value = avvikText;
+                        avvikContainer.classList.add('show');
+                        avvikContainer.style.display = 'block';
+                        console.log(`  ✅ Set avvik comment: ${avvikText.substring(0, 50)}...`);
                     }
                 }
-                break;
+            }
+        }
+    }
+    break;
             
             // NYTT: Støtte for dropdown_ok_avvik
             case 'dropdown_ok_avvik':
@@ -2400,6 +2457,18 @@ function populateChecklistItems(items, checklistData) {
                     }
                 }
                 break;
+            
+            // NYTT: Støtte for tilstandsgrad/konsekvensgrad  
+case 'tilstandsgrad_dropdown':
+case 'konsekvensgrad_dropdown':
+    const tgkgSelect = element.querySelector('select') || element.querySelector(`#select-${item.id}`);
+    if (tgkgSelect && (result || result === 0 || result === '0')) {  // FIX: 0 er gyldig
+        tgkgSelect.value = String(result);  // Konverter til string for å matche option values
+        console.log(`  ✅ Set ${item.inputType} dropdown to: ${result}`);
+    } else {
+        console.warn(`  ⚠️ Could not set ${item.inputType}, select not found or no result`);
+    }
+    break;
             
             // NYTT: Støtte for virkningsgrad
             case 'virkningsgrad':
@@ -2480,6 +2549,55 @@ function setupEventListeners() {
     setupVirkningsgradCalculation();
 
     setupAutoOkFunctionality();
+
+    // FIX: Auto-save overallComment ved navigering
+    window.addEventListener('beforeunload', async (e) => {
+        const overallCommentEl = document.getElementById('overall-comment');
+        const currentComment = overallCommentEl?.value.trim() || '';
+        const savedComment = state.serviceReport?.reportData?.overallComment || '';
+        
+        // Hvis kommentaren har endret seg, lagre automatisk
+        if (currentComment !== savedComment && state.serviceReport?.reportId) {
+            console.log('💾 Auto-saving overallComment before navigation...');
+            
+            // Oppdater state
+            state.serviceReport.reportData.overallComment = currentComment;
+            
+            // Send til backend (må være synkron for beforeunload)
+            navigator.sendBeacon(`/api/reports/${state.serviceReport.reportId}`, JSON.stringify({
+                orderId: state.orderId,
+                equipmentId: state.equipmentId,
+                reportData: state.serviceReport.reportData
+            }));
+        }
+    });
+
+    // FIX: Auto-save også ved input i overall comment
+    const overallCommentEl = document.getElementById('overall-comment');
+    if (overallCommentEl) {
+        let saveTimeout;
+        overallCommentEl.addEventListener('input', () => {
+            // Debounce - lagre 2 sekunder etter siste endring
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(async () => {
+                if (state.serviceReport?.reportId) {
+                    console.log('💾 Auto-saving overallComment after input...');
+                    state.serviceReport.reportData.overallComment = overallCommentEl.value.trim();
+                    
+                    try {
+                        await api.put(`/api/reports/${state.serviceReport.reportId}`, {
+                            orderId: state.orderId,
+                            equipmentId: state.equipmentId,
+                            reportData: state.serviceReport.reportData
+                        });
+                        console.log('✅ OverallComment auto-saved');
+                    } catch (error) {
+                        console.error('❌ Failed to auto-save overallComment:', error);
+                    }
+                }
+            }, 2000);
+        });
+    }
 }
 
 function handleStatusClick(e) {
@@ -2713,6 +2831,12 @@ async function saveChecklist(event, showToastMessage = true) {
     try {
         const componentData = collectComponentData();
         
+        // FIX: Oppdater overall comment i state
+        if (componentData.overallComment !== undefined) {
+            state.serviceReport.reportData.overallComment = componentData.overallComment;
+            console.log('✅ Overall comment updated in state');
+        }
+        
         // VIKTIG: Behold eksisterende reportData
         if (!state.serviceReport.reportData) {
             state.serviceReport.reportData = {};
@@ -2732,11 +2856,19 @@ async function saveChecklist(event, showToastMessage = true) {
         state.serviceReport.reportData.systemFields = componentData.systemFields;
         state.serviceReport.reportData.systemData = componentData.systemData || componentData.systemFields;
         state.serviceReport.reportData.products = componentData.products;
-        state.serviceReport.reportData.additionalWork = componentData.additionalWork;        // Lagre til backend
+        state.serviceReport.reportData.additionalWork = componentData.additionalWork;
+        // FIX: Oppdater overallComment FØRST
+        const overallCommentEl = document.getElementById('overall-comment');
+        if (overallCommentEl) {
+            state.serviceReport.reportData.overallComment = overallCommentEl.value.trim();
+            console.log('📝 Updating overallComment:', state.serviceReport.reportData.overallComment);
+        }
+
+        // Lagre til backend
         const response = await api.put(`/reports/${state.serviceReport.reportId}`, {
             orderId: state.orderId,
             equipmentId: state.equipmentId,
-            reportData: state.serviceReport.reportData
+            reportData: state.serviceReport.reportData  // <-- Dette sender NÅ overallComment med!
         });
         
         if (showToastMessage) {
@@ -2836,6 +2968,11 @@ function collectComponentData() {
         });
     }
 
+    // FIX: Samle inn overall comment
+    const overallCommentEl = document.getElementById('overall-comment');
+    const overallComment = overallCommentEl ? overallCommentEl.value : '';
+    console.log('📝 Collecting overall comment:', overallComment ? `"${overallComment.substring(0, 50)}..."` : '(empty)');
+
     return {
         id: state.editingComponentIndex !== null ? 
             state.serviceReport.reportData.components[state.editingComponentIndex].id : 
@@ -2848,10 +2985,11 @@ function collectComponentData() {
         },
         systemData: systemFieldsData,
         systemFields: systemFieldsData,
-        checklist: checklist,             // Med faktiske navn som keys
+        checklist: checklist,
         products: products,
         additionalWork: additionalWork,
-        driftSchedule: driftSchedule
+        driftSchedule: driftSchedule,
+        overallComment: overallComment  // LEGG TIL DENNE
     };
 }
 
@@ -2865,7 +3003,7 @@ function collectChecklistData() {
         return checklistData;
     }
 
-    const checklistItems = checklistContainer.querySelectorAll('.checklist-item, .checklist-item-fullwidth');
+    const checklistItems = checklistContainer.querySelectorAll('.checklist-item, .checklist-item-fullwidth, .form-group');  // LEGG TIL .form-group
 
     checklistItems.forEach(item => {
         const itemId = item.dataset.itemId;
@@ -2873,14 +3011,24 @@ function collectChecklistData() {
 
         const data = getChecklistItemValue(itemId);
 
-        if (data !== null && data !== undefined) {
-            // Lag lesbar nøkkel fra label
-            const label = item.querySelector('.item-label')?.textContent || itemId;
-            const key = label.trim().toLowerCase()
-                .replace(/\s+/g, '_')
-                .replace(/[^\w_æøå]/g, '');
+        if (data !== null && data !== undefined && data !== '') {  // FIX: Sjekk også tom string
+            // FIX: Bruk itemId direkte for tilstandsgrad og konsekvensgrad
+            const itemType = item.dataset.itemType;
+            let key;
+            
+            if (itemType === 'tilstandsgrad_dropdown' || itemType === 'konsekvensgrad_dropdown') {
+                // Bruk itemId direkte (tilstand1, konsekvens1) for disse typene
+                key = itemId;
+            } else {
+                // Lag lesbar nøkkel fra label for andre typer
+                const label = item.querySelector('.item-label')?.textContent || itemId;
+                key = label.trim().toLowerCase()
+                    .replace(/\s+/g, '_')
+                    .replace(/[^\w_æøå]/g, '');
+            }
             
             checklistData[key] = data;
+            console.log(`  📝 Collected ${key} = ${typeof data === 'object' ? JSON.stringify(data) : data}`);
         }
     });
 

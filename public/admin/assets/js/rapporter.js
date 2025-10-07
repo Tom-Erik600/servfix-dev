@@ -152,195 +152,156 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    /**
-     * Render the reports table
-     */
-    function renderReportsTable(reports) {
-        const tbody = document.getElementById('reports-table-body');
-        
-        if (!reports || reports.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px; color: var(--text-light);">Ingen rapporter funnet</td></tr>';
-            return;
-        }
-        
-        // Grupper rapporter etter order_id
-        const groupedReports = {};
-        reports.forEach(report => {
-            if (!groupedReports[report.order_id]) {
-                groupedReports[report.order_id] = [];
-            }
-            groupedReports[report.order_id].push(report);
-        });
-        
-        // Generer HTML for hver gruppe
-        let html = '';
-        let isFirstGroup = true;
+/**
+ * Render the reports table - NY VERSJON FOR ORDRE-GRUPPERING
+ */
+function renderReportsTable(reports) {
+    const tbody = document.getElementById('reports-table-body');
+    
+    if (!reports || reports.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px; color: var(--text-light);">Ingen rapporter funnet</td></tr>';
+        return;
+    }
+    
+    // Generer HTML - nå er hver report allerede én ordre
+    let html = '';
+    reports.forEach((orderReport) => {
+        html += createOrderReportRow(orderReport);
+    });
+    
+    tbody.innerHTML = html;
+    
+    // Oppdater statistikk
+    updateStatistics();
+}
 
-        Object.entries(groupedReports).forEach(([orderId, orderReports]) => {
-            orderReports.forEach((report, index) => {
-                const isFirstInGroup = index === 0;
-                const isLastInGroup = index === orderReports.length - 1;
-                html += createReportRow(report, isFirstInGroup, orderReports.length, !isFirstGroup, isLastInGroup);
-            });
-            isFirstGroup = false;
-        });
-        
-        tbody.innerHTML = html;
-        
-        // Oppdater statistikk
-        updateStatistics();
+/**
+ * Create a table row for an order (with all equipment on one line)
+ */
+function createOrderReportRow(order) {
+    const isInvoiced = order.is_invoiced;
+    const isSent = order.sent_til_fakturering;
+    const hasPDF = order.pdf_generated;
+    const isHasteordre = order.service_type === 'Hasteordre';
+
+    let rowClass = '';
+    if (isHasteordre) {
+        rowClass = 'row-emergency';
+    } else if (isInvoiced) {
+        rowClass = 'row-invoiced';
+    } else if (isSent) {
+        rowClass = 'row-sent';
+    } else {
+        rowClass = 'row-pending';
     }
 
-    /**
-     * Get filtered reports based on current filters
-     */
-    function getFilteredReports() {
-        let filtered = [...state.reports];
-
-        // Status filter
-        if (state.filters.status !== 'all') {
-            filtered = filtered.filter(report => {
-                switch (state.filters.status) {
-                    case 'pending':
-                        return !report.sent_til_fakturering;
-                    case 'sent':
-                        return report.sent_til_fakturering && !report.is_invoiced;
-                    case 'invoiced':
-                        return report.is_invoiced;
-                    default:
-                        return true;
+    return `
+        <tr class="${rowClass}">
+            <td>
+                <strong style="color: var(--primary-blue);">${order.order_id}</strong>
+                ${isHasteordre ? '<br><span class="emergency-badge">⚡ HASTEORDRE</span>' : ''}
+            </td>
+            <td>
+                <div style="font-weight: 500;">${formatDate(order.order_date)}</div>
+            </td>
+            <td>
+                <div style="font-weight: 400;">
+                    ${formatDate(order.last_service_date)}
+                </div>
+            </td>
+            <td>
+                <div style="font-weight: 500;">${order.customer_name || 'Ukjent kunde'}</div>
+                ${isHasteordre ? '<div class="emergency-indicator">⚡ Hasteordre</div>' : ''}
+            </td>
+            <td>
+                ${order.technician_name ?
+                    order.technician_name.split(' ').map(n => n[0]).join('').toUpperCase() :
+                    'N/A'
                 }
-            });
-        }
-
-        // Search filter
-        if (state.filters.search) {
-            const searchTerm = state.filters.search.toLowerCase();
-            filtered = filtered.filter(report => {
-                return [
-                    report.customer_name,
-                    report.order_id,
-                    report.technician_name,
-                    report.equipment_name,
-                    report.equipment_type
-                ].some(field => field && field.toLowerCase().includes(searchTerm));
-            });
-        }
-
-        return filtered;
-    }
-
-    /**
-     * Create a table row for a report
-     */
-    function createReportRow(report, isFirstInGroup, groupSize, needsTopBorder = false, isLastInGroup = false) {
-    // DEBUGGING - LEGG TIL DISSE LINJENE:
-    console.log(`🔍 DEBUGGING: ${report.equipment_name || report.order_id}`);
-    console.log(`   - isLastInGroup: ${isLastInGroup}`);
-    console.log(`   - groupSize: ${groupSize}`);
-    console.log(`   - index skulle være: ${groupSize - 1} for siste`);
-        const isInvoiced = report.is_invoiced;
-        const isSent = report.sent_til_fakturering;
-        const hasPDF = report.pdf_generated && report.pdf_path;
-        const isHasteordre = report.service_type === 'Hasteordre';
-
-        let rowClass = '';
-        if (isHasteordre) {
-            rowClass = 'row-emergency';
-        } else if (isInvoiced) {
-            rowClass = 'row-invoiced';
-        } else if (isSent) {
-            rowClass = 'row-sent';
-        } else {
-            rowClass = 'row-pending';
-        }
-
-        // Legg til klasse for siste rad i prosjektgruppe
-        if (isLastInGroup) {
-            rowClass += ' group-last';
-        }
-
-        // Legg til topp-border for nye prosjektgrupper
-        const borderStyle = needsTopBorder ? 'border-top: 2px solid #3b82f6; padding-top: 8px;' : '';
-
-        return `
-            <tr class="${rowClass}" style="${borderStyle}">
-                <td>
-                    ${isFirstInGroup ?
-                        `<strong style="color: var(--primary-blue);">${report.order_id}</strong>` +
-                        (isHasteordre ? '<br><span class="emergency-badge">⚡ HASTEORDRE</span>' : '') +
-                        (groupSize > 1 ? `<br><small style="color: var(--text-light);">${groupSize} anlegg</small>` : '') :
+            </td>
+            <td>
+                <div style="font-weight: 500;">
+                    ${order.equipment_names || 'Ukjent'}
+                </div>
+                ${order.equipment_count > 1 ? 
+                    `<small style="color: var(--text-light);">${order.equipment_count} anlegg</small>` :
+                    `<small style="color: var(--text-light);">${order.equipment_types || ''}</small>`
+                }
+            </td>
+            <td>
+                <span class="status-indicator status-${isSent ? 'sent' : 'pending'}">
+                    ${isSent ? '✅ Sendt til kunde' : '⏳ Venter sending'}
+                </span>
+            </td>
+            <td>
+                <div style="font-weight: 400;">
+                    ${order.customer_email || '<span style="color: var(--text-light);">Mangler e-post</span>'}
+                </div>
+            </td>
+            <td>
+                <div class="action-buttons" style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start;">
+                    ${hasPDF ?
+                        `<button class="btn btn-sm btn-outline" onclick="viewOrderPDFs('${order.order_id}')" title="Vis PDFer" style="font-size: 12px; padding: 6px 10px;">
+                            📄 Vis PDFer (${order.equipment_count})
+                        </button>` :
+                        `<span style="color: var(--text-light); font-size: 11px;">PDFer ikke generert</span>`
+                    }
+                    
+                    ${!isSent && hasPDF && order.customer_email ?
+                        `<button class="btn btn-sm btn-primary" onclick="sendOrderToCustomer('${order.order_id}')" style="font-size: 12px; padding: 6px 10px;">
+                            ✉️ Send til kunde
+                        </button>` :
                         ''
                     }
-                </td>
-                <td>
-                    ${isFirstInGroup ?
-                        `<div style="font-weight: 500;">${formatDate(report.scheduled_date)}</div>` :
+                    
+                    ${!isSent && hasPDF && !order.customer_email ?
+                        `<span style="color: #dc2626; font-size: 11px;">⚠️ Mangler e-post</span>` :
                         ''
                     }
-                </td>
-                <td>
-                    <div style="font-weight: 400;">
-                        ${formatDate(report.created_at)}
-                    </div>
-                </td>
-                <td>
-                    <div style="font-weight: 500;">${report.customer_name || 'Ukjent kunde'}</div>
-                    ${isHasteordre ? '<div class="emergency-indicator">⚡ Hasteordre</div>' : ''}
-                </td>
-                <td>
-                    ${report.technician_name ?
-                        report.technician_name.split(' ').map(n => n[0]).join('').toUpperCase() :
-                        'N/A'
-                    }
-                </td>
-                <td>
-                    <div style="font-weight: 500;">${report.equipment_name || 'Ukjent'}</div>
-                    <small style="color: var(--text-light);">${report.equipment_type || ''}</small>
-                </td>
-                <td>
-                    <span class="status-indicator status-${isSent ? 'sent' : 'pending'}">
-                        ${isSent ? '✅ Sendt til kunde' : '⏳ Venter sending'}
-                    </span>
-                </td>
-                <td>
-                    <div style="font-weight: 400;">
-                        ${report.customer_email || '<span style="color: var(--text-light);">Mangler e-post</span>'}
-                    </div>
-                </td>
-                <td>
-                    <div class="action-buttons" style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start;">
-                        ${hasPDF ?
-                            `<button class="btn btn-sm btn-outline" onclick="viewPDF('${report.id}')" title="Vis PDF" style="font-size: 12px; padding: 6px 10px;">
-                                📄 Vis PDF
-                            </button>` :
-                            `<span style="color: var(--text-light); font-size: 11px;">PDF ikke generert</span>`
-                        }
-                        
-                        ${!isSent && hasPDF ?
-                            `<button class="btn btn-sm btn-primary" onclick="sendToCustomer('${report.id}')" title="Send til kunde" style="font-size: 11px; padding: 4px 8px; background-color: #3b82f6;">
-                                📧 Send til kunde
-                            </button>` :
-                            ''
-                        }
-                        
-                        <button class="btn btn-sm" onclick="editReport('${report.id}')" title="Rediger" style="font-size: 11px; padding: 4px 8px; background-color: #f59e0b; color: white; border: 1px solid #f59e0b;">
-                            ✏️ Rediger
-                        </button>
-                        
-                        <label class="checkbox-container" style="display: flex; align-items: center; margin-top: 4px; font-size: 11px;">
-                            <input type="checkbox" 
-                                   ${isInvoiced ? 'checked' : ''} 
-                                   onchange="toggleInvoice('${report.id}', this.checked)"
-                                   title="Marker som fakturert"
-                                   style="margin-right: 4px; transform: scale(0.8);">
-                            <span>Fakturert</span>
-                        </label>
-                    </div>
-                </td>
-            </tr>
-        `;
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+/**
+ * View all PDFs for an order
+ */
+window.viewOrderPDFs = function(orderId) {
+    // Åpne ny side som viser alle PDFer for denne ordren
+    window.open(`/admin/ordre-pdf-er.html?orderId=${orderId}`, '_blank');
+};
+
+/**
+ * Send entire order (all reports) to customer
+ */
+window.sendOrderToCustomer = async function(orderId) {
+    try {
+        showToast('🔍 Forbereder sending av ordre...', 'info');
+        
+        // Send alle rapporter for denne ordren
+        const response = await fetch(`/api/admin/reports/order/${orderId}/send`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || 'Kunne ikke sende rapporter');
+        }
+
+        showToast(`✅ ${result.message || 'Rapporter sendt til kunde'}`, 'success');
+        await loadReports(); // Reload
+        
+    } catch (error) {
+        console.error('Error sending order:', error);
+        showToast(`❌ ${error.message}`, 'error');
     }
+};
 
     /**
      * Update statistics display
@@ -361,7 +322,39 @@ document.addEventListener('DOMContentLoaded', async function() {
         state.filters.search = elements.searchInput?.value || '';
         state.filters.status = elements.statusFilter?.value || 'all';
         
-        renderReportsTable(getFilteredReports());
+        let filtered = [...state.reports];
+
+        // Status filter
+        if (state.filters.status !== 'all') {
+            filtered = filtered.filter(order => {
+                switch (state.filters.status) {
+                    case 'pending':
+                        return !order.sent_til_fakturering;
+                    case 'sent':
+                        return order.sent_til_fakturering && !order.is_invoiced;
+                    case 'invoiced':
+                        return order.is_invoiced;
+                    default:
+                        return true;
+                }
+            });
+        }
+
+        // Search filter
+        if (state.filters.search) {
+            const searchTerm = state.filters.search.toLowerCase();
+            filtered = filtered.filter(order => {
+                return [
+                    order.customer_name,
+                    order.order_id,
+                    order.technician_name,
+                    order.equipment_names,
+                    order.equipment_types
+                ].some(field => field && field.toString().toLowerCase().includes(searchTerm));
+            });
+        }
+
+        renderReportsTable(filtered);
     }
 
     /**

@@ -115,6 +115,36 @@ class UnifiedPDFGenerator {
     }
   }
 
+/**
+ * Normaliserer checklist_data til enhetlig format
+ * Støtter både gammelt format (components array) og nytt format (flat struktur)
+ */
+normalizeChecklistStructure(checklist_data) {
+  console.log('🔄 Normalizing checklist structure...');
+  
+  // Hvis allerede i components-format, returner som den er
+  if (checklist_data?.components?.length) {
+    console.log('✅ Already in components format');
+    return checklist_data;
+  }
+  
+  // Hvis flat format (nytt), konverter til components
+  if (checklist_data?.checklist) {
+    console.log('🔄 Converting from flat format to components');
+    return {
+      components: [{
+        details: checklist_data.systemFields || checklist_data.details || {},
+        checklist: checklist_data.checklist,
+        metadata: checklist_data.metadata || {}
+      }],
+      overallComment: checklist_data.overallComment || ''
+    };
+  }
+  
+  console.warn('⚠️ Empty or invalid checklist_data');
+  return { components: [], overallComment: '' };
+}
+
   escapeHtml(unsafe) {
     if (unsafe === null || unsafe === undefined) return '';
     return unsafe
@@ -356,6 +386,7 @@ class UnifiedPDFGenerator {
                                  `Sjekkpunkt ${itemId}`;
                 
                 const checkpoint = {
+                    item_id: itemId,
                     name: actualName,
                     status: (itemData.status || 'ok').toUpperCase(),
                     comment: itemData.avvikComment || itemData.byttetComment || itemData.comment || '',
@@ -366,12 +397,14 @@ class UnifiedPDFGenerator {
                 
                 // Legg til avvik
                 if (itemData.status === 'avvik') {
-                    result.avvik.push({
-                        avvik_id: result.avvik.length + 1,
-                        systemnummer: details.system_nummer || sectionName,
-                        komponent: actualName,
-                        kommentar: itemData.avvikComment || 'Ingen beskrivelse'
-                    });
+                  result.avvik.push({
+                    item_id: itemId,
+                    systemnummer: data.equipment_serial || details.system_nummer || sectionName,
+                    equipment_name: data.equipment_name,
+                    komponent: actualName,
+                    kommentar: itemData.avvikComment || 'Ingen beskrivelse',
+                    images: []
+                  });
                 }
             });
             
@@ -417,36 +450,43 @@ class UnifiedPDFGenerator {
 
   // === RENDERING METODER ===
   renderEquipmentOverviewTable(data, theme) {
-    if (!data.all_equipment || data.all_equipment.length === 0) {
-      return '';
-    }
-    
-    const headings = theme.table.equipmentOverviewHeadings;
-    const rows = data.all_equipment.map(equip => `
-      <tr>
-        <td>${this.escapeHtml(equip.type || '')}</td>
-        <td>${this.escapeHtml(equip.system_number || '')}</td>
-        <td>${this.escapeHtml(equip.location || '')}</td>
-        <td>${this.escapeHtml(equip.betjener || '')}</td>
-      </tr>
-    `).join('');
-
-    return `
-      <section class="equipment-overview">
-        <h2>Systemoversikt</h2>
-        <table class="overview-table">
-          <thead>
-            <tr>
-              ${headings.map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}
-            </tr>
-          </thead>
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>
-      </section>
-    `;
+  const systems = data.systemsFirstPage || data.all_equipment || [];
+  
+  if (systems.length === 0) {
+    return '';
   }
+  
+  const headings = theme.table.equipmentOverviewHeadings;
+  const rows = systems.map(equip => `
+    <tr>
+      <td>${this.escapeHtml(equip.type || '')}</td>
+      <td>${this.escapeHtml(equip.system_number || '')}</td>
+      <td>${this.escapeHtml(equip.location || '')}</td>
+      <td>${this.escapeHtml(equip.betjener || '')}</td>
+    </tr>
+  `).join('');
+
+  const moreSystemsNote = data.systemsAppendix && data.systemsAppendix.length > 0
+    ? `<p class="muted-note">+ ${data.systemsAppendix.length} flere anlegg – se neste side.</p>`
+    : '';
+
+  return `
+    <section class="equipment-overview">
+      <h2>Systemoversikt</h2>
+      <table class="overview-table">
+        <thead>
+          <tr>
+            ${headings.map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+      ${moreSystemsNote}
+    </section>
+  `;
+}
 
   async generateReport(serviceReportId, tenantId) {
     console.log(`📄 Starting PDF generation for report ${serviceReportId}`);
@@ -500,6 +540,14 @@ class UnifiedPDFGenerator {
     
     // Parse JSON fields safely
     data.checklist_data = this.safeJsonParse(data.checklist_data, {});
+
+    // Normaliser checklist_data struktur
+    data.checklist_data = this.normalizeChecklistStructure(data.checklist_data);
+    console.log('📊 Normalized checklist structure:', {
+      componentCount: data.checklist_data.components?.length || 0,
+      hasOverallComment: !!data.checklist_data.overallComment
+    });
+
     data.equipment_data = this.safeJsonParse(data.equipment_data, {});
     data.products_used = this.safeJsonParse(data.products_used, []);
     data.additional_work = this.safeJsonParse(data.additional_work, []);
@@ -579,7 +627,79 @@ class UnifiedPDFGenerator {
     console.log('🎨 Generating HTML for PDF...');
     
     const customerName = this.extractCustomerName(data);
-    data = await this.processAirTechData(data);  // AWAIT!
+    data = await this.processAirTechData(data);
+
+// === DATA PREPARATION ===
+console.log('📋 Preparing data for PDF rendering...');
+
+// 1) Auto-splitt systemoversikt
+const MAX_SYSTEMS_ON_PAGE_1 = 7;
+data.systemsFirstPage = (data.all_equipment || []).slice(0, MAX_SYSTEMS_ON_PAGE_1);
+data.systemsAppendix = (data.all_equipment || []).slice(MAX_SYSTEMS_ON_PAGE_1);
+
+console.log(`  Systems on page 1: ${data.systemsFirstPage.length}`);
+console.log(`  Systems in appendix: ${data.systemsAppendix.length}`);
+
+// 2) Begrens bilder på side 1
+const MAX_IMAGES_ON_PAGE_1 = 4;
+const allPhotos = data.photos || [];
+data.documentation_photos = allPhotos.slice(0, MAX_IMAGES_ON_PAGE_1);
+data.moreDocumentationPhotos = allPhotos.slice(MAX_IMAGES_ON_PAGE_1);
+
+console.log(`  Photos on page 1: ${data.documentation_photos.length}`);
+console.log(`  Photos in appendix: ${data.moreDocumentationPhotos.length}`);
+
+// 3) Injiser bilder fra maps
+const byItemAvvik = data.avvik_images_by_item || {};
+const byItemChk = data.checklist_images_by_item || {};
+
+console.log(`  Avvik images map: ${Object.keys(byItemAvvik).length} keys`);
+console.log(`  Checklist images map: ${Object.keys(byItemChk).length} keys`);
+
+// 3a) Bilder på checkpoints
+let checkpointImagesCount = 0;
+(data.equipmentSections || []).forEach(section => {
+  (section.checkpoints || []).forEach(cp => {
+    if (!cp.item_id) return;
+    
+    const imgs = [
+      ...(byItemChk[cp.item_id] || []),
+      ...(byItemAvvik[cp.item_id] || [])
+    ];
+    
+    if (imgs.length > 0) {
+      cp.images = imgs.map(x => ({
+        url: x.image_url || x.url,
+        description: x.caption || x.metadata?.description || ''
+      }));
+      checkpointImagesCount += cp.images.length;
+    }
+  });
+});
+
+console.log(`  ✅ Injected ${checkpointImagesCount} images to checkpoints`);
+
+// 3b) Bilder på avvik
+let avvikImagesCount = 0;
+(data.avvik || []).forEach(a => {
+  if (!a.item_id) return;
+  
+  const imgs = [
+    ...(byItemAvvik[a.item_id] || []),
+    ...(byItemChk[a.item_id] || [])
+  ];
+  
+  if (imgs.length > 0) {
+    a.images = imgs.map(x => ({
+      url: x.image_url || x.url,
+      description: x.caption || x.metadata?.description || ''
+    }));
+    avvikImagesCount += a.images.length;
+  }
+});
+
+console.log(`  ✅ Injected ${avvikImagesCount} images to avvik`);
+console.log('✅ Data preparation complete\n');
 
     const logoBase64 = settings?.logoBase64 || null;
     const theme = this.getReportTheme(data.equipment_type);
@@ -657,10 +777,57 @@ class UnifiedPDFGenerator {
                 <p>Servicearbeidet som ble avtalt for de angitte anleggene er nå fullført i tråd med avtalen. I henhold til vår serviceavtale oversender vi en servicerapport etter fullført servicebesøk.</p>
             </section>
 
+            <!-- SIDE 1: OVERSIKT -->
             ${this.renderEquipmentOverviewTable(data, theme)}
             ${this.renderAvvikTable(data)}
-            ${this.renderChecklistResults(data, theme)}
             ${this.generateSummarySection(data)}
+            
+            <!-- APPENDIX: Flere anlegg hvis >7 -->
+            ${data.systemsAppendix && data.systemsAppendix.length > 0 ? `
+              <div class="page-break"></div>
+              <section class="section">
+                <h2 class="section-header">Systemoversikt (fortsettelse)</h2>
+                <table class="overview-table">
+                  <thead>
+                    <tr>
+                      ${theme.table.equipmentOverviewHeadings.map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${data.systemsAppendix.map(equip => `
+                      <tr>
+                        <td>${this.escapeHtml(equip.type || '')}</td>
+                        <td>${this.escapeHtml(equip.system_number || '')}</td>
+                        <td>${this.escapeHtml(equip.location || '')}</td>
+                        <td>${this.escapeHtml(equip.betjener || '')}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </section>
+            ` : ''}
+            
+            <!-- NY SIDE: DETALJERTE SJEKKLISTER -->
+            <div class="page-break"></div>
+            <section class="section">
+              <h2 class="section-header">Detaljerte sjekkpunkter og resultater</h2>
+              ${this.renderChecklistResults(data, theme)}
+            </section>
+            
+            <!-- APPENDIX: Flere bilder hvis >4 -->
+            ${data.moreDocumentationPhotos && data.moreDocumentationPhotos.length > 0 ? `
+              <section class="section">
+                <h2 class="section-header">Dokumentasjonsbilder (fortsettelse)</h2>
+                <div class="photos-grid">
+                  ${data.moreDocumentationPhotos.map(photo => `
+                    <div class="photo-container">
+                      <img src="${photo.url}" alt="${this.escapeHtml(photo.caption || 'Dokumentasjonsbilde')}" class="photo">
+                      ${photo.caption ? `<span class="photo-caption">${this.escapeHtml(photo.caption)}</span>` : ''}
+                    </div>
+                  `).join('')}
+                </div>
+              </section>
+            ` : ''}
             
             <div class="page-footer">
                 <div class="footer-content">
@@ -684,36 +851,57 @@ class UnifiedPDFGenerator {
     </html>`;
   }
 
-    renderAvvikTable(data) {
-    if (!data.avvik || data.avvik.length === 0) return '';
-    
+renderAvvikTable(data) {
+  if (!data.avvik || data.avvik.length === 0) return '';
+  
+  const rows = data.avvik.map(avvik => {
+    // Bilderad (kun hvis bilder finnes)
+    const imgRow = (avvik.images && avvik.images.length > 0)
+      ? `
+        <tr class="avvik-images-row">
+          <td colspan="5">
+            <div class="avvik-images">
+              <strong>Bilder for AVVIK ${String(avvik.avvik_id).padStart(3, '0')}:</strong>
+              <div class="images-grid">
+                ${avvik.images.map(img => `
+                  <img class="avvik-image" src="${img.url}" alt="${this.escapeHtml(img.description || 'Avvikbilde')}" />
+                `).join('')}
+              </div>
+            </div>
+          </td>
+        </tr>`
+      : '';
+
     return `
-        <section class="avvik-section">
-            <h2 class="section-header avvik-header">🚨 Registrerte avvik</h2>
-            <p class="avvik-warning">VIKTIG: Følgende avvik ble registrert under servicen og krever oppmerksomhet:</p>
-            
-            <table class="avvik-table styled-table">
-                <thead>
-                    <tr class="avvik-header-row">
-                        <th>Avvik ID</th>
-                        <th>Systemnummer</th>
-                        <th>Komponent</th>
-                        <th>Kommentar/Tiltak</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${data.avvik.map(avvik => `
-                        <tr class="avvik-row">
-                            <td class="avvik-id">AVVIK ID: ${String(avvik.avvik_id).padStart(3, '0')}</td>
-                            <td>${this.escapeHtml(avvik.systemnummer)}</td>
-                            <td>${this.escapeHtml(avvik.komponent)}</td>
-                            <td>${this.escapeHtml(avvik.kommentar)}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </section>
+      <tr class="avvik-row">
+        <td class="avvik-id">AVVIK ID: ${String(avvik.avvik_id).padStart(3, '0')}</td>
+        <td><strong>${this.escapeHtml(avvik.equipment_name || 'N/A')}</strong></td>
+        <td>${this.escapeHtml(avvik.systemnummer)}</td>
+        <td>${this.escapeHtml(avvik.komponent)}</td>
+        <td>${this.escapeHtml(avvik.kommentar)}</td>
+      </tr>
+      ${imgRow}
     `;
+  }).join('');
+
+  return `
+    <section class="avvik-section">
+      <h2 class="section-header avvik-header">🚨 Registrerte avvik</h2>
+      <p class="avvik-warning">VIKTIG: Følgende avvik ble registrert under servicen og krever oppmerksomhet:</p>
+      <table class="avvik-table styled-table">
+        <thead>
+          <tr class="avvik-header-row">
+            <th>Avvik ID</th>
+            <th>Anlegg</th>
+            <th>Systemnummer</th>
+            <th>Komponent</th>
+            <th>Kommentar/Tiltak</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </section>
+  `;
 }
 
     renderChecklistResults(data, theme) {
@@ -805,19 +993,22 @@ class UnifiedPDFGenerator {
             </div>
         ` : '';
 
-        const photosHtml = data.photos && data.photos.length > 0 ? `
-            <div class="documentation-photos">
-                <h3>Dokumentasjonsbilder:</h3>
-                <div class="photos-grid">
-                    ${data.photos.map(photo => `
-                        <div class="photo-container">
-                            <img src="${photo.url}" alt="${this.escapeHtml(photo.caption || 'Dokumentasjonsbilde')}" class="photo">
-                            ${photo.caption ? `<span class="photo-caption">${this.escapeHtml(photo.caption)}</span>` : ''}
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        ` : '';
+        const photosHtml = data.documentation_photos && data.documentation_photos.length > 0 ? `
+  <div class="documentation-photos">
+    <h3>Dokumentasjonsbilder:</h3>
+    <div class="photos-grid">
+      ${data.documentation_photos.map(photo => `
+        <div class="photo-container">
+          <img src="${photo.url}" alt="${this.escapeHtml(photo.caption || 'Dokumentasjonsbilde')}" class="photo">
+          ${photo.caption ? `<span class="photo-caption">${this.escapeHtml(photo.caption)}</span>` : ''}
+        </div>
+      `).join('')}
+    </div>
+    ${data.moreDocumentationPhotos && data.moreDocumentationPhotos.length > 0 
+      ? `<p class="muted-note">+ ${data.moreDocumentationPhotos.length} flere bilder – se appendix.</p>` 
+      : ''}
+  </div>
+` : '';
 
         // TEKNIKER-SIGNATUR - automatisk utfylling
         const technicianSignatureHtml = `
@@ -895,18 +1086,18 @@ class UnifiedPDFGenerator {
 /* LOGO FIXED PÅ ALLE SIDER */
 .page-logo-fixed {
     position: fixed;
-    top: 10mm;
+    top: 5mm;
     right: 15mm;
-    width: 100px;    /* Større logo */
+    width: 80px;
     height: auto;
-    max-height: 60px;  /* Større høyde */
+    max-height: 50px;
     object-fit: contain;
     z-index: 1000;
 }
 
 @page { 
     size: A4;
-    margin: 70mm 16mm 14mm 16mm;  /* Mer plass for logo */
+    margin: 25mm 15mm 20mm 15mm;
 } 
         
         body {
@@ -1126,37 +1317,50 @@ class UnifiedPDFGenerator {
         }
         .status-na { color: var(--status-na); }
 
+        /* PAGE BREAK */
+        .page-break {
+          page-break-before: always;
+          break-before: page;
+          height: 0;
+          margin: 0;
+          padding: 0;
+        }
+
+        .detailed-checklists {
+          margin-top: 20px;
+        }
+
         /* AVVIK BILDER */
         .avvik-images-row {
-            background: #fef2f2 !important;
-            border-top: 1px dashed var(--status-avvik) !important;
+          background: #fef2f2 !important;
+          border-top: 2px dashed #fca5a5 !important;
         }
 
         .avvik-images {
-            padding: 12px 0;
+          padding: 12px;
         }
 
         .avvik-images strong {
-            color: var(--status-avvik);
-            font-size: 11pt;
-            margin-bottom: 8px;
-            display: block;
+          color: var(--status-avvik);
+          font-size: 11pt;
+          margin-bottom: 10px;
+          display: block;
         }
 
         .images-grid {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-top: 8px;
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-top: 10px;
         }
 
         .avvik-image {
-            max-width: 150px;
-            max-height: 100px;
-            object-fit: cover;
-            border: 2px solid #fee2e2;
-            border-radius: 6px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          max-width: 180px;
+          max-height: 120px;
+          object-fit: cover;
+          border: 2px solid #fee2e2;
+          border-radius: 6px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         /* CHECKLIST BILDER */
@@ -1280,6 +1484,77 @@ class UnifiedPDFGenerator {
             color: #64748b;
         }
 
+        /* PAGE BREAK */
+        .page-break {
+          page-break-before: always;
+          break-before: page;
+          height: 0;
+          margin: 0;
+          padding: 0;
+        }
+
+        /* MUTED NOTE */
+        .muted-note {
+          font-size: 10pt;
+          color: #666;
+          font-style: italic;
+          margin-top: 8px;
+          margin-bottom: 0;
+        }
+
+        /* AVVIK IMAGES */
+        .avvik-images-row {
+          background: #fef2f2 !important;
+          border-top: 2px dashed #fca5a5 !important;
+        }
+
+        .avvik-images {
+          padding: 12px;
+        }
+
+        .avvik-images strong {
+          color: var(--status-avvik);
+          font-size: 11pt;
+          margin-bottom: 10px;
+          display: block;
+        }
+
+        .images-grid {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-top: 10px;
+        }
+
+        .avvik-image {
+          max-width: 180px;
+          max-height: 120px;
+          object-fit: cover;
+          border: 2px solid #fee2e2;
+          border-radius: 6px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* SYSTEMS TABLE - BRED */
+        .overview-table {
+          width: 100%;
+          table-layout: fixed;
+        }
+
+        .overview-table th:nth-child(1) { width: 28%; }
+        .overview-table th:nth-child(2) { width: 22%; }
+        .overview-table th:nth-child(3) { width: 28%; }
+        .overview-table th:nth-child(4) { width: 22%; }
+
+        /* EQUIPMENT SUMMARY (hvis mangler) */
+        .equipment-summary {
+          font-size: 12pt;
+          color: #666;
+          margin-top: 5px;
+          margin-bottom: 3px;
+          font-weight: 500;
+        }
+        
         /* RESPONSIVITET */
         @media print {
             .pdf-container { margin: 0; max-width: none; }
@@ -1305,8 +1580,11 @@ class UnifiedPDFGenerator {
         timeout: 30000 
       });
 
+      // Emulér print-media for konsistent CSS
+      await page.emulateMediaType('print');
+
       // Vent litt for at alle bilder skal laste
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));  // Øk til 3 sekunder
 
       const pdfBuffer = await page.pdf({
         format: 'A4',

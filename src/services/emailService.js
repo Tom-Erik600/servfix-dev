@@ -268,6 +268,97 @@ class EmailService {
         throw error;
     }
 }
+async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, order) {
+  try {
+    console.log(`📧 Sending ${reports.length} reports for order ${orderId} to ${customerEmail}`);
+    
+    // Hent from-adresse fra settings
+    let fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
+    try {
+      const settingsResponse = await fetch(`http://localhost:${process.env.PORT || 3000}/api/images/settings`);
+      if (settingsResponse.ok) {
+        const settings = await settingsResponse.json();
+        fromEmail = settings.reportSettings?.senderEmail || fromEmail;
+      }
+    } catch (error) {
+      console.warn('Could not load sender email, using default:', error.message);
+    }
+    
+    // Bygg liste over vedlegg
+    const bucketName = process.env.GCS_BUCKET_NAME || 'servfix-files';
+    const attachments = [];
+    
+    for (const report of reports) {
+      if (report.pdf_path && report.pdf_generated) {
+        const gcsPath = `tenants/${tenantId}/${report.pdf_path}`;
+        const publicUrl = `https://storage.googleapis.com/${bucketName}/${gcsPath}`;
+        
+        try {
+          const response = await fetch(publicUrl);
+          if (response.ok) {
+            const buffer = Buffer.from(await response.arrayBuffer());
+            const filename = `Servicerapport_${report.systemnavn || report.systemtype}_${orderId}.pdf`;
+            
+            attachments.push({
+              filename: filename,
+              content: buffer,
+              contentType: 'application/pdf'
+            });
+          }
+        } catch (error) {
+          console.warn(`Could not fetch PDF for report ${report.id}:`, error.message);
+        }
+      }
+    }
+    
+    // Bygg e-post innhold
+    const equipmentList = reports.map(r => `- ${r.systemnavn || r.systemtype}`).join('\n');
+    
+    const mailOptions = {
+      from: fromEmail,
+      to: customerEmail,
+      subject: `Servicerapport - Ordre ${orderId} - ${order.customer_name}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #1e40af;">Servicerapport</h2>
+          <p>Hei,</p>
+          <p>Vedlagt finner du servicerapport(er) for utført service hos ${order.customer_name}.</p>
+          
+          <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Ordre:</strong> ${orderId}</p>
+            <p style="margin: 8px 0 0 0;"><strong>Dato:</strong> ${new Date(order.scheduled_date).toLocaleDateString('nb-NO')}</p>
+            <p style="margin: 8px 0 0 0;"><strong>Antall anlegg:</strong> ${reports.length}</p>
+          </div>
+          
+          <p><strong>Servicerte anlegg:</strong></p>
+          <pre style="background-color: #f9fafb; padding: 12px; border-radius: 4px;">${equipmentList}</pre>
+          
+          <p>Ta gjerne kontakt dersom du har spørsmål.</p>
+          
+          <p style="margin-top: 32px;">
+            Med vennlig hilsen,<br>
+            <strong>Air-Tech AS</strong>
+          </p>
+        </div>
+      `,
+      attachments: attachments
+    };
+    
+    const result = await this.transporter.sendMail(mailOptions);
+    
+    return {
+      success: true,
+      messageId: result.messageId,
+      sentTo: customerEmail,
+      fromEmail: fromEmail,
+      reportCount: attachments.length
+    };
+    
+  } catch (error) {
+    console.error('Email sending error:', error);
+    throw error;
+  }
+}
 }
 
 module.exports = new EmailService();

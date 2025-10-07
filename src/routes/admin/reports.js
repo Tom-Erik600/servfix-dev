@@ -12,12 +12,11 @@ router.use((req, res, next) => {
   next();
 });
 
-// GET all reports - MED orderId filtering
+// GET all reports - GRUPPERER PER ORDRE
 router.get('/', async (req, res) => {
   const debugSteps = [];
   
   try {
-    // Hent orderId fra query parameters
     const { orderId } = req.query;
     
     debugSteps.push('Getting DB connection...');
@@ -36,58 +35,100 @@ router.get('/', async (req, res) => {
       debugSteps.push('📋 Getting all completed reports');
     }
     
+    // NYE QUERY: Grupper per ordre og concatenate anlegg
     const query = `
-      SELECT 
-        sr.*,
-        o.customer_name,
-        o.customer_id,
-        o.scheduled_date,
-        o.service_type,
-        e.systemnavn as equipment_name,
-        e.systemtype as equipment_type,
-        t.name as technician_name
-      FROM service_reports sr
-      LEFT JOIN orders o ON sr.order_id = o.id
-      LEFT JOIN equipment e ON sr.equipment_id::varchar = e.id::varchar
-      LEFT JOIN technicians t ON o.technician_id = t.id
-      ${whereClause}
-      ORDER BY sr.created_at DESC
+      WITH order_equipment AS (
+        SELECT 
+          sr.order_id,
+          o.customer_name,
+          o.customer_id,
+          o.scheduled_date,
+          o.service_type,
+          o.created_at as order_date,
+          MIN(sr.created_at) as first_service_date,
+          MAX(sr.created_at) as last_service_date,
+          t.name as technician_name,
+          -- Concatenate alle anlegg med komma
+          STRING_AGG(DISTINCT e.systemnavn, ', ' ORDER BY e.systemnavn) as equipment_names,
+          STRING_AGG(DISTINCT e.systemtype, ', ' ORDER BY e.systemtype) as equipment_types,
+          -- Tell antall anlegg
+          COUNT(DISTINCT sr.equipment_id) as equipment_count,
+          -- Sjekk om noen er sendt
+          BOOL_OR(sr.sent_til_fakturering) as any_sent,
+          BOOL_AND(sr.sent_til_fakturering) as all_sent,
+          -- Sjekk om noen er fakturert
+          BOOL_OR(sr.is_invoiced) as any_invoiced,
+          BOOL_AND(sr.is_invoiced) as all_invoiced,
+          -- PDF status
+          BOOL_AND(sr.pdf_generated) as all_pdfs_generated,
+          -- Samle alle rapport-IDer for denne ordren
+          ARRAY_AGG(sr.id ORDER BY sr.created_at) as report_ids
+        FROM service_reports sr
+        LEFT JOIN orders o ON sr.order_id = o.id
+        LEFT JOIN equipment e ON sr.equipment_id::varchar = e.id::varchar
+        LEFT JOIN technicians t ON o.technician_id = t.id
+        ${whereClause}
+        GROUP BY sr.order_id, o.customer_name, o.customer_id, o.scheduled_date, 
+                 o.service_type, o.created_at, t.name
+        ORDER BY MAX(sr.created_at) DESC
+      )
+      SELECT * FROM order_equipment
     `;
     
-    debugSteps.push('Executing query...');
-    const finalResult = await pool.query(query, queryParams);
-    debugSteps.push(`✅ Query OK - ${finalResult.rows.length} rows`);
+    debugSteps.push('Executing grouped query...');
+    const result = await pool.query(query, queryParams);
+    debugSteps.push(`✅ Query OK - ${result.rows.length} order groups`);
+    
+    // Hent servfixmail email for hver ordre
+    const tripletexService = require('../../services/tripletexService');
+    const ordersWithEmail = await Promise.all(result.rows.map(async (order) => {
+      let customerEmail = null;
+      
+      if (order.customer_id) {
+        try {
+          const servfixContact = await tripletexService.getServfixmailContact(order.customer_id);
+          customerEmail = servfixContact?.email || null;
+        } catch (error) {
+          console.warn(`Could not fetch servfixmail for customer ${order.customer_id}:`, error.message);
+        }
+      }
+      
+      return {
+        ...order,
+        customer_email: customerEmail,
+        // Status basert på alle rapporter i ordren
+        sent_til_fakturering: order.all_sent,
+        is_invoiced: order.all_invoiced,
+        pdf_generated: order.all_pdfs_generated
+      };
+    }));
     
     // Calculate stats
     const stats = {
-      total: finalResult.rows.length,
-      sent: finalResult.rows.filter(r => r.sent_til_fakturering).length,
-      pending: finalResult.rows.filter(r => !r.sent_til_fakturering).length,
-      invoiced: finalResult.rows.filter(r => r.is_invoiced).length
+      total: ordersWithEmail.length,
+      sent: ordersWithEmail.filter(r => r.sent_til_fakturering).length,
+      pending: ordersWithEmail.filter(r => !r.sent_til_fakturering).length,
+      invoiced: ordersWithEmail.filter(r => r.is_invoiced).length
     };
     
     res.json({
-      reports: finalResult.rows,
+      reports: ordersWithEmail,
       stats: stats,
       debug: {
         steps: debugSteps,
         success: true,
         filtered: !!orderId,
-        orderId: orderId || null
+        groupedByOrder: true
       }
     });
     
   } catch (error) {
-    console.error('Query failed at step:', debugSteps.length);
-    console.error('Error:', error);
-    
+    console.error('❌ Error in GET /admin/reports:', error);
+    debugSteps.push(`❌ Error: ${error.message}`);
     res.status(500).json({ 
-      error: 'Database error',
-      message: error.message,
-      failedAtStep: debugSteps.length,
-      debug: debugSteps,
-      detail: error.detail || null,
-      hint: error.hint || null
+      error: 'Failed to fetch reports',
+      details: error.message,
+      debug: { steps: debugSteps, success: false }
     });
   }
 });
@@ -152,6 +193,85 @@ router.get('/:reportId/pdf', async (req, res) => {
   } catch (error) {
     console.error('❌ PDF endpoint error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Send alle rapporter for en ordre til kunde
+router.post('/order/:orderId/send', async (req, res) => {
+  const { orderId } = req.params;
+  
+  try {
+    const pool = await db.getTenantConnection(req.adminTenantId);
+    
+    // Hent ordre og kunde info
+    const orderResult = await pool.query(
+      'SELECT * FROM orders WHERE id = $1',
+      [orderId]
+    );
+    
+    if (orderResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Ordre ikke funnet' });
+    }
+    
+    const order = orderResult.rows[0];
+    
+    // Hent servfixmail email
+    const tripletexService = require('../../services/tripletexService');
+    const servfixContact = await tripletexService.getServfixmailContact(order.customer_id);
+    
+    if (!servfixContact || !servfixContact.email) {
+      return res.status(400).json({ 
+        error: `Ingen servfixmail-kontakt funnet for kunde: ${order.customer_name}`,
+        customer_id: order.customer_id
+      });
+    }
+    
+    // Hent alle rapporter for ordren
+    const reportsResult = await pool.query(
+      `SELECT sr.*, e.systemnavn, e.systemtype 
+       FROM service_reports sr
+       LEFT JOIN equipment e ON sr.equipment_id::varchar = e.id::varchar
+       WHERE sr.order_id = $1 AND sr.status = 'completed'`,
+      [orderId]
+    );
+    
+    if (reportsResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Ingen fullførte rapporter funnet for denne ordren' });
+    }
+    
+    // Send e-post med alle PDFer som vedlegg
+    const EmailService = require('../../services/emailService');
+    await EmailService.init();
+    
+    const emailResult = await EmailService.sendOrderReportsToCustomer(
+      orderId,
+      req.adminTenantId,
+      reportsResult.rows,
+      servfixContact.email,
+      order
+    );
+    
+    // Oppdater alle rapporter som sendt
+    await pool.query(
+      `UPDATE service_reports 
+       SET sent_til_fakturering = true, pdf_sent_timestamp = NOW() 
+       WHERE order_id = $1`,
+      [orderId]
+    );
+    
+    res.json({
+      success: true,
+      message: `${reportsResult.rows.length} rapport(er) sendt til ${servfixContact.email}`,
+      sentTo: servfixContact.email,
+      reportCount: reportsResult.rows.length
+    });
+    
+  } catch (error) {
+    console.error('Error sending order reports:', error);
+    res.status(500).json({ 
+      error: 'Kunne ikke sende rapporter',
+      details: error.message 
+    });
   }
 });
 
