@@ -1133,62 +1133,11 @@ if (state.equipment?.systemtype) {
         }
     }, 100);
 }
+
 function renderAll() {
     console.log('🎨 renderAll() called');
     
-    // ============================================
-    // NYTT: OPPDATER KUNDEINFO FØRST - GARANTERT
-    // ============================================
-    console.log('👤 [CUSTOMER FIX] Updating customer info...');
-    console.log('👤 [CUSTOMER FIX] state.order:', state.order);
-    console.log('👤 [CUSTOMER FIX] state.order?.customer_data:', state.order?.customer_data);
-    
-    // Finn elementene
-    const customerNameEl = document.getElementById('customer-name');
-    const customerAddressEl = document.getElementById('customer-address');
-    
-    console.log('👤 [CUSTOMER FIX] Elements found:', {
-        customerNameEl: !!customerNameEl,
-        customerAddressEl: !!customerAddressEl
-    });
-    
-    // Hent verdiene
-    if (state.order && state.order.customer_data) {
-        const customerName = state.order.customer_data.name || 
-                            state.order.customer_name || 
-                            'Ukjent kunde';
-        
-        const address = state.order.customer_data.physicalAddress || 
-                       state.order.customer_data.postalAddress || 
-                       'Ikke registrert';
-        
-        console.log('👤 [CUSTOMER FIX] Values to set:', {
-            customerName: customerName,
-            address: address
-        });
-        
-        // Oppdater elementene
-        if (customerNameEl) {
-            customerNameEl.textContent = customerName;
-            console.log('✅ [CUSTOMER FIX] Customer name updated:', customerNameEl.textContent);
-        } else {
-            console.error('❌ [CUSTOMER FIX] customer-name element NOT FOUND!');
-        }
-        
-        if (customerAddressEl) {
-            customerAddressEl.textContent = address;
-            console.log('✅ [CUSTOMER FIX] Address updated:', customerAddressEl.textContent);
-        } else {
-            console.error('❌ [CUSTOMER FIX] customer-address element NOT FOUND!');
-        }
-    } else {
-        console.warn('⚠️ [CUSTOMER FIX] state.order or customer_data not available yet');
-    }
-    // ============================================
-    // SLUTT PÅ CUSTOMER FIX
-    // ============================================
-    
-    // Resten av eksisterende renderAll() kode fortsetter her...
+    // FØRST: Render alle komponenter (dette oppretter DOM-elementene)
     renderAnleggInfo();
     renderDriftScheduleSection();
     renderSystemFields();
@@ -1196,6 +1145,36 @@ function renderAll() {
     renderComponentList();
     renderDynamicLines();
     renderAdditionalWorkTable();
+    
+    // DERETTER: Oppdater kundeinfo etter at DOM er klar (100ms delay)
+    setTimeout(() => {
+        console.log('👤 [CUSTOMER FIX] Updating customer info after render...');
+        
+        if (state.order && state.order.customer_data) {
+            const customerNameEl = document.getElementById('customer-name');
+            const customerAddressEl = document.getElementById('customer-address');
+            
+            if (customerNameEl && customerAddressEl) {
+                const customerName = state.order.customer_data.name || 
+                                    state.order.customer_name || 
+                                    'Ukjent kunde';
+                
+                const address = state.order.customer_data.physicalAddress || 
+                               state.order.customer_data.postalAddress || 
+                               'Ikke registrert';
+                
+                customerNameEl.textContent = customerName;
+                customerAddressEl.textContent = address;
+                
+                console.log('✅ [CUSTOMER FIX] Customer info updated:', {
+                    name: customerName,
+                    address: address
+                });
+            } else {
+                console.warn('⚠️ [CUSTOMER FIX] Customer elements not found after render');
+            }
+        }
+    }, 100);
 }
 
 async function renderHeader() {
@@ -1488,8 +1467,6 @@ function renderChecklist() {
     const hasChecklistItems = state.checklistTemplate?.checklistItems && 
                              state.checklistTemplate.checklistItems.length > 0;
     
-    // clearAllImageContainers(); // Ikke nødvendig ved hver re-render
-    
     container.style.display = hasChecklistItems ? 'block' : 'none';
     
     // Hide/show header too
@@ -1512,7 +1489,6 @@ function renderChecklist() {
     container.innerHTML = itemsHTML;
 
     // Chain initialization med riktig timing
-    // Chain initialization med riktig timing
     setTimeout(() => {
         console.log('🎨 Step 1: Creating Lucide icons...');
         if (typeof lucide !== 'undefined') {
@@ -1523,8 +1499,13 @@ function renderChecklist() {
             console.log('📸 Step 2: Re-initializing photo handlers...');
             reinitializePhotoHandlers();
             
-            // FJERNET: Automatisk bilderedering som forårsaket problemet
             console.log('✅ Checklist rendered without automatic image loading');
+            
+            // NYTT: Last inn lagrede data etter at checklist er fullstendig rendret
+            if (state.serviceReport?.reportData?.checklist) {
+                console.log('📥 Loading saved checklist data...');
+                loadExistingReportData();
+            }
         }, 100);
     }, 100);
 }
