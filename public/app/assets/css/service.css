@@ -2077,11 +2077,6 @@ button[type="submit"].action-btn.primary:hover {
     color: #16a34a;
 }
 
-/* ============================================
-   NY CSS for smartere Anleggsinformasjon layout
-   ERSTATT ALL eksisterende anlegg CSS med dette
-   ============================================ */
-
 /* Kompakt styling for hele kortet */
 .anlegg-card {
     padding: 12px !important;

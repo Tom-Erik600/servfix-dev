@@ -386,51 +386,7 @@ const state = {
     editingComponentIndex: null
 };
 
-// DEDIKERT FUNKSJON FOR Å OPPDATERE KUNDE OG ADRESSE
-function updateCustomerInfo() {
-    console.log('🔄 updateCustomerInfo() called');
-    console.log('📊 state.order:', state.order);
-    console.log('👤 state.order?.customer_data:', state.order?.customer_data);
-    
-    // Finn elementene
-    const customerNameEl = document.getElementById('customer-name');
-    const customerAddressEl = document.getElementById('customer-address');
-    
-    console.log('🔍 Element check:', {
-        customerNameEl: !!customerNameEl,
-        customerAddressEl: !!customerAddressEl
-    });
-    
-    // Hent verdiene
-    const customerName = state.order?.customer_data?.name || 
-                        state.order?.customer_name || 
-                        'Ukjent kunde';
-    
-    const address = state.order?.customer_data?.physicalAddress || 
-                   state.order?.customer_data?.postalAddress || 
-                   'Ikke registrert';
-    
-    console.log('💾 Values to set:', {
-        customerName: customerName,
-        address: address
-    });
-    
-    // Oppdater elementene
-    if (customerNameEl) {
-        customerNameEl.textContent = customerName;
-        console.log('✅ customerNameEl updated to:', customerNameEl.textContent);
-    } else {
-        console.error('❌ customer-name element NOT FOUND in DOM!');
-        console.log('📍 Available elements with id:', Array.from(document.querySelectorAll('[id]')).map(el => el.id));
-    }
-    
-    if (customerAddressEl) {
-        customerAddressEl.textContent = address;
-        console.log('✅ customerAddressEl updated to:', customerAddressEl.textContent);
-    } else {
-        console.error('❌ customer-address element NOT FOUND in DOM!');
-    }
-}
+
 
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
@@ -768,9 +724,7 @@ console.log('📦 Customer data:', state.order.customer_data);
 console.log('🏢 Customer name:', state.order.customer_data?.name);
 console.log('📍 Physical address:', state.order.customer_data?.physicalAddress);
 
-// NYTT: Prøv å oppdatere umiddelbart (hvis elementer allerede eksisterer)
-console.log('🔄 Attempting immediate customer info update...');
-updateCustomerInfo();
+
         } catch (orderError) {
             console.error('❌ Failed to load order:', orderError);
             throw new Error('Kunne ikke laste ordre-data');
@@ -808,9 +762,9 @@ updateCustomerInfo();
         // STEP 7: Setup auto-save
         console.log('💾 Setting up auto-save...');
         setupAutoSaveListeners();
+        startAutoSave();
         
-        console.log('✅ Initialization complete!');
-        setLoading(false);
+        console.log('✅ Initialization complete!');        setLoading(false);
         
     } catch (error) {
         console.error('❌ Initialization error:', error);
@@ -1108,36 +1062,12 @@ if (state.equipment?.systemtype) {
         console.error('Error loading service report:', error);
         throw error;
     }
-    // ============================================
-    // BACKUP: Oppdater kundeinfo etter rapport er lastet
-    // ============================================
-    console.log('🔄 [CUSTOMER FIX] Triggering customer info update after report load...');
-    setTimeout(() => {
-        const customerNameEl = document.getElementById('customer-name');
-        const customerAddressEl = document.getElementById('customer-address');
-        
-        if (customerNameEl && customerAddressEl && state.order && state.order.customer_data) {
-            const customerName = state.order.customer_data.name || 
-                                state.order.customer_name || 
-                                'Ukjent kunde';
-            const address = state.order.customer_data.physicalAddress || 
-                           state.order.customer_data.postalAddress || 
-                           'Ikke registrert';
-            
-            customerNameEl.textContent = customerName;
-            customerAddressEl.textContent = address;
-            console.log('✅ [CUSTOMER FIX] Updated from loadServiceReport:', {
-                name: customerName,
-                address: address
-            });
-        }
-    }, 100);
+
 }
 
 function renderAll() {
     console.log('🎨 renderAll() called');
     
-    // FØRST: Render alle komponenter (dette oppretter DOM-elementene)
     renderAnleggInfo();
     renderDriftScheduleSection();
     renderSystemFields();
@@ -1145,36 +1075,6 @@ function renderAll() {
     renderComponentList();
     renderDynamicLines();
     renderAdditionalWorkTable();
-    
-    // DERETTER: Oppdater kundeinfo etter at DOM er klar (100ms delay)
-    setTimeout(() => {
-        console.log('👤 [CUSTOMER FIX] Updating customer info after render...');
-        
-        if (state.order && state.order.customer_data) {
-            const customerNameEl = document.getElementById('customer-name');
-            const customerAddressEl = document.getElementById('customer-address');
-            
-            if (customerNameEl && customerAddressEl) {
-                const customerName = state.order.customer_data.name || 
-                                    state.order.customer_name || 
-                                    'Ukjent kunde';
-                
-                const address = state.order.customer_data.physicalAddress || 
-                               state.order.customer_data.postalAddress || 
-                               'Ikke registrert';
-                
-                customerNameEl.textContent = customerName;
-                customerAddressEl.textContent = address;
-                
-                console.log('✅ [CUSTOMER FIX] Customer info updated:', {
-                    name: customerName,
-                    address: address
-                });
-            } else {
-                console.warn('⚠️ [CUSTOMER FIX] Customer elements not found after render');
-            }
-        }
-    }, 100);
 }
 
 async function renderHeader() {
@@ -2426,45 +2326,55 @@ function populateChecklistItems(items, checklistData) {
                                 const textarea = avvikContainer.querySelector('textarea');
                                 if (textarea) {
                                     textarea.value = result.comment;
-                                    console.log(`  ✅ Set avvik comment`);
-                                }
-                            }
-                        }
-                        
-                        if (result.status === 'byttet' && result.comment) {
-                            const byttetContainer = document.getElementById(`byttet-${item.id}`);
-                            if (byttetContainer) {
-                                const textarea = byttetContainer.querySelector('textarea');
-                                if (textarea) {
-                                    textarea.value = result.comment;
-                                    console.log(`  ✅ Set byttet comment`);
+                                    avvikContainer.classList.add('show');
+                                    avvikContainer.style.display = 'block';
                                 }
                             }
                         }
                     }
                 }
                 break;
+            
+            // NYTT: Støtte for dropdown_ok_avvik
+            case 'dropdown_ok_avvik':
+            case 'dropdown_ok_avvik_comment':
+                // Sett dropdown-verdi først
+                if (result.dropdownValue) {
+                    const dropdown = element.querySelector('select');
+                    if (dropdown) {
+                        dropdown.value = result.dropdownValue;
+                        console.log(`  ✅ Set dropdown: ${result.dropdownValue}`);
+                    }
+                }
+                // Deretter sett status (OK/Avvik)
+                if (result.status) {
+                    const statusButton = element.querySelector(`[data-status="${result.status}"]`);
+                    if (statusButton) {
+                        statusButton.click();
+                        console.log(`  ✅ Set status: ${result.status}`);
+                    }
+                }
+                break;
                 
-            case 'numeric':
             case 'text':
-            case 'textarea':
-                const input = document.getElementById(`input-${item.id}`);
-                if (input) {
+            case 'number':
+                const input = element.querySelector('input');
+                if (input && result) {
                     input.value = result;
                     console.log(`  ✅ Set value: ${result}`);
                 }
                 break;
                 
-            case 'comment':
-                const commentInput = document.getElementById(`comment-${item.id}`);
-                if (commentInput) {
-                    commentInput.value = result;
-                    console.log(`  ✅ Set comment: ${result}`);
+            case 'textarea':
+                const textarea = element.querySelector('textarea');
+                if (textarea && result) {
+                    textarea.value = result;
+                    console.log(`  ✅ Set textarea: ${result}`);
                 }
                 break;
                 
             case 'checkbox':
-                const checkbox = document.getElementById(item.id);
+                const checkbox = element.querySelector('input[type="checkbox"]');
                 if (checkbox) {
                     checkbox.checked = !!result;
                     console.log(`  ✅ Set checkbox: ${result}`);
@@ -2473,11 +2383,45 @@ function populateChecklistItems(items, checklistData) {
                 
             case 'dropdown':
             case 'switch_select':
-                const select = document.getElementById(`select-${item.id}`);
-                if (select) {
+                const select = element.querySelector('select');
+                if (select && result) {
                     select.value = result;
                     console.log(`  ✅ Set dropdown: ${result}`);
                 }
+                break;
+            
+            // NYTT: Støtte for temperature
+            case 'temperature':
+                if (result.temperature !== null && result.temperature !== undefined) {
+                    const tempInput = element.querySelector('input[type="number"]');
+                    if (tempInput) {
+                        tempInput.value = result.temperature;
+                        console.log(`  ✅ Set temperature: ${result.temperature}`);
+                    }
+                }
+                break;
+            
+            // NYTT: Støtte for virkningsgrad
+            case 'virkningsgrad':
+                if (result.t2 !== null && result.t2 !== undefined) {
+                    const t2Input = element.querySelector('#t2-' + item.id);
+                    if (t2Input) t2Input.value = result.t2;
+                }
+                if (result.t3 !== null && result.t3 !== undefined) {
+                    const t3Input = element.querySelector('#t3-' + item.id);
+                    if (t3Input) t3Input.value = result.t3;
+                }
+                if (result.t7 !== null && result.t7 !== undefined) {
+                    const t7Input = element.querySelector('#t7-' + item.id);
+                    if (t7Input) t7Input.value = result.t7;
+                }
+                if (result.virkningsgrad !== null && result.virkningsgrad !== undefined) {
+                    const virkningsgradDisplay = element.querySelector('.virkningsgrad-result');
+                    if (virkningsgradDisplay) {
+                        virkningsgradDisplay.textContent = result.virkningsgrad + '%';
+                    }
+                }
+                console.log(`  ✅ Set virkningsgrad data`);
                 break;
                 
             case 'rengjort_ikke_rengjort':
@@ -2774,13 +2718,21 @@ async function saveChecklist(event, showToastMessage = true) {
             state.serviceReport.reportData = {};
         }
         
-        // Oppdater kun checklist-data uten å ødelegge resten
+        // NYTT: Merge checklist data i stedet for å overskrive
+        const existingChecklist = state.serviceReport.reportData.checklist || {};
+        const newChecklist = componentData.checklist || {};
+        
+        // Merge: Behold gamle verdier, oppdater kun nye/endrede
+        state.serviceReport.reportData.checklist = {
+            ...existingChecklist,  // ← Behold gamle verdier
+            ...newChecklist        // ← Overstyr med nye verdier
+        };
+        
+        // Oppdater systemFields og resten som før
         state.serviceReport.reportData.systemFields = componentData.systemFields;
         state.serviceReport.reportData.systemData = componentData.systemData || componentData.systemFields;
-        state.serviceReport.reportData.checklist = componentData.checklist;
         state.serviceReport.reportData.products = componentData.products;
-        state.serviceReport.reportData.additionalWork = componentData.additionalWork;        
-        // Lagre til backend
+        state.serviceReport.reportData.additionalWork = componentData.additionalWork;        // Lagre til backend
         const response = await api.put(`/reports/${state.serviceReport.reportId}`, {
             orderId: state.orderId,
             equipmentId: state.equipmentId,

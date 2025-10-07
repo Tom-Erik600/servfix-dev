@@ -132,7 +132,7 @@ async function initializePage() {
 
         // Oppdater pageState DIREKTE uten å nullstille først
         pageState.order = orderData;
-        pageState.customer = data.customer || {};
+        pageState.customer = orderData.customer_data || {};
         pageState.technician = data.technician || {};
         pageState.quotes = data.quotes || [];
         
