@@ -1075,11 +1075,9 @@ function renderAll() {
     
     renderAnleggInfo();
     renderDriftScheduleSection();
-    renderSystemFields();
+    renderComponentDetailsForm();
     renderChecklist();
     renderComponentList();
-    renderDynamicLines();
-    renderAdditionalWorkTable();
     
     // FIX: Vis alltid overall comment og attachments sections
     const overallCommentSection = document.getElementById('overall-comment-section');
@@ -1366,7 +1364,6 @@ function renderComponentDetailsForm() {
 
     container.innerHTML = `
         <div class="system-details-section">
-            <h3>Anleggsinformasjon</h3>
             ${aggregatTypeHTML}
             ${systemFieldsHTML}
         </div>
@@ -2045,20 +2042,6 @@ function renderDriftScheduleSection() {
     }
 }
 
-function renderSystemFields() {
-    console.log('ℹ️ renderSystemFields called (system fields rendered in component details)');
-    return;
-}
-
-function renderDynamicLines() {
-    console.log('ℹ️ renderDynamicLines called (products/work rendered elsewhere)');
-    return;
-}
-
-function renderAdditionalWorkTable() {
-    console.log('ℹ️ renderAdditionalWorkTable called (work table rendered elsewhere)');
-    return;
-}
 
 // NYTT: Rydd opp alle bildecontainere
 function clearAllImageContainers() {
@@ -2182,25 +2165,33 @@ function loadExistingReportData() {
     });
     
     // 1. LAST INN SYSTEM FIELDS
-    if ((reportData.systemFields || reportData.systemData) && state.checklistTemplate?.systemFields) {
-        console.log('📝 Loading systemFields:', reportData.systemFields || reportData.systemData);
+    // Load systemFields
+    if (reportData.systemFields || reportData.systemData) {
+        const systemData = reportData.systemData || reportData.systemFields || {};
+        console.log('📝 Loading systemFields:', systemData);
         
-        state.checklistTemplate.systemFields.forEach(field => {
-            const input = document.getElementById(`system-${field.name}`);
-            // VIKTIG: Sjekk systemFields FØRST, deretter systemData
-            const value = reportData.systemFields?.[field.name] || reportData.systemData?.[field.name];
+        // Hent systemFields fra template for å vite hvilke felt vi skal se etter
+        const systemFields = state.checklistTemplate?.systemFields || [];
+        
+        systemFields.forEach(field => {
+            const fieldName = field.name;
+            const value = systemData[fieldName];
             
-            console.log(`Looking for field ${field.name}: found value "${value}", input exists: ${!!input}`);
+            // Prøv både med og uten system- prefix
+            let input = document.getElementById(`system-${fieldName}`);
+            if (!input) {
+                input = document.getElementById(fieldName);
+            }
             
-            if (input && value !== undefined && value !== null && value !== '') {
-                input.value = value;
-                console.log(`✅ Set ${field.name} = ${value}`);
-            } else if (!input) {
-                console.warn(`❌ No input found for ${field.name}`);
+            console.log(`Looking for field ${fieldName}: found value "${value}", input exists:`, !!input);
+            
+            if (input) {
+                input.value = value || '';
+                console.log(` ✅ Set ${fieldName} = "${value}"`);
+            } else {
+                console.log(` ❌ No input found for ${fieldName}`);
             }
         });
-    } else {
-        console.log('⚠️ No systemFields/systemData to load or no template');
     }    
     // 2. LAST INN CHECKLIST DATA
     if (reportData.checklist && state.checklistTemplate?.checklistItems) {
@@ -2580,12 +2571,16 @@ function setupEventListeners() {
             // Debounce - lagre 2 sekunder etter siste endring
             clearTimeout(saveTimeout);
             saveTimeout = setTimeout(async () => {
+                if (!state.serviceReport?.reportId) {
+                    console.log('⚠️ No report ID available, skipping auto-save');
+                    return;
+                }
                 if (state.serviceReport?.reportId) {
                     console.log('💾 Auto-saving overallComment after input...');
                     state.serviceReport.reportData.overallComment = overallCommentEl.value.trim();
                     
                     try {
-                        await api.put(`/api/reports/${state.serviceReport.reportId}`, {
+                        await api.put(`/reports/${state.serviceReport.reportId}`, {
                             orderId: state.orderId,
                             equipmentId: state.equipmentId,
                             reportData: state.serviceReport.reportData
@@ -2896,19 +2891,30 @@ function resetForm() {
     resetAndLoadForm(false);
 }
 
+function collectSystemData() {
+    const systemData = {};
+    
+    if (state.checklistTemplate?.systemFields) {
+        state.checklistTemplate.systemFields.forEach(field => {
+            // Prøv flere måter å finne feltet på
+            const input = document.querySelector(
+                `#system-${field.name}, #${field.name}, [name="${field.name}"]`
+            );
+            
+            if (input) {
+                systemData[field.name] = input.value || '';
+            }
+        });
+    }
+    
+    return systemData;
+}
+
 function collectComponentData() {
     console.log('Collecting component data...');
 
     // Samle systemFields
-    const systemFieldsData = {};
-    if (state.checklistTemplate?.systemFields) {
-        state.checklistTemplate.systemFields.forEach(field => {
-            const input = document.getElementById(`system-${field.name}`);
-            if (input && input.value) {
-                systemFieldsData[field.name] = input.value;
-            }
-        });
-    }
+    const systemFieldsData = collectSystemData();
 
     const checklist = collectChecklistData();
 

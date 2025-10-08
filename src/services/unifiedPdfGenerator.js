@@ -344,6 +344,47 @@ normalizeChecklistStructure(checklist_data) {
     }
 }
 
+/**
+ * Henter avvik-ID fra data, med fallback
+ */
+getAvvikId(itemData, fallbackIndex) {
+  // Prøv flere mulige felt-navn
+  const id = itemData.avvik_id ?? 
+             itemData.avviknr ?? 
+             itemData.avvikNr ?? 
+             itemData.id;
+  
+  // Hvis ID finnes, returner den
+  if (id !== undefined && id !== null) {
+    return id;
+  }
+  
+  // Fallback: bruk index + 1
+  return fallbackIndex + 1;
+}
+
+/**
+ * Sjekker om et item har faktisk data som skal vises
+ */
+itemHasData(item) {
+  // Sjekk om value finnes og ikke er tom
+  const hasValue = item.value !== null && 
+                   item.value !== undefined && 
+                   item.value !== '';
+  
+  // Sjekk om kommentar finnes
+  const hasComment = item.comment && 
+                     typeof item.comment === 'string' && 
+                     item.comment.trim() !== '';
+  
+  // Sjekk om bilder finnes
+  const hasImages = item.images && 
+                    Array.isArray(item.images) && 
+                    item.images.length > 0;
+  
+  return hasValue || hasComment || hasImages;
+}
+
   async processChecklistData(data, checklistData) {
     console.log('🔍 DEBUG checklist_data:', JSON.stringify(checklistData, null, 2));
     console.log('🔍 DEBUG equipment_type:', data.equipment_type);
@@ -399,19 +440,23 @@ normalizeChecklistStructure(checklist_data) {
                 if (itemData.status === 'avvik') {
                   result.avvik.push({
                     item_id: itemId,
+                    avvik_id: this.getAvvikId(itemData, result.avvik.length), // NYTT!
                     systemnummer: data.equipment_serial || details.system_nummer || sectionName,
                     equipment_name: data.equipment_name,
                     komponent: actualName,
-                    kommentar: itemData.avvikComment || 'Ingen beskrivelse',
-                    images: []
+                    kommentar: itemData.avvikComment || itemData.comment || 'Ingen beskrivelse',
+                    images: [] // Fylles senere
                   });
                 }
             });
             
-            if (checkpoints.length > 0) {
+            // FILTER: Kun checkpoints med data
+            const filteredCheckpoints = checkpoints.filter(cp => this.itemHasData(cp));
+
+            if (filteredCheckpoints.length > 0) {
                 result.equipmentSections.push({
                     name: sectionName,
-                    checkpoints: checkpoints
+                    checkpoints: filteredCheckpoints // ENDRET fra checkpoints
                 });
             }
         });
@@ -627,7 +672,28 @@ normalizeChecklistStructure(checklist_data) {
     console.log('🎨 Generating HTML for PDF...');
     
     const customerName = this.extractCustomerName(data);
+
+    // LEGG TIL OMFATTENDE DEBUG LOGGING:
+    console.log('🔍 DEBUG - Data before processing:', {
+      hasChecklistData: !!data.checklist_data,
+      checklistDataKeys: data.checklist_data ? Object.keys(data.checklist_data) : [],
+      hasComponents: !!data.checklist_data?.components,
+      componentCount: data.checklist_data?.components?.length || 0,
+      hasOverallComment: !!data.overall_comment,
+      overallCommentLength: data.overall_comment?.length || 0,
+      equipmentType: data.equipment_type,
+      reportId: data.id
+    });
+
     data = await this.processAirTechData(data);
+
+    console.log('🔍 DEBUG - Data after processing:', {
+      equipmentSectionsCount: data.equipmentSections?.length || 0,
+      avvikCount: data.avvik?.length || 0,
+      totalCheckpoints: data.equipmentSections?.reduce((sum, s) => sum + (s.checkpoints?.length || 0), 0) || 0,
+      firstSectionName: data.equipmentSections?.[0]?.name,
+      firstAvvikId: data.avvik?.[0]?.avvik_id
+    });
 
 // === DATA PREPARATION ===
 console.log('📋 Preparing data for PDF rendering...');
@@ -852,19 +918,29 @@ console.log('✅ Data preparation complete\n');
   }
 
 renderAvvikTable(data) {
-  if (!data.avvik || data.avvik.length === 0) return '';
+  if (!data.avvik || data.avvik.length === 0) {
+    console.log('ℹ️ No avvik to render');
+    return '';
+  }
+  
+  console.log(`📋 Rendering ${data.avvik.length} avvik with images`);
   
   const rows = data.avvik.map(avvik => {
-    // Bilderad (kun hvis bilder finnes)
+    // Vis avvik-ID med padding
+    const avvikIdFormatted = String(avvik.avvik_id || 1).padStart(3, '0');
+    
+    // Bilderad - VIS KUN hvis bilder finnes
     const imgRow = (avvik.images && avvik.images.length > 0)
       ? `
         <tr class="avvik-images-row">
           <td colspan="5">
             <div class="avvik-images">
-              <strong>Bilder for AVVIK ${String(avvik.avvik_id).padStart(3, '0')}:</strong>
+              <strong>Bilder for AVVIK ${avvikIdFormatted}:</strong>
               <div class="images-grid">
                 ${avvik.images.map(img => `
-                  <img class="avvik-image" src="${img.url}" alt="${this.escapeHtml(img.description || 'Avvikbilde')}" />
+                  <img class="avvik-image" 
+                       src="${img.url}" 
+                       alt="${this.escapeHtml(img.description || img.caption || 'Avvikbilde')}" />
                 `).join('')}
               </div>
             </div>
@@ -874,9 +950,9 @@ renderAvvikTable(data) {
 
     return `
       <tr class="avvik-row">
-        <td class="avvik-id">AVVIK ID: ${String(avvik.avvik_id).padStart(3, '0')}</td>
+        <td class="avvik-id">AVVIK ${avvikIdFormatted}</td>
         <td><strong>${this.escapeHtml(avvik.equipment_name || 'N/A')}</strong></td>
-        <td>${this.escapeHtml(avvik.systemnummer)}</td>
+        <td>${this.escapeHtml(avvik.systemnummer || 'N/A')}</td>
         <td>${this.escapeHtml(avvik.komponent)}</td>
         <td>${this.escapeHtml(avvik.kommentar)}</td>
       </tr>

@@ -241,8 +241,8 @@ function createOrderReportRow(order) {
             <td>
                 <div class="action-buttons" style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start;">
                     ${hasPDF ?
-                        `<button class="btn btn-sm btn-outline" onclick="viewOrderPDFs('${order.order_id}')" title="Vis PDFer" style="font-size: 12px; padding: 6px 10px;">
-                            📄 Vis PDFer (${order.equipment_count})
+                        `<button class="btn btn-sm btn-outline" onclick="viewOrderPDFs('${order.order_id}', ${JSON.stringify(order.report_ids).replace(/"/g, '&quot;')})" title="Vis PDFer" style="font-size: 12px; padding: 6px 10px;">
+                            📄 Vis PDF
                         </button>` :
                         `<span style="color: var(--text-light); font-size: 11px;">PDFer ikke generert</span>`
                     }
@@ -265,11 +265,20 @@ function createOrderReportRow(order) {
 }
 
 /**
- * View all PDFs for an order
+ * View PDF for an order - Opens the PDF directly using reportId
  */
-window.viewOrderPDFs = function(orderId) {
-    // Åpne ny side som viser alle PDFer for denne ordren
-    window.open(`/admin/ordre-pdf-er.html?orderId=${orderId}`, '_blank');
+window.viewOrderPDFs = function(orderId, reportIds) {
+    if (!reportIds || reportIds.length === 0) {
+        showToast('❌ Ingen PDF funnet for denne ordren', 'error');
+        return;
+    }
+    
+    // Siden 1-1 forhold mellom ordre og rapport: Bruk første rapport-ID
+    const reportId = reportIds[0];
+    const pdfUrl = `/api/admin/reports/${reportId}/pdf`;
+    window.open(pdfUrl, '_blank');
+    
+    console.log(`📄 Opening PDF for report ${reportId} from order ${orderId}`);
 };
 
 /**
