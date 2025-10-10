@@ -383,6 +383,81 @@ class UnifiedPDFGenerator {
     return out;
   }
 
+  // --- [NEW] Inline helpers ---
+  async fetchAsDataURI(url) {
+    try {
+      // storage.googleapis.com/<bucket>/<path> → last med GCS SDK (stabilt i Cloud Run)
+      const m = url.match(/^https:\/\/storage\.googleapis\.com\/([^/]+)\/(.+)$/i);
+      if (m && this.storage) {
+        const [bucketName, objectPath] = [m[1], m[2]];
+        const file = this.storage.bucket(bucketName).file(objectPath);
+        const [buf] = await file.download();
+        // forsøk MIME fra endelse
+        const ext = (objectPath.split('.').pop() || '').toLowerCase();
+        const mime = ext === 'png' ? 'image/png'
+                  : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
+                  : 'application/octet-stream';
+        return `data:${mime};base64,${buf.toString('base64')}`;
+      }
+
+      // Fallback: bruk https-get (for andre URL-er)
+      const https = require('https');
+      const buff = await new Promise((resolve, reject) => {
+        https.get(url, res => {
+          const chunks = [];
+          res.on('data', c => chunks.push(c));
+          res.on('end', () => resolve(Buffer.concat(chunks)));
+          res.on('error', reject);
+        }).on('error', reject);
+      });
+
+      // grovt mime-gjett
+      let mime = 'application/octet-stream';
+      const lower = url.toLowerCase();
+      if (lower.endsWith('.png')) mime = 'image/png';
+      else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg';
+      else if (lower.endsWith('.webp')) mime = 'image/webp';
+
+      return `data:${mime};base64,${buff.toString('base64')}`;
+    } catch (e) {
+      console.warn('⚠️ inline fetch failed for', url, e.message);
+      return url; // behold originalen hvis inlining feiler
+    }
+  }
+
+  async inlineImagesArray(arr) {
+    if (!Array.isArray(arr)) return;
+    for (const img of arr) {
+      if (img && img.url && !String(img.url).startsWith('data:')) {
+        img.url = await this.fetchAsDataURI(img.url);
+      }
+    }
+  }
+
+  async inlineAllImages(data /* processed */) {
+    try {
+      // førsteside-bilder
+      await this.inlineImagesArray(data.documentation_photos);
+      await this.inlineImagesArray(data.moreDocumentationPhotos);
+
+      // sjekkpunkt-bilder
+      for (const section of (data.equipmentSections || [])) {
+        for (const cp of (section.checkpoints || [])) {
+          await this.inlineImagesArray(cp.images);
+        }
+      }
+
+      // avvik-bilder
+      await this.inlineImagesArray(data.avvik?.map(a => a.images).flat().filter(Boolean) || []);
+      // direkte per avvik-objekt
+      for (const a of (data.avvik || [])) {
+        await this.inlineImagesArray(a.images);
+      }
+    } catch (e) {
+      console.warn('⚠️ inlineAllImages error:', e.message);
+    }
+  }
+
   /* ===========================
    * Prosessering til PDF-modell
    * =========================== */
@@ -829,15 +904,7 @@ class UnifiedPDFGenerator {
       .sign-section .sign-label{ color:#6b7280; font-size:10pt; }
       .closing{ margin-top:10px; }
 
-      /* Firma-footer (blå) med sidetall – rent, uten stor bakgrunnsflate */
-      .footer-company {
-        position: fixed;
-        left: 0; right: 0; bottom: -8mm;
-        font-size: 9pt; color: #1d4ed8; text-align: center;
-      }
-      .page-info { color:#4b5563; margin-left: 6px; }
-      .footer-company .page-number::after { content: counter(page); }
-      .footer-company .total-pages::after { content: counter(pages); }
+
 
       @media print {
         .section { page-break-inside: avoid; }
@@ -902,16 +969,6 @@ class UnifiedPDFGenerator {
         </section>
       `
       : '';
-
-    const footer = `
-      <div class="footer footer-company">
-        ${this.escapeHtml((settings.company || {}).name || '')}
-        &middot; ${this.escapeHtml((settings.company || {}).address || '')}
-        &middot; ${this.escapeHtml((settings.company || {}).phone || '')}
-        &middot; ${this.escapeHtml((settings.company || {}).email || '')}
-        <span class="page-info">— Side <span class="page-number"></span> av <span class="total-pages"></span></span>
-      </div>
-    `;
 
     return `
 <!DOCTYPE html>
@@ -981,7 +1038,6 @@ class UnifiedPDFGenerator {
       ${checklistSections}
     </section>
   </div>
-  ${footer}
 </body>
 </html>`;
   }
@@ -994,12 +1050,20 @@ class UnifiedPDFGenerator {
     const page = await this.browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle2', timeout: 45000 });
     await page.emulateMediaType('print');
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await page.waitForTimeout(1500);
+
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' },
+      displayHeaderFooter: true,
+      headerTemplate: '<span></span>',
+      footerTemplate: `
+    <div style="font-size:9px; color:#4b5563; width:100%; text-align:center;">
+      Side <span class="pageNumber"></span> av <span class="totalPages"></span>
+    </div>`,
+      margin: { top: '20mm', right: '15mm', bottom: '22mm', left: '15mm' }
     });
+
     await page.close();
     return pdfBuffer;
   }
@@ -1059,17 +1123,21 @@ class UnifiedPDFGenerator {
       const reportData = await this.fetchReportData(reportId, tenantId);
       const settings = await this.loadCompanySettings(tenantId);
       const processed = await this.processAirTechData(reportData);
+
+      // Inline all images to base64
+      await this.inlineAllImages(processed);
+
       const html = this.generateHTML(processed, settings);
       await this.debugSaveHTML(html, reportId);
       const pdfBuffer = await this.generatePDF(html);
       
       // UPLOAD til GCS - KUN DETTE
-      const publicUrl = await this.uploadToGCS(tenantId, pdfBuffer, reportId, reportData.order_id);
+      const relativePath = await this.uploadToGCS(tenantId, pdfBuffer, reportId, reportData.order_id);
       
       // OPPDATER database med URL
-      await this.updateReportPDFPath(reportId, publicUrl, tenantId);
+      await this.updateReportPDFPath(reportId, relativePath, tenantId);
       
-      return publicUrl;
+      return relativePath;
     } finally {
       await this.close();
     }
