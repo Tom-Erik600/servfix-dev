@@ -962,12 +962,11 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
                 name: customerName,
                 physicalAddress: completeData.physicalAddress || targetCustomer.physicalAddress || null,
                 postalAddress: completeData.postalAddress || targetCustomer.postalAddress || null,
-                email: completeData.servfixEmail || targetCustomer.email || null,  // VIKTIG: Bruk servfixmail først
+                email: completeData.servfixEmail || null,  // KUN servfixmail-epost, ALDRI fallback
                 organizationNumber: targetCustomer.organizationNumber || null,
                 contact: targetCustomer.contact || null,
                 phone: targetCustomer.phone || null
-            }
-        };
+            }        };
         
         // Legg til includedEquipmentIds hvis valgt
         if (selectedEquipment.length > 0) {

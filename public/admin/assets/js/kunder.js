@@ -183,6 +183,31 @@ window.selectCustomer = async function(customerId) {
             console.error('Feil ved henting av adresser:', error);
         }
     }
+
+    // NYTT: Hent rapport-epost (servfixmail) i bakgrunnen
+    if (!customer.reportEmail) {
+        console.log(`📧 Henter rapport-epost for ${customer.name}...`);
+        try {
+            const reportResponse = await fetch(`/api/admin/customers/${customerId}/servfixmail`, {
+                credentials: 'include'
+            });
+            
+            if (reportResponse.ok) {
+                const reportData = await reportResponse.json();
+                
+                // Oppdater customer-objektet
+                customer.reportEmail = reportData.email || null;
+                
+                // Re-render med rapport-epost
+                renderCustomerDetails(customer);
+                console.log('✅ Rapport-epost hentet:', customer.reportEmail || 'Ikke funnet');
+            } else {
+                console.error('Feil ved henting av rapport-epost:', reportResponse.status);
+            }
+        } catch (error) {
+            console.error('Feil ved henting av rapport-epost:', error);
+        }
+    }
 };
 
     /**
@@ -231,6 +256,13 @@ window.selectCustomer = async function(customerId) {
                     <div class="modern-info-label">E-post</div>
                     <div class="modern-info-value ${customer.email ? 'highlight' : 'empty'}">
                         ${customer.email || 'Mangler e-post'}
+                    </div>
+                </div>
+
+                <div class="modern-info-group">
+                    <div class="modern-info-label">Rapport epost</div>
+                    <div class="modern-info-value ${customer.reportEmail ? 'highlight' : 'empty'}">
+                        ${customer.reportEmail || 'Ikke registrert'}
                     </div>
                 </div>
                 

@@ -1,1732 +1,1030 @@
-// src/services/unifiedPdfGenerator.js - Air-Tech PDF Generator med riktig mal, logo og avvik
-const puppeteer = require('puppeteer');
-const db = require('../config/database');
-const fs = require('fs').promises;
+// src/services/unifiedPdfGenerator.js
+'use strict';
+
 const path = require('path');
+const fs = require('fs').promises;
+const puppeteer = require('puppeteer');
 const { Storage } = require('@google-cloud/storage');
+const db = require('../config/database'); // getTenantConnection(tenantId)
 
 class UnifiedPDFGenerator {
   constructor() {
     this.browser = null;
-    this.avvikMap = new Map();
-    
-    // Initialize Google Cloud Storage
-    if (process.env.NODE_ENV === 'production' || process.env.USE_CLOUD_STORAGE === 'true') {
+
+    // Init GCS (valgfritt i dev)
+    const bucketName =
+      process.env.GCS_BUCKET_NAME ||
+      process.env.GCS_BUCKET ||
+      process.env.GOOGLE_CLOUD_BUCKET ||
+      process.env.GCLOUD_STORAGE_BUCKET ||
+      null;
+
+    if (bucketName) {
       try {
-        if (process.env.K_SERVICE) {
-          this.storage = new Storage({ projectId: process.env.GCP_PROJECT_ID || 'servfix' });
-          console.log('✅ Using Google Cloud default credentials (Cloud Run)');
-        } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-          const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS);
-          this.storage = new Storage({ projectId: process.env.GCP_PROJECT_ID || 'servfix', credentials });
-          console.log('✅ Using Google Cloud credentials from env variable');
-        } else {
-          const credentials = require('../config/serviceAccountKey.json');
-          this.storage = new Storage({ projectId: process.env.GCP_PROJECT_ID || 'servfix', credentials });
-          console.log('✅ Using Google Cloud credentials from file');
-        }
-        this.bucket = this.storage.bucket(process.env.GCS_BUCKET_NAME || 'servfix-files');
-        console.log('✅ Google Cloud Storage initialized for bucket:', process.env.GCS_BUCKET_NAME || 'servfix-files');
-      } catch (error) {
-        console.error('⚠️ Could not initialize Google Cloud Storage:', error.message);
+        // Cloud Run (default creds) eller lokale creds (GOOGLE_APPLICATION_CREDENTIALS peker til fil)
+        this.storage = new Storage({
+          projectId: process.env.GCP_PROJECT_ID || process.env.GCLOUD_PROJECT || undefined,
+        });
+        this.bucket = this.storage.bucket(bucketName);
+        console.log('✅ GCS init:', bucketName);
+      } catch (e) {
+        console.warn('⚠️  GCS init feilet:', e.message);
         this.storage = null;
         this.bucket = null;
       }
+    } else {
+      console.warn('ℹ️ Ingen GCS bucket konfigurert. Offentlig opplasting vil ikke fungere.');
+      this.storage = null;
+      this.bucket = null;
     }
   }
 
+  /* ===========================
+   * Lifecycle
+   * =========================== */
   async init() {
-    try {
-      // MILJØ-SPESIFIKKE INNSTILLINGER
-      const isProduction = process.env.NODE_ENV === 'production';
-      const isWindows = process.platform === 'win32';
-
-      console.log(`🔧 Environment: ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
-      console.log(`🔧 Platform: ${process.platform}`);
-
-      const options = {
-        headless: isProduction ? true : 'new',
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu'
-        ]
-      };
-
-      // PRODUKSJON (Google Cloud Run)
-      if (process.env.K_SERVICE) {
-        options.executablePath = '/usr/bin/chromium';
-        options.args.push(
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process'
-        );
-      } 
-      // DEVELOPMENT (Windows)
-      else if (!isProduction && isWindows) {
-        console.log('🚀 Configuring for Windows development...');
-        options.args.push(
-          '--disable-web-security',
-          '--disable-features=TranslateUI',
-          '--disable-extensions',
-          '--disable-plugins',
-          '--run-all-compositor-stages-before-draw',
-          '--disable-background-timer-throttling',
-          '--disable-renderer-backgrounding',
-          '--disable-backgrounding-occluded-windows',
-          '--memory-pressure-off'
-        );
-        
-        if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-          options.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-        }
-      } 
-      // ANDRE MILJØER
-      else {
-        if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-          options.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-        }
-      }
-
-      this.browser = await puppeteer.launch(options);
-    } catch (error) {
-      console.error('❌ Failed to launch Puppeteer:', error.message);
-      try {
-        this.browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-      } catch (fallbackError) {
-        throw new Error(`Cannot launch browser: ${fallbackError.message}`);
-      }
-    }
-  }
-
-  // === HJELPEMETODER ===
-  safeJsonParse(jsonString, defaultValue = null) {
-    try {
-      if (!jsonString) return defaultValue;
-      if (typeof jsonString === 'object') return jsonString; // Allerede parsed
-      return JSON.parse(jsonString);
-    } catch (error) {
-      console.warn('JSON parse error:', error.message);
-      return defaultValue;
-    }
-  }
-
-/**
- * Normaliserer checklist_data til enhetlig format
- * Støtter både gammelt format (components array) og nytt format (flat struktur)
- */
-normalizeChecklistStructure(checklist_data) {
-  console.log('🔄 Normalizing checklist structure...');
-  
-  // Hvis allerede i components-format, returner som den er
-  if (checklist_data?.components?.length) {
-    console.log('✅ Already in components format');
-    return checklist_data;
-  }
-  
-  // Hvis flat format (nytt), konverter til components
-  if (checklist_data?.checklist) {
-    console.log('🔄 Converting from flat format to components');
-    return {
-      components: [{
-        details: checklist_data.systemFields || checklist_data.details || {},
-        checklist: checklist_data.checklist,
-        metadata: checklist_data.metadata || {}
-      }],
-      overallComment: checklist_data.overallComment || ''
+    if (this.browser) return;
+    const isProd = process.env.NODE_ENV === 'production';
+    const opts = {
+      headless: isProd ? true : 'new',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+      ],
     };
-  }
-  
-  console.warn('⚠️ Empty or invalid checklist_data');
-  return { components: [], overallComment: '' };
-}
 
-  escapeHtml(unsafe) {
-    if (unsafe === null || unsafe === undefined) return '';
-    return unsafe
-      .toString()
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+    if (process.env.K_SERVICE) {
+      // Cloud Run
+      opts.executablePath = '/usr/bin/chromium';
+      opts.args.push(
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process'
+      );
+    } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      opts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    }
+
+    try {
+      this.browser = await puppeteer.launch(opts);
+    } catch (err) {
+      console.error('❌ Puppeteer launch feilet, fallback:', err.message);
+      this.browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      });
+    }
   }
 
   async close() {
-    if (this.browser) {
-      try {
-        await this.browser.close();
-        console.log('✅ Puppeteer browser closed.');
-      } catch (error) {
-        console.error('❌ Error closing Puppeteer browser:', error);
-      } finally {
-        this.browser = null;
-      }
+    if (!this.browser) return;
+    try { await this.browser.close(); } catch (_) {}
+    this.browser = null;
+  }
+
+  /* ===========================
+   * Helpers
+   * =========================== */
+  safeJsonParse(input, fallback) {
+    try {
+      if (!input) return fallback;
+      if (typeof input === 'object') return input;
+      return JSON.parse(input);
+    } catch {
+      return fallback;
     }
   }
 
-  // === KONFIGURASJON ===
-  getReportTheme(equipmentType) {
-    const themes = {
-        'boligventilasjon': {
-            title: 'SERVICERAPPORT BOLIGVENTILASJON',
-            table: {
-                equipmentOverviewHeadings: ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'],
-                checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat']
-            },
-            show: { equipmentOverview: true, checklistResults: true, avvik: true, summary: true },
-            cssMods: { rowDensity: 'compact', tableHeaderWeight: '600', headerUppercase: true }
-        },
-        'ventilasjon': {
-            title: 'SERVICERAPPORT VENTILASJON',
-            table: {
-                equipmentOverviewHeadings: ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'],
-                checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat']
-            },
-            show: { equipmentOverview: true, checklistResults: true, avvik: true, summary: true },
-            cssMods: { rowDensity: 'normal', tableHeaderWeight: '600', headerUppercase: true }
-        },
-        'ventilasjonsaggregat': {
-            title: 'SERVICERAPPORT VENTILASJONSAGGREGAT',
-            table: {
-                equipmentOverviewHeadings: ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'],
-                checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat']
-            },
-            show: { equipmentOverview: true, checklistResults: true, avvik: true, summary: true },
-            cssMods: { rowDensity: 'normal', tableHeaderWeight: '600', headerUppercase: true }
-        },
-        'vifter': {
-            title: 'SERVICERAPPORT VIFTER',
-            table: {
-                equipmentOverviewHeadings: ['Viftetype', 'Systemnummer', 'Plassering', 'Betjener'],
-                checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat']
-            },
-            show: { equipmentOverview: true, checklistResults: true, avvik: true, summary: true },
-            cssMods: { rowDensity: 'normal', tableHeaderWeight: '600', headerUppercase: true }
-        }
-    };
-
-    return themes[equipmentType] || themes['ventilasjon'];
-}
-
-  extractCustomerName(data) {
-    return data.customer_name || 
-           data.company_name || 
-           data.customer_data?.name ||
-           data.customer_data?.customer_name ||
-           'Ukjent kunde';
+  escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 
-  // === FIRMA-INNSTILLINGER FRA JSON ===
+  /* ===========================
+   * Company settings (logo / info)
+   * =========================== */
   async loadCompanySettings(tenantId) {
-    console.log(`🔧 Loading company settings from JSON for tenant: ${tenantId}`);
-    
-    try {
-      if (!this.bucket) {
-        console.log('ℹ️ No GCS bucket, using defaults');
-        return {
-          companyInfo: { name: 'Air-Tech AS' },
-          logo_base64: null
-        };
-      }
+    const defaults = {
+      company: {
+        name: 'Air-Tech AS',
+        address: 'Stanseveien 18, 0975 Oslo',
+        phone: '+47 91 52 40 40',
+        email: 'post@air-tech.no',
+        orgnr: '889 558 652',
+        website: 'www.air-tech.no',
+      },
+      logoBase64: null,
+    };
 
-      // Last innstillinger fra JSON-fil
+    if (!this.bucket) return defaults;
+
+    // 1) settings.json (valgfritt)
+    try {
       const settingsPath = `tenants/${tenantId}/assets/settings.json`;
       const file = this.bucket.file(settingsPath);
       const [exists] = await file.exists();
-      
-      let settings = {};
       if (exists) {
-        const [contents] = await file.download();
-        settings = JSON.parse(contents.toString());
-        console.log('✅ Settings loaded from GCS JSON file');
-      } else {
-        console.log('ℹ️ No settings file found, using defaults');
-      }
-      
-      // Last logo hvis det finnes
-      let logoBase64 = null;
-      if (settings.logo && settings.logo.url) {
-        try {
-          const bucketName = process.env.GCS_BUCKET_NAME || 'servfix-files';
-          const logoPath = settings.logo.url.replace(`https://storage.googleapis.com/${bucketName}/`, '');
-          const logoFile = this.bucket.file(logoPath);
-          const [logoExists] = await logoFile.exists();
-          
-          if (logoExists) {
-            const [logoBuffer] = await logoFile.download();
-            const logoExtension = logoPath.split('.').pop().toLowerCase();
-            const mimeType = logoExtension === 'png' ? 'image/png' : 'image/jpeg';
-            logoBase64 = `data:${mimeType};base64,${logoBuffer.toString('base64')}`;
-            console.log('✅ Logo loaded successfully');
+        const [buf] = await file.download();
+        const json = JSON.parse(buf.toString());
+        if (json.companyInfo) {
+          defaults.company = {
+            ...defaults.company,
+            ...json.companyInfo,
+          };
+        }
+        // 2) logo via settings (hvis gitt)
+        if (json.logo?.url) {
+          const bucketName = this.bucket.name;
+          const rel = json.logo.url.replace(`https://storage.googleapis.com/${bucketName}/`, '');
+          const logoFile = this.bucket.file(rel);
+          const [lexists] = await logoFile.exists();
+          if (lexists) {
+            const [lbuf] = await logoFile.download();
+            const ext = (rel.split('.').pop() || 'png').toLowerCase();
+            const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
+            defaults.logoBase64 = `data:${mime};base64,${lbuf.toString('base64')}`;
           }
-        } catch (logoError) {
-          console.warn('⚠️ Could not load logo:', logoError.message);
         }
       }
-      
+    } catch (e) {
+      console.warn('⚠️  Kunne ikke lese settings.json:', e.message);
+    }
+
+    // 3) Fallback logo (fast sti)
+    if (!defaults.logoBase64) {
+      try {
+        const candidate = `tenants/${tenantId}/assets/logo.png`;
+        const file = this.bucket.file(candidate);
+        const [exists] = await file.exists();
+        if (exists) {
+          const [buf] = await file.download();
+          defaults.logoBase64 = `data:image/png;base64,${buf.toString('base64')}`;
+        }
+      } catch (e) {
+        // ignorer
+      }
+    }
+
+    return defaults;
+  }
+
+  /* ===========================
+   * DB Fetch
+   * =========================== */
+  async fetchReportData(reportId, tenantId) {
+    const pool = await db.getTenantConnection(tenantId);
+
+    // rapport + alle ferdigstilte rapporter på samme ordre
+    const q = `
+      SELECT 
+        sr.id, sr.order_id, sr.equipment_id, sr.checklist_data, sr.photos,
+        sr.status, sr.completed_at, sr.created_at, sr.pdf_path, sr.pdf_generated,
+        o.id              AS order_number,
+        o.customer_name   AS customer_name,
+        o.customer_data   AS customer_data,
+        o.scheduled_date  AS service_date,
+        e.systemnavn      AS equipment_name,
+        e.systemtype      AS equipment_type,
+        e.location        AS equipment_location,
+        e.systemnummer    AS equipment_serial,
+        t.name            AS technician_name,
+
+        ARRAY_AGG(
+          json_build_object(
+            'report_id',          sr2.id,
+            'equipment_id',       sr2.equipment_id,
+            'equipment_name',     e2.systemnavn,
+            'equipment_type',     e2.systemtype,
+            'equipment_location', e2.location,
+            'system_nummer',      e2.systemnummer,
+            'checklist_data',     sr2.checklist_data,
+            'photos',             sr2.photos
+          )
+        ) FILTER (WHERE sr2.id IS NOT NULL) AS all_reports
+
+      FROM service_reports sr
+      LEFT JOIN orders o        ON o.id = sr.order_id
+      LEFT JOIN equipment e     ON e.id = sr.equipment_id
+      LEFT JOIN technicians t   ON t.id = o.technician_id
+      LEFT JOIN service_reports sr2 ON sr2.order_id = sr.order_id AND sr2.status = 'completed'
+      LEFT JOIN equipment e2    ON e2.id = sr2.equipment_id
+      WHERE sr.id = $1
+      GROUP BY sr.id, o.id, e.id, t.id
+      LIMIT 1;
+    `;
+    const { rows } = await pool.query(q, [reportId]);
+    if (!rows.length) throw new Error(`Report not found: ${reportId}`);
+
+    const row = rows[0];
+
+    // parse JSON
+    row.customer_data = this.safeJsonParse(row.customer_data, {});
+    row.checklist_data = this.safeJsonParse(row.checklist_data, {});
+    row.photos = Array.isArray(row.photos) ? row.photos : this.safeJsonParse(row.photos, []) || [];
+
+    row.all_reports = (row.all_reports || []).map(r => ({
+      ...r,
+      checklist_data: this.safeJsonParse(r.checklist_data, {}),
+      photos: Array.isArray(r.photos) ? r.photos : this.safeJsonParse(r.photos, []) || [],
+    }));
+
+    // Avvik-bilder for denne rapporten (brukes i mapping etterpå)
+    const avvikImagesQ = `
+      SELECT checklist_item_id, image_url, avvik_number, uploaded_at
+      FROM avvik_images
+      WHERE service_report_id = $1
+      ORDER BY avvik_number ASC, uploaded_at ASC
+    `;
+    const avvikRes = await pool.query(avvikImagesQ, [reportId]);
+    row.avvik_images = avvikRes.rows || [];
+
+    return { ...row, tenant_id: tenantId };
+  }
+
+  /* ===========================
+   * Normalisering
+   * =========================== */
+  normalizeChecklistStructure(checklist) {
+    if (!checklist) return { components: [] };
+
+    if (Array.isArray(checklist.components)) {
+      return checklist;
+    }
+
+    if (checklist?.checklist) {
+      const details = checklist.systemFields || checklist.details || {};
+      let componentName = 'Sjekkliste';
+      if (details.etasje && details.leilighet_nr) {
+        componentName = `Etasje ${details.etasje} - Leilighet ${details.leilighet_nr}`;
+      } else if (details.etasje) {
+        componentName = `Etasje ${details.etasje}`;
+      } else if (details.leilighet_nr) {
+        componentName = `Leilighet ${details.leilighet_nr}`;
+      }
       return {
-        companyInfo: settings.companyInfo || { name: 'Air-Tech AS' },
-        quoteSettings: settings.quoteSettings || {},
-        logoBase64: logoBase64
+        components: [{
+          name: componentName,
+          details,
+          checklist: checklist.checklist,
+          metadata: checklist.metadata || {},
+        }],
+        overallComment: checklist.overallComment || '',
       };
-      
-    } catch (error) {
-      console.warn('⚠️ Could not load company settings:', error.message);
-      return {
-        companyInfo: { name: 'Air-Tech AS' },
-        quoteSettings: {},
-        logoBase64: null
-      };
+    }
+
+    return { components: [] };
+  }
+
+  /* ===========================
+   * Templates (valgfritt)
+   * =========================== */
+  async fetchChecklistTemplate(tenantId, equipmentType) {
+    try {
+      const pool = await db.getTenantConnection(tenantId);
+      const res = await pool.query(
+        'SELECT template_data FROM checklist_templates WHERE equipment_type = $1 LIMIT 1',
+        [equipmentType]
+      );
+      if (res.rows.length) {
+        return this.safeJsonParse(res.rows[0].template_data, { checklistItems: [] });
+      }
+      return { checklistItems: [] };
+    } catch {
+      return { checklistItems: [] };
     }
   }
 
-  // === DATA-PROSESSERING ===
-  async processAirTechData(data) {
-    console.log('🔧 Starting Air-Tech data processing...');
-    
-    this.buildEquipmentOverview(data);
-    const processedChecklist = await this.processChecklistData(data, data.checklist_data); // LEGG TIL AWAIT!
-    
-    data.equipmentSections = processedChecklist.equipmentSections;
-    data.avvik = processedChecklist.avvik;
-    
-    console.log('✅ Air-Tech data processing complete');
-    return data;
+  generateFallbackName(itemId) {
+    const patterns = {
+      'item': 'Sjekkpunkt',
+      'temp': 'Temperatur',
+      'virkn': 'Virkningsgrad',
+      'tilstand': 'Tilstandsgrad',
+      'konsekvens': 'Konsekvensgrad',
+    };
+    for (const [p, name] of Object.entries(patterns)) {
+      if ((itemId || '').startsWith(p)) {
+        const num = (itemId || '').replace(p, '');
+        return `${name} ${num}`;
+      }
+    }
+    if (!itemId) return 'Ukjent punkt';
+    const text = itemId.replace(/_/g, ' ');
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  itemHasData(checkpoint) {
+    const s = (checkpoint.status || '').toLowerCase();
+    if (!s) return false;
+    return s !== 'na' && s !== 'ikke relevant';
   }
 
   buildEquipmentOverview(data) {
-    if (!data.checklist_data || !data.checklist_data.components) {
-        data.all_equipment = [{
-            type: data.equipment_type || 'Ukjent type',
-            system_number: 'N/A',
-            location: data.equipment_location || 'Ikke spesifisert',
-            betjener: 'Ikke spesifisert'
-        }];
-        return;
+    if (!Array.isArray(data.all_reports) || !data.all_reports.length) {
+      data.all_equipment = [{
+        systemtype: data.equipment_type || 'System',
+        systemnummer: data.equipment_serial || 'N/A',
+        plassering: data.equipment_location || 'Ikke spesifisert',
+        betjener: 'Ikke spesifisert',
+      }];
+      return;
     }
 
-    // Hent fra checklist_data components
-    data.all_equipment = data.checklist_data.components.map(component => ({
-        type: data.equipment_type || component.type || 'System',
-        system_number: component.systemnummer || component.system_number || component.name || 'N/A',
-        location: component.plassering || component.location || data.equipment_location || 'Ikke spesifisert',
-        betjener: component.betjener || component.operator || 'Ikke spesifisert'
+    data.all_equipment = data.all_reports.map(r => ({
+      systemtype: r.equipment_type || 'System',
+      systemnummer: r.system_nummer || 'N/A',
+      plassering: r.equipment_location || 'Ikke spesifisert',
+      betjener: 'Ikke spesifisert',
     }));
-}
-
-  async fetchChecklistTemplate(tenantId, equipmentType) {
-    try {
-        console.log(`🔍 Looking up template for equipment_type: ${equipmentType}`);
-        const pool = await db.getTenantConnection(tenantId);
-        const result = await pool.query(
-            'SELECT template_data FROM checklist_templates WHERE equipment_type = $1 LIMIT 1',
-            [equipmentType]
-        );
-        
-        console.log(`📋 Query result: ${result.rows.length} rows found`);
-        
-        if (result.rows.length > 0) {
-            const templateData = this.safeJsonParse(result.rows[0].template_data, {});
-            console.log('📋 Template found with', templateData.checklistItems?.length || 0, 'items');
-            return templateData;
-        }
-        
-        console.log('⚠️ No template found for', equipmentType);
-        return { checklistItems: [] };
-    } catch (error) {
-        console.error('❌ fetchChecklistTemplate ERROR:', error.message);
-        return { checklistItems: [] };
-    }
-}
-
-/**
- * Henter avvik-ID fra data, med fallback
- */
-getAvvikId(itemData, fallbackIndex) {
-  // Prøv flere mulige felt-navn
-  const id = itemData.avvik_id ?? 
-             itemData.avviknr ?? 
-             itemData.avvikNr ?? 
-             itemData.id;
-  
-  // Hvis ID finnes, returner den
-  if (id !== undefined && id !== null) {
-    return id;
   }
-  
-  // Fallback: bruk index + 1
-  return fallbackIndex + 1;
-}
 
-/**
- * Sjekker om et item har faktisk data som skal vises
- */
-itemHasData(item) {
-  // Sjekk om value finnes og ikke er tom
-  const hasValue = item.value !== null && 
-                   item.value !== undefined && 
-                   item.value !== '';
-  
-  // Sjekk om kommentar finnes
-  const hasComment = item.comment && 
-                     typeof item.comment === 'string' && 
-                     item.comment.trim() !== '';
-  
-  // Sjekk om bilder finnes
-  const hasImages = item.images && 
-                    Array.isArray(item.images) && 
-                    item.images.length > 0;
-  
-  return hasValue || hasComment || hasImages;
-}
+  extractImagesFromChecklistData(checklistData) {
+    const out = [];
+    if (!checklistData?.components) return out;
 
-  async processChecklistData(data, checklistData) {
-    console.log('🔍 DEBUG checklist_data:', JSON.stringify(checklistData, null, 2));
-    console.log('🔍 DEBUG equipment_type:', data.equipment_type);
-    
-    try {
-        // HENT TEMPLATE for navn-mapping
-        const template = await this.fetchChecklistTemplate('airtech', data.equipment_type);
-        console.log('📋 Template found:', !!template, 'with', template.checklistItems?.length || 0, 'items');
-        
-        // BYGG ROBUST lookup-map som takler ALLE items
-        const nameLookup = {};
-        if (template.checklistItems) {
-            template.checklistItems.forEach(item => {
-                nameLookup[item.id] = item.label || item.name || `Sjekkpunkt ${item.id}`;
+    checklistData.components.forEach((component, idx) => {
+      if (!component?.checklist) return;
+      Object.entries(component.checklist).forEach(([itemId, itemData]) => {
+        if (Array.isArray(itemData?.images)) {
+          itemData.images.forEach(url => {
+            out.push({
+              checklist_item_id: itemId,
+              image_url: url,
+              image_type: (itemData.status || '').toLowerCase() === 'avvik' ? 'avvik' : 'checklist',
+              component_index: idx,
+              source: 'checklist_data',
             });
+          });
         }
-        
-        console.log('📋 Name lookup created:', Object.keys(nameLookup).length, 'mappings');
-        
-        const result = { equipmentSections: [], avvik: [] };
-        
-        if (!checklistData?.components) {
-            console.log('⚠️ No checklist components found');
-            return result;
-        }
-        
-        checklistData.components.forEach((component, idx) => {
-            if (!component.checklist) return;
-            
-            const details = component.details || {};
-            const sectionName = `${details.etasje || '1'} - ${details.leilighet_nr || '1'} - ${details.aggregat_type || 'Aggregat'} - ${details.system_nummer || 'System'}`;
-            
-            const checkpoints = [];
-            
-            // ROBUST: Iterer gjennom ALLE faktiske items i data - ikke template
-            Object.entries(component.checklist).forEach(([itemId, itemData]) => {
-                // FALLBACK: Hvis template ikke har dette item, lag beskrivende navn
-                const actualName = nameLookup[itemId] || 
-                                 this.generateFallbackName(itemId) || 
-                                 `Sjekkpunkt ${itemId}`;
-                
-                const checkpoint = {
-                    item_id: itemId,
-                    name: actualName,
-                    status: (itemData.status || 'ok').toUpperCase(),
-                    comment: itemData.avvikComment || itemData.byttetComment || itemData.comment || '',
-                    images: []
-                };
-                
-                checkpoints.push(checkpoint);
-                
-                // Legg til avvik
-                if (itemData.status === 'avvik') {
-                  result.avvik.push({
-                    item_id: itemId,
-                    avvik_id: this.getAvvikId(itemData, result.avvik.length), // NYTT!
-                    systemnummer: data.equipment_serial || details.system_nummer || sectionName,
-                    equipment_name: data.equipment_name,
-                    komponent: actualName,
-                    kommentar: itemData.avvikComment || itemData.comment || 'Ingen beskrivelse',
-                    images: [] // Fylles senere
-                  });
-                }
+        if (itemData?.comment && typeof itemData.comment === 'string') {
+          const urlRegex = /https:\/\/storage\.googleapis\.com\/[^\s)]+/g;
+          const urls = itemData.comment.match(urlRegex) || [];
+          urls.forEach(url => {
+            out.push({
+              checklist_item_id: itemId,
+              image_url: url,
+              image_type: (itemData.status || '').toLowerCase() === 'avvik' ? 'avvik' : 'checklist',
+              component_index: idx,
+              source: 'comment_urls',
             });
-            
-            // FILTER: Kun checkpoints med data
-            const filteredCheckpoints = checkpoints.filter(cp => this.itemHasData(cp));
+          });
+        }
+      });
+    });
 
-            if (filteredCheckpoints.length > 0) {
-                result.equipmentSections.push({
-                    name: sectionName,
-                    checkpoints: filteredCheckpoints // ENDRET fra checkpoints
-                });
+    return out;
+  }
+
+  /* ===========================
+   * Prosessering til PDF-modell
+   * =========================== */
+  async processAirTechData(row) {
+    const data = { ...row };
+
+    // 1) Systemoversikt
+    this.buildEquipmentOverview(data);
+
+    // 2) Navn-mapping fra template
+    const template = await this.fetchChecklistTemplate(data.tenant_id, data.equipment_type);
+    const nameLookup = {};
+    if (Array.isArray(template.checklistItems)) {
+      template.checklistItems.forEach(it => {
+        if (it?.id && (it.label || it.name)) {
+          nameLookup[it.id] = it.label || it.name;
+        }
+      });
+    }
+
+    // 3) Sjekklister + avvik (fra alle anlegg/rapporter)
+    const result = { equipmentSections: [], avvik: [] };
+    let avvikCounter = 1;
+
+    if (Array.isArray(data.all_reports)) {
+      for (const report of data.all_reports) {
+        const normalized = this.normalizeChecklistStructure(report.checklist_data);
+        if (!normalized?.components?.length) continue;
+
+        const systemRef = `${report.system_nummer || 'N/A'} - ${report.equipment_name || ''}`;
+        const sectionNameFallback = report.equipment_name || systemRef;
+
+        normalized.components.forEach(component => {
+          if (!component.checklist) return;
+
+          const sectionName = component.name || sectionNameFallback;
+          const checkpoints = [];
+
+          Object.entries(component.checklist).forEach(([itemId, itemData]) => {
+            const actualName = nameLookup[itemId] || this.generateFallbackName(itemId) || `Sjekkpunkt ${itemId}`;
+
+            const cp = {
+              item_id: itemId,
+              name: actualName,
+              status: (itemData.status || 'ok').toUpperCase(),
+              comment: itemData.avvikComment || itemData.byttetComment || itemData.comment || '',
+              system_ref: systemRef,
+              images: [],
+            };
+            checkpoints.push(cp);
+
+            if ((itemData.status || '').toLowerCase() === 'avvik') {
+              result.avvik.push({
+                item_id: itemId,
+                avvik_id: String(avvikCounter++).padStart(3, '0'),
+                systemnummer: report.system_nummer || 'N/A',
+                systemnavn: report.equipment_name || '',
+                komponent: actualName,
+                seksjon: sectionName,
+                kommentar: itemData.avvikComment || itemData.comment || 'Ingen beskrivelse',
+                images: [],
+              });
             }
+          });
+
+          const filtered = checkpoints.filter(cp => this.itemHasData(cp));
+          if (filtered.length > 0) {
+            result.equipmentSections.push({
+              name: sectionName,
+              system_ref: systemRef,
+              checkpoints: filtered,
+            });
+          }
         });
-        
-        console.log('✅ Processed', result.equipmentSections.length, 'sections with', result.avvik.length, 'avvik');
-        return result;
-        
-    } catch (error) {
-        console.error('❌ processChecklistData ERROR:', error.message);
-        console.error('❌ Stack:', error.stack);
-        
-        // FALLBACK: Returner basic struktur
-        return { equipmentSections: [], avvik: [] };
+      }
     }
-}
 
-  generateFallbackName(itemId) {
-    // Generer beskrivende navn basert på itemId mønster
-    const patterns = {
-        'item': 'Sjekkpunkt',
-        'temp': 'Temperatur',
-        'virkn': 'Virkningsgrad', 
-        'tilstand': 'Tilstandsgrad',
-        'konsekvens': 'Konsekvensgrad'
+    // 4) Bilder: bygg maps (avvik + sjekkliste)
+    const byItemAvvik = {};
+    const byItemChk = {};
+    (data.avvik_images || []).forEach(x => {
+      if (!x.checklist_item_id) return;
+      byItemAvvik[x.checklist_item_id] = byItemAvvik[x.checklist_item_id] || [];
+      byItemAvvik[x.checklist_item_id].push(x);
+    });
+    const extractedFromChecklist = this.extractImagesFromChecklistData(
+      this.normalizeChecklistStructure(data.checklist_data)
+    );
+    extractedFromChecklist.forEach(x => {
+      if (!x.checklist_item_id) return;
+      byItemChk[x.checklist_item_id] = byItemChk[x.checklist_item_id] || [];
+      byItemChk[x.checklist_item_id].push(x);
+    });
+
+    // 4a) Injiser bilder på checkpoints
+    result.equipmentSections.forEach(section => {
+      section.checkpoints.forEach(cp => {
+        const imgs = [
+          ...(byItemChk[cp.item_id] || []),
+          ...(byItemAvvik[cp.item_id] || []),
+        ];
+        if (imgs.length) {
+          cp.images = imgs.map(x => ({
+            url: x.image_url || x.url,
+            description: x.caption || x.metadata?.description || '',
+          }));
+        }
+      });
+    });
+
+    // 4b) Injiser bilder på avvik
+    result.avvik.forEach(a => {
+      const imgs = [
+        ...(byItemAvvik[a.item_id] || []),
+        ...(byItemChk[a.item_id] || []),
+      ];
+      if (imgs.length) {
+        a.images = imgs.map(x => ({
+          url: x.image_url || x.url,
+          description: x.caption || x.metadata?.description || '',
+        }));
+      }
+    });
+
+    // 5) Førsteside-splitt for systemer/bilder
+    const MAX_SYSTEMS_ON_PAGE_1 = 7;
+    const MAX_IMAGES_ON_PAGE_1 = 4;
+    data.all_equipment = data.all_equipment || [];
+    data.systemsFirstPage = data.all_equipment.slice(0, MAX_SYSTEMS_ON_PAGE_1);
+    data.systemsAppendix = data.all_equipment.slice(MAX_SYSTEMS_ON_PAGE_1);
+
+    const allPhotos = Array.isArray(data.photos) ? data.photos : [];
+    data.documentation_photos = allPhotos.slice(0, MAX_IMAGES_ON_PAGE_1);
+    data.moreDocumentationPhotos = allPhotos.slice(MAX_IMAGES_ON_PAGE_1);
+
+    return {
+      ...data,
+      equipmentSections: result.equipmentSections,
+      avvik: result.avvik,
     };
-    
-    for (const [pattern, name] of Object.entries(patterns)) {
-        if (itemId.startsWith(pattern)) {
-            const number = itemId.replace(pattern, '');
-            return `${name} ${number}`;
-        }
-    }
-    
-    return `Ukjent punkt ${itemId}`;
-}
+  }
 
-  // === RENDERING METODER ===
+  /* ===========================
+   * Theming & Rendering
+   * =========================== */
+  getReportTheme(equipmentTypeRaw) {
+    const equipmentType = (equipmentTypeRaw || '').toLowerCase();
+    const themes = {
+      boligventilasjon: {
+        title: 'SERVICERAPPORT BOLIGVENTILASJON',
+        table: {
+          equipmentOverviewHeadings: ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'],
+          checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat'],
+        },
+      },
+      vifter: {
+        title: 'SERVICERAPPORT VIFTER',
+        table: {
+          equipmentOverviewHeadings: ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'],
+          checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat'],
+        },
+      },
+      default: {
+        title: 'SERVICERAPPORT',
+        table: {
+          equipmentOverviewHeadings: ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'],
+          checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat'],
+        },
+      },
+    };
+    return themes[equipmentType] || themes.default;
+  }
+
   renderEquipmentOverviewTable(data, theme) {
-  const systems = data.systemsFirstPage || data.all_equipment || [];
-  
-  if (systems.length === 0) {
-    return '';
-  }
-  
-  const headings = theme.table.equipmentOverviewHeadings;
-  const rows = systems.map(equip => `
-    <tr>
-      <td>${this.escapeHtml(equip.type || '')}</td>
-      <td>${this.escapeHtml(equip.system_number || '')}</td>
-      <td>${this.escapeHtml(equip.location || '')}</td>
-      <td>${this.escapeHtml(equip.betjener || '')}</td>
-    </tr>
-  `).join('');
+    const systems = data.systemsFirstPage || data.all_equipment || [];
+    if (!systems.length) return '';
 
-  const moreSystemsNote = data.systemsAppendix && data.systemsAppendix.length > 0
-    ? `<p class="muted-note">+ ${data.systemsAppendix.length} flere anlegg – se neste side.</p>`
-    : '';
+    const headings = theme.table.equipmentOverviewHeadings || ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'];
+    const rows = systems.map(e => `
+      <tr>
+        <td>${this.escapeHtml(e.systemtype || '')}</td>
+        <td>${this.escapeHtml(e.systemnummer || '')}</td>
+        <td>${this.escapeHtml(e.plassering || '')}</td>
+        <td>${this.escapeHtml(e.betjener || '')}</td>
+      </tr>
+    `).join('');
 
-  return `
-    <section class="equipment-overview">
-      <h2>Systemoversikt</h2>
-      <table class="overview-table">
-        <thead>
-          <tr>
-            ${headings.map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
-      ${moreSystemsNote}
-    </section>
-  `;
-}
-
-  async generateReport(serviceReportId, tenantId) {
-    console.log(`📄 Starting PDF generation for report ${serviceReportId}`);
-    try {
-      await this.init();
-      let reportData = await this.fetchReportData(serviceReportId, tenantId);
-      
-      const companySettings = await this.loadCompanySettings(tenantId);
-      const html = await this.generateHTML(reportData, companySettings);
-      
-      // Save debug HTML for development
-      await this.debugSaveHTML(html, serviceReportId);
-      
-      const pdfBuffer = await this.generatePDF(html);
-      const pdfPath = await this.savePDF(pdfBuffer, reportData, tenantId);
-      await this.updateReportPDFPath(serviceReportId, pdfPath, tenantId);
-      return pdfPath;
-    } catch (error) {
-      console.error('❌ PDF generation failed:', error);
-      throw error;
-    } finally {
-      await this.close();
-    }
-  }
-
-  async fetchReportData(reportId, tenantId) {
-    const pool = await db.getTenantConnection(tenantId);
-    const query = `
-      SELECT 
-        sr.id, sr.order_id, sr.equipment_id, sr.checklist_data, sr.products_used,
-        sr.additional_work, sr.status, sr.signature_data, sr.photos, sr.created_at,
-        sr.completed_at, sr.pdf_path, sr.pdf_generated,
-        o.id as order_number, o.customer_name as company_name, o.description as order_description,
-        o.scheduled_date as service_date, o.customer_data,
-        o.customer_data->>'email' as company_email, o.customer_data->>'phone' as company_phone,
-        o.customer_data->>'address' as company_address,
-        o.customer_data->>'contact_person' as contact_person,
-        e.systemnavn as equipment_name, e.systemtype as equipment_type, e.location as equipment_location,
-        e.systemnummer as equipment_serial,
-        t.name as technician_name, t.initials as technician_initials
-      FROM service_reports sr
-      LEFT JOIN orders o ON sr.order_id = o.id
-      LEFT JOIN equipment e ON sr.equipment_id = e.id
-      LEFT JOIN technicians t ON o.technician_id = t.id
-      WHERE sr.id = $1
-    `;
-    const result = await pool.query(query, [reportId]);
-    if (result.rows.length === 0) throw new Error('Service report not found');
-    
-    const data = result.rows[0];
-    
-    // Parse JSON fields safely
-    data.checklist_data = this.safeJsonParse(data.checklist_data, {});
-
-    // Normaliser checklist_data struktur
-    data.checklist_data = this.normalizeChecklistStructure(data.checklist_data);
-    console.log('📊 Normalized checklist structure:', {
-      componentCount: data.checklist_data.components?.length || 0,
-      hasOverallComment: !!data.checklist_data.overallComment
-    });
-
-    data.equipment_data = this.safeJsonParse(data.equipment_data, {});
-    data.products_used = this.safeJsonParse(data.products_used, []);
-    data.additional_work = this.safeJsonParse(data.additional_work, []);
-    data.photos = data.photos || [];
-    data.tenant_id = tenantId;
-
-    const customerData = this.safeJsonParse(data.customer_data, {});
-    data.contact_person = data.contact_person || customerData?.contact_person || '';
-
-    // **NYTT: Hent avvik-bilder fra avvik_images tabellen**
-    const avvikImagesQuery = `
-        SELECT 
-            ai.id,
-            ai.service_report_id,
-            ai.avvik_number,
-            ai.checklist_item_id,
-            ai.image_url,
-            ai.metadata,
-            ai.uploaded_at
-        FROM avvik_images ai
-        WHERE ai.service_report_id = $1
-        ORDER BY ai.avvik_number ASC, ai.uploaded_at ASC
-    `;
-    
-    const avvikImagesResult = await pool.query(avvikImagesQuery, [reportId]);
-    const avvikImages = avvikImagesResult.rows;
-    
-    console.log(`📸 Found ${avvikImages.length} avvik images for report ${reportId}`);
-
-    // **ALTERNATIV: Hent bilder fra checklist_data JSON**
-    const checklistDataImages = this.extractImagesFromChecklistData(data.checklist_data);
-    console.log(`📸 Found ${checklistDataImages.length} images in checklist_data`);
-
-    // **Kombiner alle bilde-kilder**
-    const allChecklistImages = [...checklistDataImages];
-
-    // For bakoverkompatibilitet, treat checklist_data images som checklist_images
-    const checklistImages = allChecklistImages;
-    
-    // **Legg til bilder i data-objektet**
-    data.avvik_images = avvikImages;
-    data.checklist_images = checklistImages;
-    
-    // **Group avvik images by checklist_item_id for lettere tilgang**
-    data.avvik_images_by_item = {};
-    avvikImages.forEach(img => {
-        if (img.checklist_item_id) {
-            if (!data.avvik_images_by_item[img.checklist_item_id]) {
-                data.avvik_images_by_item[img.checklist_item_id] = [];
-            }
-            data.avvik_images_by_item[img.checklist_item_id].push(img);
-        }
-    });
-    
-    // **Group checklist images by checklist_item_id**
-    data.checklist_images_by_item = {};
-    checklistImages.forEach(img => {
-        if (img.checklist_item_id) {
-            if (!data.checklist_images_by_item[img.checklist_item_id]) {
-                data.checklist_images_by_item[img.checklist_item_id] = [];
-            }
-            data.checklist_images_by_item[img.checklist_item_id].push(img);
-        }
-    });
-    
-    console.log('✅ Report data fetched with images:', {
-        hasAvvikImages: avvikImages.length > 0,
-        hasChecklistImages: checklistImages.length > 0,
-        avvikItemsWithImages: Object.keys(data.avvik_images_by_item).length,
-        checklistItemsWithImages: Object.keys(data.checklist_images_by_item).length
-    });
-
-    return data;
-  }
-
-  async generateHTML(data, settings) {
-    console.log('🎨 Generating HTML for PDF...');
-    
-    const customerName = this.extractCustomerName(data);
-
-    // LEGG TIL OMFATTENDE DEBUG LOGGING:
-    console.log('🔍 DEBUG - Data before processing:', {
-      hasChecklistData: !!data.checklist_data,
-      checklistDataKeys: data.checklist_data ? Object.keys(data.checklist_data) : [],
-      hasComponents: !!data.checklist_data?.components,
-      componentCount: data.checklist_data?.components?.length || 0,
-      hasOverallComment: !!data.overall_comment,
-      overallCommentLength: data.overall_comment?.length || 0,
-      equipmentType: data.equipment_type,
-      reportId: data.id
-    });
-
-    data = await this.processAirTechData(data);
-
-    console.log('🔍 DEBUG - Data after processing:', {
-      equipmentSectionsCount: data.equipmentSections?.length || 0,
-      avvikCount: data.avvik?.length || 0,
-      totalCheckpoints: data.equipmentSections?.reduce((sum, s) => sum + (s.checkpoints?.length || 0), 0) || 0,
-      firstSectionName: data.equipmentSections?.[0]?.name,
-      firstAvvikId: data.avvik?.[0]?.avvik_id
-    });
-
-// === DATA PREPARATION ===
-console.log('📋 Preparing data for PDF rendering...');
-
-// 1) Auto-splitt systemoversikt
-const MAX_SYSTEMS_ON_PAGE_1 = 7;
-data.systemsFirstPage = (data.all_equipment || []).slice(0, MAX_SYSTEMS_ON_PAGE_1);
-data.systemsAppendix = (data.all_equipment || []).slice(MAX_SYSTEMS_ON_PAGE_1);
-
-console.log(`  Systems on page 1: ${data.systemsFirstPage.length}`);
-console.log(`  Systems in appendix: ${data.systemsAppendix.length}`);
-
-// 2) Begrens bilder på side 1
-const MAX_IMAGES_ON_PAGE_1 = 4;
-const allPhotos = data.photos || [];
-data.documentation_photos = allPhotos.slice(0, MAX_IMAGES_ON_PAGE_1);
-data.moreDocumentationPhotos = allPhotos.slice(MAX_IMAGES_ON_PAGE_1);
-
-console.log(`  Photos on page 1: ${data.documentation_photos.length}`);
-console.log(`  Photos in appendix: ${data.moreDocumentationPhotos.length}`);
-
-// 3) Injiser bilder fra maps
-const byItemAvvik = data.avvik_images_by_item || {};
-const byItemChk = data.checklist_images_by_item || {};
-
-console.log(`  Avvik images map: ${Object.keys(byItemAvvik).length} keys`);
-console.log(`  Checklist images map: ${Object.keys(byItemChk).length} keys`);
-
-// 3a) Bilder på checkpoints
-let checkpointImagesCount = 0;
-(data.equipmentSections || []).forEach(section => {
-  (section.checkpoints || []).forEach(cp => {
-    if (!cp.item_id) return;
-    
-    const imgs = [
-      ...(byItemChk[cp.item_id] || []),
-      ...(byItemAvvik[cp.item_id] || [])
-    ];
-    
-    if (imgs.length > 0) {
-      cp.images = imgs.map(x => ({
-        url: x.image_url || x.url,
-        description: x.caption || x.metadata?.description || ''
-      }));
-      checkpointImagesCount += cp.images.length;
-    }
-  });
-});
-
-console.log(`  ✅ Injected ${checkpointImagesCount} images to checkpoints`);
-
-// 3b) Bilder på avvik
-let avvikImagesCount = 0;
-(data.avvik || []).forEach(a => {
-  if (!a.item_id) return;
-  
-  const imgs = [
-    ...(byItemAvvik[a.item_id] || []),
-    ...(byItemChk[a.item_id] || [])
-  ];
-  
-  if (imgs.length > 0) {
-    a.images = imgs.map(x => ({
-      url: x.image_url || x.url,
-      description: x.caption || x.metadata?.description || ''
-    }));
-    avvikImagesCount += a.images.length;
-  }
-});
-
-console.log(`  ✅ Injected ${avvikImagesCount} images to avvik`);
-console.log('✅ Data preparation complete\n');
-
-    const logoBase64 = settings?.logoBase64 || null;
-    const theme = this.getReportTheme(data.equipment_type);
-    const equipmentTypeClass = (data.equipment_type || 'generic').toLowerCase();
-    
-    const technician = data.technician_name || 'Ukjent tekniker';
-    const companyName = settings?.companyInfo?.name || 'Air-Tech AS';
-  
-    return `
-    <!DOCTYPE html>
-    <html lang="no">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${theme.title} ${data.id}</title>
-        <style>
-            ${this.getAirTechCSS(theme)}
-        </style>
-    </head>
-    <body class="type-${equipmentTypeClass}">
-        <div class="pdf-container">
-            <header class="header-section">
-                <div class="header-content">
-                    <div class="header-left">
-                        <h1 class="main-title">${theme.title}</h1>
-                        <p class="report-id">Rapport-ID: SR-${data.id}</p>
-                    </div>
-                    <div class="header-right">
-                    </div>
-                </div>
-                <div class="header-divider"></div>
-            </header>
-            
-            <!-- Logo for alle sider -->
-            ${logoBase64 ? `<img src="${logoBase64}" alt="Air-Tech AS" class="page-logo-fixed">` : ''}
-            
-            <section class="customer-info-table">
-                <table class="info-table">
-                    <tr>
-                        <td class="info-label">Avtalenummer:</td>
-                        <td class="info-value"></td>
-                        <td class="info-label">Besøk nr:</td>
-                        <td class="info-value"></td>
-                        <td class="info-label">Årstall</td>
-                        <td class="info-value">${new Date(data.created_at).getFullYear()}</td>
-                    </tr>
-                    <tr>
-                        <td class="info-label">Kundenummer</td>
-                        <td class="info-value">${data.customer_data?.id || data.customer_id || ''}</td>
-                        <td class="info-label">Kundenavn</td>
-                        <td class="info-value">${customerName}</td>
-                        <td class="info-label">Mottaker av rapport</td>
-                        <td class="info-value">${data.customer_data?.contactPerson || data.contact_person || ''}</td>
-                    </tr>
-                    <tr>
-                        <td class="info-label">Byggnavn</td>
-                        <td class="info-value">${data.equipment_location || data.location || data.equipment_name || ''}</td>
-                        <td class="info-label">Adresse</td>
-                        <td class="info-value">${data.customer_address || data.address || data.customer_data?.address || ''}</td>
-                        <td class="info-label">Post nr.</td>
-                        <td class="info-value">${data.customer_data?.postalCode || data.postal_code || ''}</td>
-                    </tr>
-                    <tr>
-                        <td class="info-label">Rapport dato:</td>
-                        <td class="info-value">${new Date(data.created_at).toLocaleDateString('nb-NO')}</td>
-                        <td class="info-label">Utført av:</td>
-                        <td class="info-value">${technician}</td>
-                        <td class="info-label">Vår kontaktperson</td>
-                        <td class="info-value">${technician}</td>
-                    </tr>
-                </table>
-            </section>
-            
-            <section class="service-agreement-text">
-                <p>Servicearbeidet som ble avtalt for de angitte anleggene er nå fullført i tråd med avtalen. I henhold til vår serviceavtale oversender vi en servicerapport etter fullført servicebesøk.</p>
-            </section>
-
-            <!-- SIDE 1: OVERSIKT -->
-            ${this.renderEquipmentOverviewTable(data, theme)}
-            ${this.renderAvvikTable(data)}
-            ${this.generateSummarySection(data)}
-            
-            <!-- APPENDIX: Flere anlegg hvis >7 -->
-            ${data.systemsAppendix && data.systemsAppendix.length > 0 ? `
-              <div class="page-break"></div>
-              <section class="section">
-                <h2 class="section-header">Systemoversikt (fortsettelse)</h2>
-                <table class="overview-table">
-                  <thead>
-                    <tr>
-                      ${theme.table.equipmentOverviewHeadings.map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${data.systemsAppendix.map(equip => `
-                      <tr>
-                        <td>${this.escapeHtml(equip.type || '')}</td>
-                        <td>${this.escapeHtml(equip.system_number || '')}</td>
-                        <td>${this.escapeHtml(equip.location || '')}</td>
-                        <td>${this.escapeHtml(equip.betjener || '')}</td>
-                      </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
-              </section>
-            ` : ''}
-            
-            <!-- NY SIDE: DETALJERTE SJEKKLISTER -->
-            <div class="page-break"></div>
-            <section class="section">
-              <h2 class="section-header">Detaljerte sjekkpunkter og resultater</h2>
-              ${this.renderChecklistResults(data, theme)}
-            </section>
-            
-            <!-- APPENDIX: Flere bilder hvis >4 -->
-            ${data.moreDocumentationPhotos && data.moreDocumentationPhotos.length > 0 ? `
-              <section class="section">
-                <h2 class="section-header">Dokumentasjonsbilder (fortsettelse)</h2>
-                <div class="photos-grid">
-                  ${data.moreDocumentationPhotos.map(photo => `
-                    <div class="photo-container">
-                      <img src="${photo.url}" alt="${this.escapeHtml(photo.caption || 'Dokumentasjonsbilde')}" class="photo">
-                      ${photo.caption ? `<span class="photo-caption">${this.escapeHtml(photo.caption)}</span>` : ''}
-                    </div>
-                  `).join('')}
-                </div>
-              </section>
-            ` : ''}
-            
-            <div class="page-footer">
-                <div class="footer-content">
-                    <div class="footer-left">
-                        <strong>Air-Tech AS</strong><br>
-                        Stanseveien 18, 0975 Oslo<br>
-                        www.air-tech.no
-                    </div>
-                    <div class="footer-center">
-                        Telefon: +47 91 52 40 40<br>
-                        Epost: post@air-tech.no<br>
-                        Org.nr: 889 558 652
-                    </div>
-                    <div class="footer-right">
-                        Side 1 av 1
-                    </div>
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>`;
-  }
-
-renderAvvikTable(data) {
-  if (!data.avvik || data.avvik.length === 0) {
-    console.log('ℹ️ No avvik to render');
-    return '';
-  }
-  
-  console.log(`📋 Rendering ${data.avvik.length} avvik with images`);
-  
-  const rows = data.avvik.map(avvik => {
-    // Vis avvik-ID med padding
-    const avvikIdFormatted = String(avvik.avvik_id || 1).padStart(3, '0');
-    
-    // Bilderad - VIS KUN hvis bilder finnes
-    const imgRow = (avvik.images && avvik.images.length > 0)
-      ? `
-        <tr class="avvik-images-row">
-          <td colspan="5">
-            <div class="avvik-images">
-              <strong>Bilder for AVVIK ${avvikIdFormatted}:</strong>
-              <div class="images-grid">
-                ${avvik.images.map(img => `
-                  <img class="avvik-image" 
-                       src="${img.url}" 
-                       alt="${this.escapeHtml(img.description || img.caption || 'Avvikbilde')}" />
-                `).join('')}
-              </div>
-            </div>
-          </td>
-        </tr>`
+    const more = data.systemsAppendix && data.systemsAppendix.length
+      ? `<p class="muted-note">+ ${data.systemsAppendix.length} flere anlegg – se neste side.</p>`
       : '';
 
     return `
-      <tr class="avvik-row">
-        <td class="avvik-id">AVVIK ${avvikIdFormatted}</td>
-        <td><strong>${this.escapeHtml(avvik.equipment_name || 'N/A')}</strong></td>
-        <td>${this.escapeHtml(avvik.systemnummer || 'N/A')}</td>
-        <td>${this.escapeHtml(avvik.komponent)}</td>
-        <td>${this.escapeHtml(avvik.kommentar)}</td>
-      </tr>
-      ${imgRow}
+      <section class="section avoid-break">
+        <h2 class="section-header">Systemoversikt</h2>
+        <table class="styled-table overview-table">
+          <thead>
+            <tr>${headings.map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}</tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${more}
+      </section>
     `;
-  }).join('');
+  }
 
-  return `
-    <section class="avvik-section">
-      <h2 class="section-header avvik-header">🚨 Registrerte avvik</h2>
-      <p class="avvik-warning">VIKTIG: Følgende avvik ble registrert under servicen og krever oppmerksomhet:</p>
-      <table class="avvik-table styled-table">
+  renderAvvikTable(data) {
+    if (!data.avvik || !data.avvik.length) return '';
+    const rows = data.avvik.map(a => {
+      const id = String(a.avvik_id || '').padStart(3, '0');
+      const imagesRow = (a.images && a.images.length)
+        ? `
+          <tr class="avvik-images-row">
+            <td colspan="5">
+              <div class="avvik-images">
+                <strong>Bilder for AVVIK ${this.escapeHtml(id)}:</strong>
+                <div class="images-grid">
+                  ${a.images.map(img => `
+                    <img class="avvik-image" src="${img.url}" alt="${this.escapeHtml(img.description || 'Avvikbilde')}"/>
+                  `).join('')}
+                </div>
+              </div>
+            </td>
+          </tr>
+        `
+        : '';
+
+      return `
+        <tr>
+          <td>${this.escapeHtml(id)}</td>
+          <td>${this.escapeHtml(a.systemnavn || '')}</td>
+          <td>${this.escapeHtml(a.systemnummer || '')}</td>
+          <td>${this.escapeHtml(a.komponent || '')}</td>
+          <td>${this.escapeHtml(a.kommentar || '')}</td>
+        </tr>
+        ${imagesRow}
+      `;
+    }).join('');
+
+    return `
+      <section class="section avoid-break">
+        <h2 class="section-header">Registrerte avvik</h2>
+        <p>Følgende avvik ble registrert under servicen:</p>
+        <table class="styled-table avvik-table">
+          <thead>
+            <tr class="avvik-header-row">
+              <th>Avvik ID</th>
+              <th>Anlegg</th>
+              <th>Systemnummer</th>
+              <th>Komponent</th>
+              <th>Kommentar</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </section>
+    `;
+  }
+
+  renderChecklistResults(data, theme) {
+    if (!data.equipmentSections || !data.equipmentSections.length) {
+      return '<p>Ingen sjekkpunkter registrert.</p>';
+    }
+
+    const html = data.equipmentSections.map(section => {
+      const rows = section.checkpoints.map(cp => {
+        const statusClass = `status-${(cp.status || '').toLowerCase()}`;
+        const imagesHtml = (cp.images && cp.images.length)
+          ? `
+            <tr class="image-row">
+              <td colspan="3">
+                <div class="checklist-images">
+                  ${cp.images.map(img => `
+                    <div class="image-container">
+                      <img src="${img.url}" class="checklist-image" alt="${this.escapeHtml(img.description || 'Bilde')}"/>
+                      ${img.description ? `<span class="image-caption">${this.escapeHtml(img.description)}</span>` : ''}
+                    </div>
+                  `).join('')}
+                </div>
+              </td>
+            </tr>
+          `
+          : '';
+
+        return `
+          <tr>
+            <td>${this.escapeHtml(cp.name)}</td>
+            <td class="status-cell ${statusClass}">${this.escapeHtml(cp.status)}</td>
+            <td>${this.escapeHtml(cp.comment || '')}</td>
+          </tr>
+          ${imagesHtml}
+        `;
+      }).join('');
+
+      return `
+        <div class="section avoid-break">
+          <h3 class="section-subheader">${this.escapeHtml(section.system_ref || section.name)}</h3>
+          <table class="styled-table">
+            <thead>
+              <tr>${(theme.table.checklistHeadings || ['Sjekkpunkt', 'Status', 'Merknad / Resultat']).map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}</tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    }).join('');
+
+    return html;
+  }
+
+  generateSummarySection(data, settings) {
+    const products = Array.isArray(data.products_used) ? data.products_used : [];
+    const work = Array.isArray(data.additional_work) ? data.additional_work : [];
+    const overall = data.overall_comment;
+
+    const productsHtml = products.length
+      ? `<h3>Produkter brukt:</h3><ul>${products.map(p => `<li>${this.escapeHtml(p.name || '')} (${this.escapeHtml(p.quantity || '')})</li>`).join('')}</ul>`
+      : '';
+
+    const workHtml = work.length
+      ? `<h3>Utførte tilleggsarbeider:</h3><ul>${work.map(w => `<li>${this.escapeHtml(w.description || '')}</li>`).join('')}</ul>`
+      : '';
+
+    const overallHtml = overall
+      ? `<h3>Generell kommentar:</h3><p>${this.escapeHtml(overall)}</p>`
+      : '';
+
+    const photos = Array.isArray(data.documentation_photos) ? data.documentation_photos : [];
+    const photosHtml = photos.length
+      ? `
+        <div class="documentation-photos">
+          <h3>Dokumentasjonsbilder:</h3>
+          <div class="photos-grid">
+            ${photos.map(photo => `
+              <div class="photo-container">
+                <img src="${photo.url}" class="photo" alt="${this.escapeHtml(photo.caption || 'Dokumentasjonsbilde')}"/>
+                ${photo.caption ? `<span class="photo-caption">${this.escapeHtml(photo.caption)}</span>` : ''}
+              </div>
+            `).join('')}
+          </div>
+          ${Array.isArray(data.moreDocumentationPhotos) && data.moreDocumentationPhotos.length
+            ? `<p class="muted-note">+ ${data.moreDocumentationPhotos.length} flere bilder – se appendix.</p>`
+            : ''
+          }
+        </div>
+      `
+      : '';
+
+    const signSection = `
+      <section class="section sign-section avoid-break">
+        <h2 class="section-header">Signatur</h2>
+        <div class="sign-row">
+          <div class="sign-block">
+            <div class="sign-line"></div>
+            <div class="sign-label">Tekniker</div>
+          </div>
+          <div class="sign-block">
+            <div class="sign-line"></div>
+            <div class="sign-label">Kunde</div>
+          </div>
+        </div>
+        <p class="closing">Med vennlig hilsen<br><strong>${this.escapeHtml((settings.company || {}).name || 'Air-Tech AS')}</strong></p>
+      </section>
+    `;
+
+    if (!productsHtml && !workHtml && !overallHtml && !photosHtml) {
+      return signSection;
+    }
+
+    return `
+      <section class="section avoid-break">
+        <h2 class="section-header">Oppsummering og utførte arbeider</h2>
+        ${overallHtml}
+        ${productsHtml}
+        ${workHtml}
+        ${photosHtml}
+      </section>
+      ${signSection}
+    `;
+  }
+
+  getAirTechCSS() {
+    // Ingen blå bakgrunn på toppen – cleaner look.
+    return `
+      @page { size: A4; margin: 28mm 15mm 20mm 15mm; }
+      html, body { font-family: Arial, Helvetica, sans-serif; color:#111; font-size:10.5pt; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+      /* Fast logo øverst til høyre på alle sider */
+      .page-logo-fixed {
+        position: fixed;
+        top: 5mm;
+        right: 15mm;
+        width: 80px;
+        height: auto;
+        max-height: 50px;
+        object-fit: contain;
+        z-index: 1000;
+      }
+
+      .pdf-container { max-width: 210mm; margin: 0 auto; background: #fff; }
+      .header-section { position: relative; margin: 0 0 10px 0; padding: 0 0 6px 0; }
+      .main-title { font-size: 20pt; margin: 0 0 4px 0; color:#0B5FAE; }
+      .report-id { color:#374151; margin: 0; font-size: 10pt; }
+      .header-divider { border-bottom: 2px solid #0B5FAE; margin-top: 10px; }
+
+      .section { margin-top: 14px; }
+      .section-header { font-size: 13pt; margin: 0 0 8px 0; color:#0B5FAE; border-bottom:2px solid #0B5FAE; padding-bottom: 4px; }
+      .section-subheader { font-size: 12pt; margin: 10px 0; }
+      .avoid-break { page-break-inside: avoid; }
+
+      table.styled-table { width: 100%; border-collapse: collapse; }
+      table.styled-table th, table.styled-table td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+      table.styled-table thead tr { background: #f3f4f6; }
+      .overview-table th:nth-child(1){ width: 28%; }
+      .overview-table th:nth-child(2){ width: 22%; }
+      .overview-table th:nth-child(3){ width: 28%; }
+      .overview-table th:nth-child(4){ width: 22%; }
+
+      .status-cell { font-weight: 600; text-transform: uppercase; text-align:center; }
+      .status-ok { color:#059669; }
+      .status-byttet { color:#0369a1; }
+      .status-avvik { color:#dc2626; }
+      .status-na { color:#6b7280; }
+
+      /* Avvik – tydelig header uten stor fargeflate */
+      .avvik-header-row { background:#fee2e2; }
+      .avvik-table tbody tr:nth-child(even){ background: #fef7f7; }
+
+      .avvik-images-row { background:#fef2f2; border-top: 2px dashed #fca5a5; }
+      .avvik-images { padding: 10px 0; }
+      .images-grid { display:flex; gap: 10px; flex-wrap: wrap; }
+      .avvik-image { max-width: 180px; max-height: 120px; object-fit: cover; border: 2px solid #fee; border-radius: 6px; }
+
+      .checklist-images { padding: 10px 0; display:flex; gap:12px; flex-wrap: wrap; }
+      .checklist-image { max-width: 120px; max-height: 80px; object-fit: cover; border: 2px solid #e2e8f0; border-radius: 6px; display: block; }
+      .image-caption { font-size: 9pt; color:#64748b; display:block; margin-top:2px; max-width: 120px; }
+
+      .documentation-photos .photo { max-width: 150px; max-height: 100px; object-fit: cover; border:2px solid #e2e8f0; border-radius: 6px; }
+      .muted-note { color:#666; font-style: italic; margin: 6px 0 0 0; font-size: 10pt; }
+
+      .sign-section .sign-row{ display:flex; gap:24px; }
+      .sign-section .sign-block{ flex:1; }
+      .sign-section .sign-line{ border-bottom:1px solid #9ca3af; height:38px; margin-bottom:6px; }
+      .sign-section .sign-label{ color:#6b7280; font-size:10pt; }
+      .closing{ margin-top:10px; }
+
+      /* Firma-footer (blå) med sidetall – rent, uten stor bakgrunnsflate */
+      .footer-company {
+        position: fixed;
+        left: 0; right: 0; bottom: -8mm;
+        font-size: 9pt; color: #1d4ed8; text-align: center;
+      }
+      .page-info { color:#4b5563; margin-left: 6px; }
+      .footer-company .page-number::after { content: counter(page); }
+      .footer-company .total-pages::after { content: counter(pages); }
+
+      @media print {
+        .section { page-break-inside: avoid; }
+      }
+    `;
+  }
+
+  getRecipientFromCustomerData(customerData) {
+    if (!customerData) return '';
+    const contacts = customerData.contacts || customerData.kontakter || [];
+    const match = contacts.find(c => (c.last_name || c.etternavn || '').toLowerCase() === 'servfixmail');
+    if (match?.email) return match.email;
+    return customerData.email || customerData.contactPerson || '';
+  }
+
+  getOrderLocationFromCustomer(customerData) {
+    const post = customerData?.post_address
+      || customerData?.postadresse
+      || customerData?.postalAddress
+      || {};
+    const loc = customerData?.location || customerData?.lokasjon || {};
+    return {
+      buildingName: loc.name || loc.byggnavn || '',
+      address: post.addressLine1 || post.address || post.adresse || customerData?.address || '',
+      postalCode: post.postalCode || post.postnr || post.postal_code || customerData?.postalCode || '',
+    };
+  }
+
+  generateHTML(data, settings) {
+    const theme = this.getReportTheme((data.equipment_type || '').toLowerCase());
+    const logoTag = settings.logoBase64 ? `<img src="${settings.logoBase64}" alt="logo" class="page-logo-fixed"/>` : '';
+    const customerName = data.customer_name || data.customerData?.name || '';
+    const recipient = this.getRecipientFromCustomerData(data.customer_data || {});
+    const where = this.getOrderLocationFromCustomer(data.customer_data || {});
+    const technician = data.technician_name || 'Ukjent tekniker';
+
+    const equipmentOverview = this.renderEquipmentOverviewTable(data, theme);
+    const avvikTable = this.renderAvvikTable(data);
+    const checklistSections = this.renderChecklistResults(data, theme);
+    const summarySection = this.generateSummarySection(data, settings);
+
+    const appendixSystems = (data.systemsAppendix && data.systemsAppendix.length)
+      ? `
+        <div class="page-break"></div>
+        <section class="section avoid-break">
+          <h2 class="section-header">Systemoversikt (fortsettelse)</h2>
+          <table class="styled-table overview-table">
+            <thead>
+              <tr>${theme.table.equipmentOverviewHeadings.map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}</tr>
+            </thead>
+            <tbody>
+              ${data.systemsAppendix.map(equip => `
+                <tr>
+                  <td>${this.escapeHtml(equip.systemtype || '')}</td>
+                  <td>${this.escapeHtml(equip.systemnummer || '')}</td>
+                  <td>${this.escapeHtml(equip.plassering || '')}</td>
+                  <td>${this.escapeHtml(equip.betjener || '')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </section>
+      `
+      : '';
+
+    const footer = `
+      <div class="footer footer-company">
+        ${this.escapeHtml((settings.company || {}).name || '')}
+        &middot; ${this.escapeHtml((settings.company || {}).address || '')}
+        &middot; ${this.escapeHtml((settings.company || {}).phone || '')}
+        &middot; ${this.escapeHtml((settings.company || {}).email || '')}
+        <span class="page-info">— Side <span class="page-number"></span> av <span class="total-pages"></span></span>
+      </div>
+    `;
+
+    return `
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="utf-8"/>
+  <title>${this.escapeHtml(theme.title)} ${this.escapeHtml(data.id)}</title>
+  <style>${this.getAirTechCSS()}</style>
+</head>
+<body>
+  ${logoTag}
+  <div class="pdf-container">
+    <header class="header-section">
+      <h1 class="main-title">${this.escapeHtml(theme.title)}</h1>
+      <p class="report-id">
+        ${this.escapeHtml(customerName)} • Ordre ${this.escapeHtml(data.order_number || '')}
+        • ${(data.service_date || '').toString().slice(0,10)}
+      </p>
+      <div class="header-divider"></div>
+    </header>
+
+    <section class="section avoid-break">
+      <table class="styled-table">
         <thead>
-          <tr class="avvik-header-row">
-            <th>Avvik ID</th>
-            <th>Anlegg</th>
-            <th>Systemnummer</th>
-            <th>Komponent</th>
-            <th>Kommentar/Tiltak</th>
+          <tr>
+            <th>Avtalenummer</th><th>Besøk nr</th><th>Årstall</th>
+            <th>Kundenummer</th><th>Kundenavn</th><th>Mottaker av rapport</th>
           </tr>
         </thead>
-        <tbody>${rows}</tbody>
+        <tbody>
+          <tr>
+            <td></td><td></td><td>${new Date(data.created_at).getFullYear()}</td>
+            <td>${this.escapeHtml(data.customer_data?.id || data.customer_id || '')}</td>
+            <td>${this.escapeHtml(customerName)}</td>
+            <td>${this.escapeHtml(recipient)}</td>
+          </tr>
+          <tr>
+            <th>Byggnavn</th><th>Adresse</th><th>Post nr.</th>
+            <th>Rapport dato</th><th>Utført av</th><th>Vår kontaktperson</th>
+          </tr>
+          <tr>
+            <td>${this.escapeHtml(where.buildingName)}</td>
+            <td>${this.escapeHtml(where.address)}</td>
+            <td>${this.escapeHtml(where.postalCode)}</td>
+            <td>${new Date(data.created_at).toLocaleDateString('nb-NO')}</td>
+            <td>${this.escapeHtml(technician)}</td>
+            <td>${this.escapeHtml(technician)}</td>
+          </tr>
+        </tbody>
       </table>
     </section>
-  `;
-}
 
-    renderChecklistResults(data, theme) {
-        if (!data.equipmentSections || data.equipmentSections.length === 0) {
-            return '';
-        }
+    <section class="section">
+      <p>Servicearbeidet som ble avtalt for de angitte anleggene er nå fullført i tråd med avtalen. 
+      I henhold til vår serviceavtale oversender vi en servicerapport etter fullført servicebesøk.</p>
+    </section>
 
-        const checklistHtml = data.equipmentSections.map(section => {
-            const sectionHeader = section.name ? `<h3 class="section-header">${this.escapeHtml(section.name)}</h3>` : '';
-            
-            const checkpointsHtml = section.checkpoints.map(checkpoint => {
-                const statusClass = `status-${checkpoint.status.toLowerCase()}`;
-                const imagesHtml = checkpoint.images && checkpoint.images.length > 0 ? `
-                    <tr class="image-row">
-                        <td colspan="3">
-                            <div class="checklist-images">
-                                ${checkpoint.images.map(img => `
-                                    <div class="image-container">
-                                        <img src="${img.url}" alt="${this.escapeHtml(img.description || 'Bilde')}" class="checklist-image">
-                                        ${img.description ? `<span class="image-caption">${this.escapeHtml(img.description)}</span>` : ''}
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </td>
-                    </tr>
-                ` : '';
+    ${equipmentOverview}
+    ${avvikTable}
+    ${summarySection}
 
-                return `
-                    <tr>
-                        <td>${this.escapeHtml(checkpoint.name)}</td>
-                        <td class="status-cell ${statusClass}">${this.escapeHtml(checkpoint.status)}</td>
-                        <td>${this.escapeHtml(checkpoint.comment)}</td>
-                    </tr>
-                    ${imagesHtml}
-                `;
-            }).join('');
+    ${appendixSystems}
 
-            return `
-                <div class="section">
-                    ${sectionHeader}
-                    <table class="styled-table">
-                        <thead>
-                            <tr>
-                                ${theme.table.checklistHeadings.map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${checkpointsHtml}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-        }).join('');
-
-        return `
-            <section class="section">
-                <h2 class="section-header">Sjekkpunkter og resultater</h2>
-                ${checklistHtml}
-            </section>
-        `;
-    }
-
-    generateSummarySection(data) {
-        const productsUsedHtml = data.products_used && data.products_used.length > 0 ? `
-            <h3>Produkter brukt:</h3>
-            <ul>
-                ${data.products_used.map(product => `<li>${this.escapeHtml(product.name || '')} (${this.escapeHtml(product.quantity || '')})</li>`).join('')}
-            </ul>
-        ` : '';
-
-        const additionalWorkHtml = data.additional_work && data.additional_work.length > 0 ? `
-            <h3>Utførte tilleggsarbeider:</h3>
-            <ul>
-                ${data.additional_work.map(work => `<li>${this.escapeHtml(work.description || '')}</li>`).join('')}
-            </ul>
-        ` : '';
-
-        const overallCommentHtml = data.overall_comment ? `
-            <h3>Generell kommentar:</h3>
-            <p>${this.escapeHtml(data.overall_comment)}</p>
-        ` : '';
-
-        const signatureHtml = data.signature_data?.signatureImage || data.signature_data?.name ? `
-            <div class="signature-section">
-                <h3>Signatur:</h3>
-                ${data.signature_data.signatureImage ? `<img src="${data.signature_data.signatureImage}" alt="Signatur" style="max-width: 200px; max-height: 100px; display: block; margin-bottom: 10px;">` : ''}
-                <p>Signert av: ${this.escapeHtml(data.signature_data.name || 'Ukjent')}</p>
-                <p>Dato: ${new Date(data.signature_data.timestamp).toLocaleDateString('nb-NO')}</p>
-            </div>
-        ` : '';
-
-        const photosHtml = data.documentation_photos && data.documentation_photos.length > 0 ? `
-  <div class="documentation-photos">
-    <h3>Dokumentasjonsbilder:</h3>
-    <div class="photos-grid">
-      ${data.documentation_photos.map(photo => `
-        <div class="photo-container">
-          <img src="${photo.url}" alt="${this.escapeHtml(photo.caption || 'Dokumentasjonsbilde')}" class="photo">
-          ${photo.caption ? `<span class="photo-caption">${this.escapeHtml(photo.caption)}</span>` : ''}
-        </div>
-      `).join('')}
-    </div>
-    ${data.moreDocumentationPhotos && data.moreDocumentationPhotos.length > 0 
-      ? `<p class="muted-note">+ ${data.moreDocumentationPhotos.length} flere bilder – se appendix.</p>` 
-      : ''}
+    <div class="page-break"></div>
+    <section class="section">
+      <h2 class="section-header">Detaljerte sjekkpunkter og resultater</h2>
+      ${checklistSections}
+    </section>
   </div>
-` : '';
-
-        // TEKNIKER-SIGNATUR - automatisk utfylling
-        const technicianSignatureHtml = `
-            <div class="signature-placeholder">
-                <div class="signature-left">
-                    <span>Tekniker: ${this.escapeHtml(data.technician_name || 'Ukjent tekniker')}</span>
-                    <span>Stilling: Servicetekniker</span>
-                    <span>Dato: ${new Date(data.completed_at || data.created_at).toLocaleDateString('nb-NO')}</span>
-                </div>
-                <div style="margin-top: 40px; border-top: 1px solid #333; width: 200px;">
-                    <small>Underskrift</small>
-                </div>
-            </div>
-        `;
-
-        if (!productsUsedHtml && !additionalWorkHtml && !overallCommentHtml && !signatureHtml && !photosHtml) {
-            return technicianSignatureHtml; // Vis i det minste tekniker-signatur
-        }
-
-        return `
-            <section class="section">
-                <h2 class="section-header">Oppsummering og utførte arbeider</h2>
-                ${overallCommentHtml}
-                ${productsUsedHtml}
-                ${additionalWorkHtml}
-                ${photosHtml}
-                ${signatureHtml}
-                ${technicianSignatureHtml}
-            </section>
-        `;
-    }
-
-  getAirTechCSS(theme) {
-    const rowPadding = theme.cssMods?.rowDensity === 'compact' ? '8px 10px' : '10px 12px';
-    
-    return `
-        /* AVVIK TABELL - ROSA/RØD */
-.avvik-section {
-    margin: 25px 0;
-    background-color: #fdf2f8;
-    border: 2px solid #f472b6;
-    border-radius: 8px;
-    padding: 15px;
-}
-
-.avvik-header-row th {
-    background-color: #dc2626 !important;
-    color: white !important;
-    font-weight: 700;
-}
-
-.avvik-table {
-    background-color: #fef7f7;
-}
-
-/* SYSTEMOVERSIKT TABELL - BLÅ */
-.equipment-overview h2 {
-    color: var(--brand-blue);
-    font-size: 14pt;
-    font-weight: 700;
-    margin-bottom: 10px;
-    border-bottom: 2px solid var(--brand-blue);
-    padding-bottom: 5px;
-}
-
-.overview-table thead th {
-    background-color: var(--brand-blue) !important;
-    color: white !important;
-    font-weight: 700;
-}
-
-.overview-table {
-    border: 2px solid var(--brand-blue);
-}
-/* LOGO FIXED PÅ ALLE SIDER */
-.page-logo-fixed {
-    position: fixed;
-    top: 5mm;
-    right: 15mm;
-    width: 80px;
-    height: auto;
-    max-height: 50px;
-    object-fit: contain;
-    z-index: 1000;
-}
-
-@page { 
-    size: A4;
-    margin: 25mm 15mm 20mm 15mm;
-} 
-        
-        body {
-            font-family: Arial, Helvetica, sans-serif;
-            font-size: 10pt;
-            line-height: 1.45;
-            color: #222;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-            margin: 0;
-            padding: 0;
-        }
-    
-        :root {
-            --brand-blue: #0B5FAE;
-            --brand-blue-2: #094E90;
-            --border-color: #D9E1EA;
-            --row-alt: #F6F8FB;
-            --text-color: #222222;
-            --muted-text: #555555;
-            --status-ok: #28A745;
-            --status-byttet: #FD7E14;
-            --status-avvik: #DC3545;
-            --status-na: #6C757D;
-            --info-table-bg: #F8F9FA;
-            --info-table-border: #DEE2E6;
-        }
-    
-        .pdf-container { 
-            max-width: 210mm; 
-            margin: 0 auto; 
-            background: white; 
-        }
-    
-        /* HEADER - Logo til høyre */
-        .header-section {
-            background: white;
-            color: var(--text-color);
-            padding: 20px 22px 10px;
-            margin-bottom: 20px;
-        }
-    
-        .header-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            width: 100%;
-        }
-    
-        .header-left {
-            flex: 1;
-            padding-right: 20px;
-        }
-    
-        .main-title {
-            font-size: 24pt;
-            font-weight: 700;
-            color: var(--brand-blue);
-            margin: 0;
-            font-family: Arial, Helvetica, sans-serif;
-        }
-    
-        .header-right {
-            display: flex;
-            align-items: flex-start;
-            flex-shrink: 0;
-            margin-left: auto;
-        }
-    
-        .company-logo {
-            height: 80px;
-            width: auto;
-            max-width: 150px;
-            object-fit: contain;
-            display: block;
-        }
-    
-        .logo-placeholder {
-            height: 80px;
-            width: 150px;
-            background: var(--brand-blue);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 16px;
-        }
-    
-        .header-divider {
-            border-bottom: 2px solid var(--brand-blue);
-            margin-top: 15px;
-        }
-
-        /* KUNDE INFO-TABELL */
-        .customer-info-table {
-            margin-bottom: 20px;
-        }
-
-        .info-table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--info-table-bg);
-            border: 1px solid var(--info-table-border);
-        }
-
-        .info-table td {
-            padding: 8px 12px;
-            border: 1px solid var(--info-table-border);
-            font-size: 10pt;
-            font-family: Arial, Helvetica, sans-serif;
-        }
-
-        .info-label {
-            font-weight: 700;
-            color: var(--text-color);
-            background: var(--info-table-bg);
-            width: 16.66%;
-        }
-
-        .info-value {
-            color: var(--text-color);
-            background: var(--info-table-bg);
-            width: 16.66%;
-        }
-    
-        /* SERVICEAVTALE TEKST */
-        .service-agreement-text {
-            margin: 20px 0;
-        }
-
-        .service-agreement-text p {
-            font-size: 11pt;
-            line-height: 1.4;
-            color: var(--text-color);
-            font-family: Arial, Helvetica, sans-serif;
-            margin: 0;
-        }
-    
-        /* SEKSJONER */
-        .section { 
-            margin-bottom: 18px; 
-        }
-        
-        .section-header {
-            font-size: 14pt;
-            font-weight: 700;
-            color: var(--brand-blue);
-            margin: 20px 0 10px 0;
-            padding-bottom: 6px;
-            border-bottom: 2px solid var(--brand-blue);
-        }
-    
-        .avvik-header {
-            color: var(--status-avvik) !important;
-            border-bottom-color: var(--status-avvik) !important;
-        }
-    
-        /* TABELLER */
-        .styled-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-            border: 1px solid var(--border-color);
-        }
-    
-        .styled-table th {
-            background: var(--brand-blue);
-            color: white;
-            padding: 10px 12px;
-            text-align: left;
-            font-weight: 600;
-            font-size: 11pt;
-            border-bottom: 1px solid var(--border-color);
-        }
-    
-        .styled-table td {
-            padding: ${rowPadding};
-            border-bottom: 1px solid var(--border-color);
-            font-size: 10pt;
-        }
-    
-        .styled-table tbody tr:nth-child(even) {
-            background: var(--row-alt);
-        }
-
-        /* AVVIK TABELL - ROSA STYLING */
-.avvik-section {
-    margin: 25px 0;
-    background-color: #fef2f2;
-    border: 2px solid #fca5a5;
-    border-radius: 8px;
-    padding: 15px;
-}
-
-.avvik-table-header th {
-    background-color: #f87171 !important;
-    color: white !important;
-}
-
-.avvik-row:nth-child(even) td {
-    background-color: #fef7f7 !important;
-}
-
-        /* STATUS STYLING */
-        .status-cell {
-            text-align: center;
-            font-weight: 600;
-        }
-
-        .status-ok { color: var(--status-ok); }
-        .status-byttet { color: var(--status-byttet); }
-        .status-avvik { 
-            color: var(--status-avvik) !important;
-            background: #fef2f2 !important;
-        }
-        .status-na { color: var(--status-na); }
-
-        /* PAGE BREAK */
-        .page-break {
-          page-break-before: always;
-          break-before: page;
-          height: 0;
-          margin: 0;
-          padding: 0;
-        }
-
-        .detailed-checklists {
-          margin-top: 20px;
-        }
-
-        /* AVVIK BILDER */
-        .avvik-images-row {
-          background: #fef2f2 !important;
-          border-top: 2px dashed #fca5a5 !important;
-        }
-
-        .avvik-images {
-          padding: 12px;
-        }
-
-        .avvik-images strong {
-          color: var(--status-avvik);
-          font-size: 11pt;
-          margin-bottom: 10px;
-          display: block;
-        }
-
-        .images-grid {
-          display: flex;
-          gap: 12px;
-          flex-wrap: wrap;
-          margin-top: 10px;
-        }
-
-        .avvik-image {
-          max-width: 180px;
-          max-height: 120px;
-          object-fit: cover;
-          border: 2px solid #fee2e2;
-          border-radius: 6px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        /* CHECKLIST BILDER */
-        .image-row {
-            background: #f8fafc !important;
-            border-top: 1px dashed #94a3b8 !important;
-        }
-
-        .checklist-images {
-            padding: 12px 0;
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-
-        .image-container {
-            text-align: center;
-            flex: 0 0 auto;
-        }
-
-        .checklist-image {
-            max-width: 120px;
-            max-height: 80px;
-            object-fit: cover;
-            border: 2px solid #e2e8f0;
-            border-radius: 6px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            display: block;
-            margin-bottom: 4px;
-        }
-
-        .image-caption {
-            font-size: 9pt;
-            color: #64748b;
-            line-height: 1.2;
-            max-width: 120px;
-            word-wrap: break-word;
-        }
-
-        /* SIGNATUR */
-        .signature-section {
-            margin: 40px 0;
-            page-break-inside: avoid;
-        }
-
-        .signature-section p {
-            margin: 8px 0;
-            font-size: 12pt;
-            line-height: 1.4;
-        }
-
-        .signature-placeholder {
-            margin-top: 60px;
-            padding: 20px 0;
-            page-break-inside: avoid;
-        }
-
-        .signature-left {
-            text-align: left;
-            line-height: 1.8;
-            font-size: 11pt;
-        }
-
-        .signature-left span {
-            display: block;
-            font-weight: 500;
-            margin-bottom: 5px;
-        }
-
-        /* FOOTER */
-        .page-footer {
-            margin-top: 40px;
-            padding: 20px 0;
-            border-top: 2px solid var(--brand-blue);
-            font-size: 10px;
-        }
-
-        .footer-content {
-            display: flex;
-            justify-content: space-between;
-            width: 100%;
-        }
-
-        .footer-left, 
-        .footer-center, 
-        .footer-right {
-            flex: 1;
-        }
-
-        .footer-right {
-            text-align: right;
-        }
-
-        /* GENERELLE BILDER */
-        .documentation-photos {
-            margin: 20px 0;
-        }
-
-        .photos-grid {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-            margin-top: 10px;
-        }
-
-        .photo-container {
-            text-align: center;
-        }
-
-        .photo {
-            max-width: 150px;
-            max-height: 100px;
-            object-fit: cover;
-            border: 2px solid #e2e8f0;
-            border-radius: 6px;
-            margin-bottom: 4px;
-        }
-
-        .photo-caption {
-            font-size: 9pt;
-            color: #64748b;
-        }
-
-        /* PAGE BREAK */
-        .page-break {
-          page-break-before: always;
-          break-before: page;
-          height: 0;
-          margin: 0;
-          padding: 0;
-        }
-
-        /* MUTED NOTE */
-        .muted-note {
-          font-size: 10pt;
-          color: #666;
-          font-style: italic;
-          margin-top: 8px;
-          margin-bottom: 0;
-        }
-
-        /* AVVIK IMAGES */
-        .avvik-images-row {
-          background: #fef2f2 !important;
-          border-top: 2px dashed #fca5a5 !important;
-        }
-
-        .avvik-images {
-          padding: 12px;
-        }
-
-        .avvik-images strong {
-          color: var(--status-avvik);
-          font-size: 11pt;
-          margin-bottom: 10px;
-          display: block;
-        }
-
-        .images-grid {
-          display: flex;
-          gap: 12px;
-          flex-wrap: wrap;
-          margin-top: 10px;
-        }
-
-        .avvik-image {
-          max-width: 180px;
-          max-height: 120px;
-          object-fit: cover;
-          border: 2px solid #fee2e2;
-          border-radius: 6px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        /* SYSTEMS TABLE - BRED */
-        .overview-table {
-          width: 100%;
-          table-layout: fixed;
-        }
-
-        .overview-table th:nth-child(1) { width: 28%; }
-        .overview-table th:nth-child(2) { width: 22%; }
-        .overview-table th:nth-child(3) { width: 28%; }
-        .overview-table th:nth-child(4) { width: 22%; }
-
-        /* EQUIPMENT SUMMARY (hvis mangler) */
-        .equipment-summary {
-          font-size: 12pt;
-          color: #666;
-          margin-top: 5px;
-          margin-bottom: 3px;
-          font-weight: 500;
-        }
-        
-        /* RESPONSIVITET */
-        @media print {
-            .pdf-container { margin: 0; max-width: none; }
-            .header-section { margin-bottom: 20px; }
-            .section { page-break-inside: avoid; }
-            .avvik-item { page-break-inside: avoid; }
-        }
-    `
+  ${footer}
+</body>
+</html>`;
   }
 
-  // === PDF-HÅNDTERING ===
+  /* ===========================
+   * PDF / Upload
+   * =========================== */
   async generatePDF(html) {
-    if (!this.browser) {
-      throw new Error('Browser not initialized');
-    }
-
-    let page = null;
-    try {
-      page = await this.browser.newPage();
-      
-      await page.setContent(html, { 
-        waitUntil: 'networkidle2',
-        timeout: 30000 
-      });
-
-      // Emulér print-media for konsistent CSS
-      await page.emulateMediaType('print');
-
-      // Vent litt for at alle bilder skal laste
-      await new Promise(resolve => setTimeout(resolve, 3000));  // Øk til 3 sekunder
-
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: { 
-          top: '20mm', 
-          right: '15mm', 
-          bottom: '20mm', 
-          left: '15mm' 
-        }
-      });
-
-      console.log(`✅ PDF generated: ${Math.round(pdfBuffer.length / 1024)}KB`);
-      return pdfBuffer;
-
-    } finally {
-      if (page) {
-        await page.close();
-      }
-    }
+    if (!this.browser) throw new Error('Browser not initialized');
+    const page = await this.browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle2', timeout: 45000 });
+    await page.emulateMediaType('print');
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' },
+    });
+    await page.close();
+    return pdfBuffer;
   }
 
-  async savePDF(pdfBuffer, reportData, tenantId) {
-    const timestamp = Date.now();
-    const orderId = reportData.order_id;
-    const equipmentId = reportData.equipment_id;
-    const year = new Date().getFullYear();
-    const month = String(new Date().getMonth() + 1).padStart(2, '0');
-
-    // Generer filnavn
-    const fileName = `servicerapport_${reportData.id}_${timestamp}.pdf`;
+  async uploadToGCS(tenantId, buffer, reportId, orderId) {
+    if (!this.bucket) throw new Error('GCS bucket not initialized');
     
-    if (this.bucket) {
-      // Google Cloud Storage
-      const gcsPath = `tenants/${tenantId}/service-reports/${year}/${month}/${orderId}/${equipmentId}/${fileName}`;
-      const relativePath = `service-reports/${year}/${month}/${orderId}/${equipmentId}/${fileName}`;
-      
-      try {
-        const file = this.bucket.file(gcsPath);
-        await file.save(pdfBuffer, {
-          metadata: {
-            contentType: 'application/pdf'
-          }
-        });
-        
-        console.log(`✅ PDF saved to GCS: ${gcsPath}`);
-        return relativePath; // Return path WITHOUT tenants prefix
-        
-      } catch (error) {
-        console.error('❌ Failed to save to GCS:', error.message);
-        // Fallback til lokal lagring
-      }
-    }
-
-    // Lokal lagring som fallback
-    const fs = require('fs').promises;
-    const path = require('path');
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const fileName = `servicerapport_${reportId}_${Date.now()}.pdf`;
+    const gcsPath = `tenants/${tenantId}/service-reports/${yyyy}/${mm}/${orderId}/${fileName}`;
     
-    const localDir = path.join(process.cwd(), 'servfix-files', 'tenants', tenantId, 'reports', year.toString(), month);
-    await fs.mkdir(localDir, { recursive: true });
+    const file = this.bucket.file(gcsPath);
+    await file.save(buffer, {
+      metadata: { contentType: 'application/pdf' }
+    });
     
-    const localPath = path.join(localDir, fileName);
-    await fs.writeFile(localPath, pdfBuffer);
+    // LAGRE RELATIV PATH i database, men logg full URL
+    const publicUrl = `https://storage.googleapis.com/${this.bucket.name}/${gcsPath}`;
+    const relativePath = `service-reports/${yyyy}/${mm}/${orderId}/${fileName}`;
     
-    const relativePath = `reports/${year}/${month}/${fileName}`;
-    console.log(`✅ PDF saved locally: ${relativePath}`);
+    console.log(`✅ PDF uploaded to GCS: ${publicUrl}`);
+    console.log(`📁 Relative path stored: ${relativePath}`);
+    
     return relativePath;
   }
 
@@ -1736,74 +1034,46 @@ renderAvvikTable(data) {
       'UPDATE service_reports SET pdf_path = $1, pdf_generated = true WHERE id = $2',
       [pdfPath, reportId]
     );
-    console.log(`✅ Database updated: report ${reportId} -> ${pdfPath}`);
+    console.log(`✅ Database updated: ${reportId}`);
   }
 
   async debugSaveHTML(html, reportId) {
-    if (process.env.NODE_ENV !== 'production') {
-      try {
-        const fs = require('fs').promises;
-        const path = require('path');
-        
-        const debugDir = path.join(process.cwd(), 'test-output');
-        await fs.mkdir(debugDir, { recursive: true });
-        
-        const debugPath = path.join(debugDir, `debug-report-${reportId}-${Date.now()}.html`);
-        await fs.writeFile(debugPath, html, 'utf8');
-        
-        console.log(`🐛 Debug HTML saved: ${debugPath}`);
-      } catch (error) {
-        console.warn('⚠️ Could not save debug HTML:', error.message);
-      }
+    if (process.env.NODE_ENV === 'production') return;
+    try {
+      const debugDir = path.join(process.cwd(), 'test-output');
+      await fs.mkdir(debugDir, { recursive: true });
+      const debugPath = path.join(debugDir, `debug-report-${reportId}-${Date.now()}.html`);
+      await fs.writeFile(debugPath, html, 'utf8');
+      console.log(`🐛 Debug HTML saved: ${debugPath}`);
+    } catch (e) {
+      console.warn('⚠️  Kunne ikke lagre debug HTML:', e.message);
     }
   }
-extractImagesFromChecklistData(checklistData) {
-    const extractedImages = [];
-    
-    if (!checklistData?.components) {
-        return extractedImages;
-    }
-    
-    checklistData.components.forEach((component, componentIndex) => {
-        if (component.checklist) {
-            Object.entries(component.checklist).forEach(([itemId, itemData]) => {
-                // Sjekk etter bilder i itemData
-                if (itemData.images && Array.isArray(itemData.images)) {
-                    itemData.images.forEach(imageUrl => {
-                        extractedImages.push({
-                            checklist_item_id: itemId,
-                            image_url: imageUrl,
-                            image_type: itemData.status === 'AVVIK' ? 'avvik' : 'checklist',
-                            component_index: componentIndex,
-                            source: 'checklist_data'
-                        });
-                    });
-                }
-                
-                // Sjekk etter bilder i comment (hvis they are stored as URLs)
-                if (itemData.comment && typeof itemData.comment === 'string') {
-                    const urlRegex = /https:\/\/storage\.googleapis\.com\/[^\s]+/g;
-                    const urls = itemData.comment.match(urlRegex);
-                    if (urls) {
-                        urls.forEach(url => {
-                            extractedImages.push({
-                                checklist_item_id: itemId,
-                                image_url: url,
-                                image_type: itemData.status === 'AVVIK' ? 'avvik' : 'checklist',
-                                component_index: componentIndex,
-                                source: 'comment_urls'
-                            });
-                        });
-                    }
-                }
-            });
-        }
-    });
-    
-    console.log(`📸 Extracted ${extractedImages.length} images from checklist_data`);
-    return extractedImages;
-}
 
-} // END AV KLASSE
+  /* ===========================
+   * Orkestrering
+   * =========================== */
+  async generateReport(reportId, tenantId) {
+    await this.init();
+    try {
+      const reportData = await this.fetchReportData(reportId, tenantId);
+      const settings = await this.loadCompanySettings(tenantId);
+      const processed = await this.processAirTechData(reportData);
+      const html = this.generateHTML(processed, settings);
+      await this.debugSaveHTML(html, reportId);
+      const pdfBuffer = await this.generatePDF(html);
+      
+      // UPLOAD til GCS - KUN DETTE
+      const publicUrl = await this.uploadToGCS(tenantId, pdfBuffer, reportId, reportData.order_id);
+      
+      // OPPDATER database med URL
+      await this.updateReportPDFPath(reportId, publicUrl, tenantId);
+      
+      return publicUrl;
+    } finally {
+      await this.close();
+    }
+  }
+}
 
 module.exports = UnifiedPDFGenerator;

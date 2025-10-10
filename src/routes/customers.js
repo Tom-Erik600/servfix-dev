@@ -3,6 +3,33 @@ const router = express.Router();
 
 console.log('🟢 [CUSTOMERS] Route loading...');
 
+// Health check endpoint
+router.get('/health', async (req, res) => {
+  try {
+    const tripletexService = require('../services/tripletexService');
+    
+    // Test at vi kan få token
+    const token = await tripletexService.getSessionToken();
+    const hasToken = !!token;
+    
+    // Test at vi kan lage client
+    const client = await tripletexService.getApiClient();
+    const hasClient = !!client;
+    
+    res.json({
+      status: 'ok',
+      hasToken,
+      hasClient,
+      tokenLength: token ? token.length : 0
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      error: error.message
+    });
+  }
+});
+
 // Middleware - sjekk tekniker ELLER admin auth
 router.use((req, res, next) => {
   if (!req.session.technicianId && !req.session.isAdmin) {
@@ -13,25 +40,45 @@ router.use((req, res, next) => {
 
 // GET all customers (UTEN adresser for å unngå rate limiting)
 router.get('/', async (req, res) => {
-  console.log('🟢 [CUSTOMERS] GET all customers');
+  console.log('🟢 [CUSTOMERS] GET all customers with pagination');
   
   try {
     const tripletexService = require('../services/tripletexService');
+    const allCustomers = [];
+    const pageSize = 100; // Hent 100 om gangen
+    let currentPage = 0;
+    let hasMore = true;
     
-    // Hent kunder UTEN å fetche adresser
-    const client = await tripletexService.getApiClient();
-    const response = await client.get('/customer', {
-      params: {
-        from: 0,
-        count: 1000
+    while (hasMore) {
+      console.log(`📄 Fetching page ${currentPage + 1} (from: ${currentPage * pageSize})`);
+      
+      const client = await tripletexService.getApiClient();
+      const response = await client.get('/customer', {
+        params: {
+          from: currentPage * pageSize,
+          count: pageSize
+        }
+      });
+      
+      const customers = response.data.values || [];
+      allCustomers.push(...customers);
+      
+      console.log(`   ✅ Got ${customers.length} customers, total so far: ${allCustomers.length}`);
+      
+      // Sjekk om det er flere sider
+      hasMore = customers.length === pageSize;
+      currentPage++;
+      
+      // Legg inn delay mellom requests for å unngå rate limiting
+      if (hasMore) {
+        await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay
       }
-    });
+    }
     
-    const customers = response.data.values;
-    console.log(`✅ Got ${customers.length} customers from Tripletex`);
+    console.log(`✅ Total customers fetched: ${allCustomers.length}`);
     
-    // Transform uten å hente adresser
-    const transformed = customers.map(c => ({
+    // Transform customers...
+    const transformed = allCustomers.map(c => ({
       id: String(c.id),
       name: c.name || '',
       customerNumber: c.customerNumber || '',
@@ -61,10 +108,16 @@ router.get('/', async (req, res) => {
     res.json(transformed);
     
   } catch (error) {
-    console.error('❌ [CUSTOMERS] Error:', error.message);
+    console.error('❌ [CUSTOMERS] Detailed error:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+      stack: error.stack
+    });
+    
     res.status(500).json({ 
       error: 'Failed to fetch customers',
-      details: error.message 
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

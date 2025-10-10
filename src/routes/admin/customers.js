@@ -54,7 +54,8 @@ router.get('/', async (req, res) => {
       isPrivate: c.isPrivateIndividual || false,
       customerAccountManager: c.accountManager?.name || '',
       invoiceEmail: c.invoiceEmail || '',
-      overdueNoticeEmail: c.overdueNoticeEmail || ''
+      overdueNoticeEmail: c.overdueNoticeEmail || '',
+      reportEmail: null  // Fylles opp senere via lazy loading
     }));
     
     console.log(`✅ Transformed ${transformed.length} customers`);

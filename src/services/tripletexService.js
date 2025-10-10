@@ -7,6 +7,7 @@ class TripletexService {
         this.employeeToken = process.env.EMPLOYEE_TOKEN;
         this.sessionToken = null;
         this.apiClient = null;
+        this.tokenCreatedAt = null;
 
         if (!this.consumerToken || !this.employeeToken) {
             console.warn('Tripletex API tokens are not fully configured in .env. Tripletex functionality may be limited.');
@@ -133,10 +134,10 @@ class TripletexService {
     async getServfixmailContact(customerId) {
         try {
             const contacts = await this.getCustomerContacts(customerId);
-            console.log(`📧 Searching ${contacts.length} contacts for firstName="servfixmail"`);
+            console.log(`📧 Searching ${contacts.length} contacts for lastName="servfixmail"`);
             
             const servfixContact = contacts.find(contact => 
-                contact.firstName && contact.firstName.toLowerCase() === 'servfixmail'
+                contact.lastName && contact.lastName.toLowerCase() === 'servfixmail'
             );
             
             if (servfixContact && servfixContact.email) {
@@ -144,7 +145,7 @@ class TripletexService {
                 return servfixContact;
             }
             
-            console.log(`📧 ERROR: No contact with firstName="servfixmail" found for customer ${customerId}`);
+            console.log(`📧 ERROR: No contact with lastName="servfixmail" found for customer ${customerId}`);
             return null;
             
         } catch (error) {

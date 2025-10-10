@@ -270,7 +270,7 @@ class EmailService {
 }
 async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, order) {
   try {
-    console.log(`📧 Sending ${reports.length} reports for order ${orderId} to ${customerEmail}`);
+    console.log(`📧 Sending report for order ${orderId} to ${customerEmail}`);
     
     // Hent from-adresse fra settings
     let fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
@@ -284,35 +284,31 @@ async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, orde
       console.warn('Could not load sender email, using default:', error.message);
     }
     
-    // Bygg liste over vedlegg
-    const bucketName = process.env.GCS_BUCKET_NAME || 'servfix-files';
-    const attachments = [];
+    // ENDRING: Kun bruk FØRSTE rapport siden alle peker til samme PDF
+    const firstReport = reports[0];
     
-    for (const report of reports) {
-      if (report.pdf_path && report.pdf_generated) {
-        const gcsPath = `tenants/${tenantId}/${report.pdf_path}`;
-        const publicUrl = `https://storage.googleapis.com/${bucketName}/${gcsPath}`;
-        
-        try {
-          const response = await fetch(publicUrl);
-          if (response.ok) {
-            const buffer = Buffer.from(await response.arrayBuffer());
-            const filename = `Servicerapport_${report.systemnavn || report.systemtype}_${orderId}.pdf`;
-            
-            attachments.push({
-              filename: filename,
-              content: buffer,
-              contentType: 'application/pdf'
-            });
-          }
-        } catch (error) {
-          console.warn(`Could not fetch PDF for report ${report.id}:`, error.message);
-        }
-      }
+    if (!firstReport || !firstReport.pdf_path || !firstReport.pdf_generated) {
+      throw new Error('Ingen PDF funnet for denne ordren');
     }
     
-    // Bygg e-post innhold
-    const equipmentList = reports.map(r => `- ${r.systemnavn || r.systemtype}`).join('\n');
+    const bucketName = process.env.GCS_BUCKET_NAME || 'servfix-files';
+    const gcsPath = `tenants/${tenantId}/${firstReport.pdf_path}`;
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${gcsPath}`;
+    
+    let pdfBuffer;
+    try {
+      const response = await fetch(publicUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      pdfBuffer = Buffer.from(await response.arrayBuffer());
+      console.log(`✅ PDF fetched from GCS: ${Math.round(pdfBuffer.length / 1024)}KB`);
+    } catch (error) {
+      throw new Error(`Kunne ikke hente PDF: ${error.message}`);
+    }
+    
+    // Bygg e-post innhold med liste over alle anlegg
+    const equipmentList = reports
+      .map(r => `- ${r.systemnavn || r.systemtype}`)
+      .join('\n');
     
     const mailOptions = {
       from: fromEmail,
@@ -341,7 +337,11 @@ async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, orde
           </p>
         </div>
       `,
-      attachments: attachments
+      attachments: [{
+        filename: `Servicerapport_${orderId}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }]
     };
     
     const result = await this.transporter.sendMail(mailOptions);
@@ -351,7 +351,7 @@ async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, orde
       messageId: result.messageId,
       sentTo: customerEmail,
       fromEmail: fromEmail,
-      reportCount: attachments.length
+      reportCount: 1  // Alltid 1 PDF nå
     };
     
   } catch (error) {
