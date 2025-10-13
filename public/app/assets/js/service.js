@@ -1080,7 +1080,7 @@ function renderAll() {
     renderComponentDetailsForm();
     renderChecklist();
     renderComponentList();
-    
+    renderSectionVisibility()
     // FIX: Vis alltid overall comment og attachments sections
     const overallCommentSection = document.getElementById('overall-comment-section');
     const attachmentsSection = document.getElementById('attachments-section');

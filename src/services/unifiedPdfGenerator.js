@@ -579,7 +579,7 @@ renderDriftSchedule(schedule) {
       <table class="styled-table drift-schedule-table" style="table-layout: fixed; width: 100%;">
         <thead>
           <tr>
-            <th style="text-align: left; width: 80px;"></th>
+            <th style="text-align: left; width: 60px;"></th>
             ${headers}
           </tr>
         </thead>
@@ -982,17 +982,14 @@ renderDriftSchedule(schedule) {
         ${equipmentOverview}
         ${avvikTable}
         ${signSection}
-
-        ${checklistSections ? '<div class="page-break"></div>' : ''}
-        ${checklistSections ? `
-<section class="section avoid-break">
-  <h2 class="section-header">Sjekkpunkter og detaljer</h2>
-  ${checklistSections}
-</section>
-` : ''}
-
-        ${summarySection ? '<div class="page-break"></div>' : ''}
-
+        
+        <section class="section avoid-break">
+          <h2 class="section-header">Sjekkpunkter og detaljer</h2>
+          ${checklistSections}
+        </section>
+        
+        <div class="page-break"></div>
+        
         ${summarySection}
       </div></body></html>`;
   }
