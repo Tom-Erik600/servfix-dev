@@ -47,6 +47,7 @@ function splitReportDataForDB(reportData) {
       checklist: reportData.checklist || {},
       systemFields: reportData.systemFields || {},  // ← FIX: Match frontend naming
       overallComment: reportData.overallComment || '',
+      driftSchedule: reportData.driftSchedule || {},  // ✅ LEGG TIL DENNE LINJEN!
       metadata: {
         version: '2.0',
         saved_at: new Date().toISOString()
@@ -58,11 +59,15 @@ function splitReportDataForDB(reportData) {
   };
 
   console.log('splitReportDataForDB result (new structure):', {
-    hasChecklist: !!reportData.checklist,
-    products: dbData.products_used.length,
-    work: dbData.additional_work.length,
-    hasPhotos: dbData.photos !== undefined
-  });
+    hasChecklist: !!dbData.checklist_data.checklist,
+    hasSystemFields: !!dbData.checklist_data.systemFields,
+    hasOverallComment: !!dbData.checklist_data.overallComment,
+    hasDriftSchedule: !!dbData.checklist_data.driftSchedule,  // ✅ LEGG TIL
+    driftScheduleKeys: Object.keys(dbData.checklist_data.driftSchedule || {}), // ✅ LEGG TIL
+    hasProducts: dbData.products_used.length > 0,
+    hasAdditionalWork: dbData.additional_work.length > 0,
+    metadata: dbData.checklist_data.metadata
+});
 
   return dbData;
 }
@@ -86,11 +91,12 @@ function transformDbRowToFrontend(row) {
   const reportData = {
     checklist: checklistData?.checklist || {},
     systemFields: checklistData?.systemFields || {},
-    overallComment: checklistData?.overallComment || '',
-    metadata: checklistData?.metadata || {},
     systemData: checklistData?.systemData || {},
+    overallComment: checklistData?.overallComment || '',
+    driftSchedule: checklistData?.driftSchedule || {},  // ✅ LEGG TIL DENNE!
     products: row.products_used || [],
-    additionalWork: row.additional_work || []
+    additionalWork: row.additional_work || [],
+    metadata: checklistData?.metadata || {}
   };
   
   console.log('📦 transformDbRowToFrontend OUTPUT:', {

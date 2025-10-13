@@ -666,7 +666,7 @@ function showEquipmentForm(customer, equipmentType) {
             systemnavn: document.getElementById('systemnavn').value,
             plassering: document.getElementById('plassering').value,
             betjener: document.getElementById('betjener')?.value || null,
-            location: document.getElementById('plassering').value,
+            location: null,  // Brukes ikke - byggnavn hentes fra Tripletex
             notater: document.getElementById('equipment-notes')?.value || null,
             status: 'active'
         };

@@ -163,11 +163,13 @@ class UnifiedPDFGenerator {
         sr.status, sr.completed_at, sr.created_at,
         o.id AS order_number, o.customer_name, o.customer_data, o.scheduled_date AS service_date,
         e.systemnavn AS equipment_name, e.systemtype AS equipment_type, e.location AS equipment_location, e.systemnummer AS equipment_serial,
+  e.betjener AS equipment_betjener,
         t.name AS technician_name,
         ARRAY_AGG(
           json_build_object(
             'report_id', sr2.id, 'equipment_id', sr2.equipment_id, 'equipment_name', e2.systemnavn,
             'equipment_type', e2.systemtype, 'equipment_location', e2.location, 'system_nummer', e2.systemnummer,
+    'equipment_betjener', e2.betjener,
             'checklist_data', sr2.checklist_data, 'photos', sr2.photos
           )
         ) FILTER (WHERE sr2.id IS NOT NULL) AS all_reports
@@ -242,7 +244,7 @@ class UnifiedPDFGenerator {
       systemtype: r.equipment_type || 'System',
       systemnummer: r.system_nummer || 'N/A',
       plassering: r.equipment_location || 'Ikke spesifisert',
-      betjener: 'Ikke spesifisert',
+      betjener: r.equipment_betjener || 'Ikke spesifisert',
     }));
   }
 
@@ -290,9 +292,6 @@ class UnifiedPDFGenerator {
     const data = { ...row };
     this.buildEquipmentOverview(data);
 
-    // Hent mal for å oversette ID-er til lesbare navn
-    const template = await this.fetchChecklistTemplate(data.tenant_id, data.equipment_type);
-    
     const result = { equipmentSections: [], avvik: [] };
     let avvikCounter = 1;
 
@@ -306,38 +305,51 @@ class UnifiedPDFGenerator {
       imagesByReportAndItem[key].push(img);
     });
 
-    // Gå gjennom alle rapporter på ordren for å bygge sjekklister og avvik
     if (Array.isArray(data.all_reports)) {
       for (const report of data.all_reports) {
+        // ==================================================================
+        // FIKS 1: Hent riktig mal for HVERT anlegg inne i løkken
+        // ==================================================================
+        const template = await this.fetchChecklistTemplate(data.tenant_id, report.equipment_type);
+        
         const normalized = this.normalizeChecklistStructure(report.checklist_data);
         if (!normalized?.components?.length) continue;
 
         const systemRef = `${report.system_nummer || 'N/A'} - ${report.equipment_name || ''}`;
         
+        // ✅ VIKTIG: Hent driftSchedule UTENFOR component-loop
+        // Driftstider gjelder for hele anlegget, ikke per component
+        const driftSchedule = report.checklist_data?.driftSchedule || {};
+
+        console.log(`📅 Driftstider for ${report.equipment_name}:`, {
+          hasDriftSchedule: Object.keys(driftSchedule).length > 0,
+          driftScheduleKeys: Object.keys(driftSchedule),
+          firstDay: driftSchedule['mandag']
+        });
+
         normalized.components.forEach(component => {
           if (!component.checklist) return;
-          const sectionName = component.name || systemRef;
+          // ALLTID bruk systemRef som overskrift (inneholder systemnummer og navn)
+          const sectionName = systemRef;
           const checkpoints = [];
 
           Object.entries(component.checklist).forEach(([transformedId, itemData]) => {
-            // ==================================================================
-            // START: Den "smarte" oversettelseslogikken fra Claude.ai
-            // ==================================================================
             const templateItem = (template.checklistItems || []).find(tItem => {
               const labelKey = ((tItem.label || tItem.name) || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/[^\w_æøå]/g, '');
               return labelKey === transformedId;
             });
-            // Bruk den originale, tekniske ID-en hvis den finnes.
-            const originalItemId = templateItem?.id || transformedId;
+
             // ==================================================================
-            // SLUTT: Den "smarte" oversettelseslogikken
+            // FIKS 2: Korrekt fallback-logikk. Vi MÅ ha en original ID.
             // ==================================================================
+            if (!templateItem) return; // Hvis vi ikke finner sjekkpunktet i malen, kan vi ikke fortsette
+            const originalItemId = templateItem.id;
             
             const normalizedOriginalId = (originalItemId || '').toLowerCase().trim();
             const imageKey = `${report.report_id}:${normalizedOriginalId}`;
             const imagesForThisItem = imagesByReportAndItem[imageKey] || [];
             
-            const actualName = templateItem?.label || templateItem?.name || this.generateFallbackName(transformedId);
+            const actualName = templateItem.label || templateItem.name;
 
             const cp = {
               item_id: originalItemId,
@@ -363,7 +375,13 @@ class UnifiedPDFGenerator {
           
           const filtered = checkpoints.filter(cp => this.itemHasData(cp));
           if (filtered.length > 0) {
-            result.equipmentSections.push({ name: sectionName, system_ref: systemRef, checkpoints: filtered });
+            // ✅ Bruk driftSchedule fra report-nivå, ikke component-nivå
+            result.equipmentSections.push({ 
+              name: sectionName, 
+              system_ref: systemRef, 
+              checkpoints: filtered,
+              driftSchedule: driftSchedule  // ✅ Fra report.checklist_data
+            });
           }
         });
       }
@@ -373,15 +391,17 @@ class UnifiedPDFGenerator {
     data.documentation_photos = (data.all_reports || []).reduce((acc, r) => acc.concat(r.photos || []), [])
       .map(url => typeof url === 'string' ? { url, caption: '' } : url);
     
-    // Hent ut oppsummeringstekst for hovedrapporten
+    // ==================================================================
+    // FIKS 3: Korrekt bruk av camelCase for oppsummering
+    // ==================================================================
     const primaryReportData = data.checklist_data || (data.all_reports && data.all_reports[0]?.checklist_data);
     if (primaryReportData) {
-      data.overallComment = primaryReportData.overallComment || '';
-      data.products = primaryReportData.products || [];
-      data.additionalWork = primaryReportData.additionalWork || [];
+      data.overallComment = primaryReportData.overallComment;
+      data.products = primaryReportData.products;
+      data.additionalWork = primaryReportData.additionalWork;
     }
 
-    return { ...data, equipmentSections: result.equipmentSections, avvik: result.avvik };
+    return { ...data, ...result };
   }
 
   /* ===========================
@@ -399,15 +419,39 @@ class UnifiedPDFGenerator {
   renderEquipmentOverviewTable(data) {
     const systems = data.all_equipment || [];
     if (!systems.length) return '';
+    
+    // NYTT: Hent systemfelter fra første system (alle har samme mal)
+    const firstReport = (data.all_reports || [])[0];
+    const systemData = firstReport?.checklist_data?.systemData || {};
+    const template = firstReport?.checklist_data?.metadata?.template || {};
+    const systemFields = template.systemFields || [];
+    
+    // NYTT: Bygg dynamisk systemfelter-visning
+    const systemFieldsHTML = systemFields
+      .sort((a, b) => a.order - b.order)
+      .map(field => {
+        const value = systemData[field.name] || 'Ikke spesifisert';
+        return `<strong>${this.escapeHtml(field.label)}:</strong> ${this.escapeHtml(value)}`;
+      })
+      .join(', ');
+    
+    const systemFieldsSection = systemFieldsHTML ? 
+      `<p style="font-size: 11pt; margin-bottom: 12px; line-height: 1.6;">${systemFieldsHTML}</p>` : '';
+    
+    // Eksisterende tabell
     const rows = systems.map(e => `
       <tr>
-        <td>${this.escapeHtml(e.systemtype)}</td><td>${this.escapeHtml(e.systemnummer)}</td>
-        <td>${this.escapeHtml(e.plassering)}</td><td>${this.escapeHtml(e.betjener)}</td>
+        <td>${this.escapeHtml(e.systemtype)}</td>
+        <td>${this.escapeHtml(e.systemnummer)}</td>
+        <td>${this.escapeHtml(e.plassering)}</td>
+        <td>${this.escapeHtml(e.betjener)}</td>
       </tr>`).join('');
+    
     return `
       <section class="section avoid-break">
         <h2 class="section-header">Systemoversikt</h2>
-        <table class="styled-table">
+        ${systemFieldsSection}
+        <table class="styled-table equipment-overview">
           <thead><tr><th>Systemtype</th><th>Systemnummer</th><th>Plassering</th><th>Betjener</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -415,26 +459,42 @@ class UnifiedPDFGenerator {
   }
 
   renderAvvikTable(data) {
-    if (!data.avvik || !data.avvik.length) return '';
-    const rows = data.avvik.map(a => `
-      <tr>
-        <td>${this.escapeHtml(a.avvik_id)}</td><td>${this.escapeHtml(a.systemnavn)}</td>
-        <td>${this.escapeHtml(a.systemnummer)}</td><td>${this.escapeHtml(a.komponent)}</td>
-        <td>${this.escapeHtml(a.kommentar)}</td>
-      </tr>`).join('');
-    return `
-      <section class="section avoid-break avvik-section">
-        <h2 class="section-header">Registrerte avvik</h2>
-        <p>Følgende avvik ble registrert under servicen. Tiltak avtales separat.</p>
-        <table class="styled-table avvik-table">
-          <thead><tr><th>Avvik ID</th><th>Anlegg</th><th>Systemnummer</th><th>Komponent</th><th>Kommentar</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </section>`;
+  console.log('🔍 renderAvvikTable called with:', {
+    hasAvvik: !!data.avvik,
+    avvikLength: data.avvik?.length || 0,
+    avvikData: data.avvik
+  });
+  
+  if (!data.avvik || !data.avvik.length) {
+    console.log('⚠️ No avvik to render');
+    return '';
   }
+  
+  const rows = data.avvik.map(a => `
+    <tr>
+      <td>${this.escapeHtml(a.avvik_id)}</td>
+      <td>${this.escapeHtml(a.systemnavn)}</td>
+      <td>${this.escapeHtml(a.systemnummer)}</td>
+      <td>${this.escapeHtml(a.komponent)}</td>
+      <td>${this.escapeHtml(a.kommentar)}</td>
+    </tr>`).join('');
+  
+  console.log(`✅ Rendering ${data.avvik.length} avvik rows`);
+  
+  return `
+    <section class="section avoid-break avvik-section">
+      <h2 class="section-header">Registrerte avvik</h2>
+      <p>Følgende avvik ble registrert under servicen.</p>
+      <table class="styled-table avvik-table">
+        <thead><tr><th>Avvik ID</th><th>Anlegg</th><th>Systemnummer</th><th>Komponent</th><th>Kommentar</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </section>`;
+}
 
   renderChecklistResults(data) {
     if (!data.equipmentSections || !data.equipmentSections.length) return '';
+    
     return data.equipmentSections.map(section => {
       const rows = section.checkpoints.map(cp => {
         const statusClass = `status-${(cp.status || '').toLowerCase()}`;
@@ -446,33 +506,96 @@ class UnifiedPDFGenerator {
                 <div class="image-container-inline">
                   <img src="${img.url}" class="checklist-image" alt="${this.escapeHtml(img.description || 'Bilde')}"/>
                   ${img.description ? `<span class="image-caption">${this.escapeHtml(img.description)}</span>` : ''}
-                </div>`).join('')}
+                </div>
+              `).join('')}
             </div>
           </div>` : '';
+
+        const statusBadge = cp.status ? `<span class="status-badge status-${cp.status.toLowerCase()}">${this.escapeHtml(cp.status)}</span>` : '';
+        const merknad = cp.comment ? `<span class="merknad-text">${this.escapeHtml(cp.comment)}</span>` : '';
 
         return `
           <tr>
             <td>${this.escapeHtml(cp.name)}</td>
-            <td class="status-cell">
-              <span class="status-badge ${statusClass}">${this.escapeHtml(cp.status)}</span>
-            </td>
-            <td class="merknad-cell">
-              <div class="merknad-text">${this.escapeHtml(cp.comment || '')}</div>
-              ${imagesHtml}
+            <td style="text-align:center;">${statusBadge}</td>
+            <td>
+              <div class="merknad-cell">
+                ${merknad}
+                ${imagesHtml}
+              </div>
             </td>
           </tr>`;
       }).join('');
 
+      // ============ NYT TILLEGG: DRIFTSTIDER =============
+      const driftScheduleHtml = section.driftSchedule ? this.renderDriftSchedule(section.driftSchedule) : '';
+      // ==================================================
+
       return `
-        <div class="section avoid-break">
-          <h3 class="section-subheader">${this.escapeHtml(section.system_ref)}</h3>
+        <div class="checklist-section avoid-break">
+          <h3 class="checklist-section-header">${this.escapeHtml(section.name)}</h3>
           <table class="styled-table">
-            <thead><tr><th>Sjekkpunkt</th><th>Status</th><th>Merknad / Resultat</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Sjekkpunkt</th>
+                <th style="text-align:center;">Status</th>
+                <th >Merknad / Dokumentasjon</th>
+              </tr>
+            </thead>
             <tbody>${rows}</tbody>
           </table>
+          ${driftScheduleHtml}
         </div>`;
     }).join('');
   }
+
+renderDriftSchedule(schedule) {
+  if (!schedule || Object.keys(schedule).length === 0) {
+    console.log('⚠️ No driftSchedule data to render');
+    return '';
+  }
+  
+  console.log('📅 Rendering driftSchedule:', schedule);
+  
+  const days = ['mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag', 'søndag'];
+  const dayLabels = ['Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lørdag', 'Søndag'];
+  
+  // Start og stopp rows
+  const startRow = days.map((day, idx) => {
+    const value = schedule[day]?.start || '-';
+    return `<td>${this.escapeHtml(value)}</td>`;
+  }).join('');
+  
+  const stoppRow = days.map((day, idx) => {
+    const value = schedule[day]?.stopp || '-';
+    return `<td>${this.escapeHtml(value)}</td>`;
+  }).join('');
+  
+  const headers = dayLabels.map(label => `<th style="width: 14.28%; text-align: center;">${label}</th>`).join('');
+  
+  return `
+    <div style="margin-top: 20px;">
+      <h4 style="color: #0B5FAE; font-size: 11pt; margin-bottom: 10px;">Driftstider</h4>
+      <table class="styled-table drift-schedule-table" style="table-layout: fixed; width: 100%;">
+        <thead>
+          <tr>
+            <th style="text-align: left; width: 80px;"></th>
+            ${headers}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="text-align: left; font-weight: 600;">Start</td>
+            ${startRow}
+          </tr>
+          <tr>
+            <td style="text-align: left; font-weight: 600;">Stopp</td>
+            ${stoppRow}
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+}
 
   groupDataByEquipment(data) {
     const equipmentGroups = {};
@@ -671,6 +794,20 @@ class UnifiedPDFGenerator {
       table.styled-table th:nth-child(1) { width: 50%; }
       table.styled-table th:nth-child(2) { width: 15%; text-align: center; }
       table.styled-table th:nth-child(3) { width: 35%; }
+
+/* Kolonne-bredder for systemoversikt-tabell */
+.styled-table.equipment-overview th:nth-child(1) { width: 5%; }   /* Nr */
+.styled-table.equipment-overview th:nth-child(2) { width: 15%; }  /* Systemtype - redusert fra ~25% */
+.styled-table.equipment-overview th:nth-child(3) { width: 20%; }  /* Systemnummer */
+.styled-table.equipment-overview th:nth-child(4) { width: 25%; }  /* Plassering */
+.styled-table.equipment-overview th:nth-child(5) { width: 35%; }  /* Betjener - økt fra ~25% */
+
+/* Kolonne-bredder for avvik-tabell */
+.avvik-table th:nth-child(1) { width: 6%; }   /* Avvik ID - redusert fra ~10% */
+.avvik-table th:nth-child(2) { width: 15%; }  /* System */
+.avvik-table th:nth-child(3) { width: 20%; }  /* Komponent */
+.avvik-table th:nth-child(4) { width: 10%; }  /* Status */
+.avvik-table th:nth-child(5) { width: 49%; }  /* Kommentar - økt fra ~40% */
       .equipment-summary { margin: 20px 0; padding: 15px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fafafa; }
       .equipment-header { font-size: 14pt; color: #0B5FAE; margin: 0 0 10px 0; padding-bottom: 5px; border-bottom: 1px solid #0B5FAE; }
       .system-number { font-size: 11pt; color: #6b7280; font-weight: normal; }
@@ -682,7 +819,43 @@ class UnifiedPDFGenerator {
       .images-grid { display: flex; gap: 10px; flex-wrap: wrap; }
       .image-container { display: inline-block; max-width: 140px; text-align: center; }
       .avvik-image-small { max-width: 140px; max-height: 100px; object-fit: contain; border: 2px solid #fca5a5; border-radius: 4px; }
-    `;
+    
+/* Driftstider-tabell */
+.drift-schedule-table { 
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt; 
+  margin-top: 8px;
+  background: white;
+}
+.drift-schedule-table th { 
+  background: #0B5FAE !important; 
+  color: white !important;
+  text-align: center;
+  padding: 8px 4px;
+  font-size: 9pt;
+  border: 1px solid #0B5FAE;
+}
+.drift-schedule-table td { 
+  text-align: center;
+  padding: 8px 4px;
+  border: 1px solid #e5e7eb;
+  background: white;
+}
+.drift-schedule-table td:first-child { 
+  text-align: left; 
+  font-weight: 600;
+  width: 60px;
+  background: #f3f4f6;
+  color: #374151;
+}
+.drift-schedule-table tbody tr:nth-child(even) td {
+  background: #f9fafb;
+}
+.drift-schedule-table tbody tr:nth-child(even) td:first-child {
+  background: #f3f4f6;
+}
+`;
   }
 
   getRecipientFromCustomerData(customerData) {
@@ -802,16 +975,25 @@ class UnifiedPDFGenerator {
           </tbody>
         </table>
       </section>
-        <section class="section"><p>Servicearbeidet som ble avtalt for de angitte anleggene er nå fullført i tråd med avtalen. I henhold til vår serviceavtale oversender vi en servicerapport etter fullført servicebesøk.</p></section>
+        <section class="section">
+          <p>Servicearbeidet som ble avtalt for de angitte anleggene er nå fullført i tråd med avtalen. I henhold til vår serviceavtale oversender vi en servicerapport etter fullført servicebesøk.</p>
+        </section>
+        
         ${equipmentOverview}
         ${avvikTable}
-        ${summarySection}
-        <div class="page-break"></div>
-        <section class="section avoid-break">
-          <h2 class="section-header">Sjekkpunkter og resultater</h2>
-          ${checklistSections}
-        </section>
         ${signSection}
+
+        ${checklistSections ? '<div class="page-break"></div>' : ''}
+        ${checklistSections ? `
+<section class="section avoid-break">
+  <h2 class="section-header">Sjekkpunkter og detaljer</h2>
+  ${checklistSections}
+</section>
+` : ''}
+
+        ${summarySection ? '<div class="page-break"></div>' : ''}
+
+        ${summarySection}
       </div></body></html>`;
   }
 

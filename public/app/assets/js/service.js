@@ -1074,7 +1074,9 @@ function renderAll() {
     console.log('🎨 renderAll() called');
     
     renderAnleggInfo();
+    console.log('🎨 About to render drift schedule...');
     renderDriftScheduleSection();
+    console.log('✅ Drift schedule render complete');
     renderComponentDetailsForm();
     renderChecklist();
     renderComponentList();
@@ -1995,8 +1997,18 @@ function renderSectionVisibility() {
 }
 
 function renderDriftScheduleSection() {
+    console.log('📅 renderDriftScheduleSection called');
+    console.log('📅 Has template?', !!state.checklistTemplate);
+    console.log('📅 Has hasDriftSchedule?', state.checklistTemplate?.hasDriftSchedule);
+    console.log('📅 Has config?', !!state.checklistTemplate?.driftScheduleConfig);
+    
     const container = document.getElementById('drift-schedule-container');
-    if (!container) return;
+    console.log('📅 Container found?', !!container);
+    
+    if (!container) {
+        console.error('❌ drift-schedule-container NOT FOUND in DOM!');
+        return;
+    }
     
     if (state.checklistTemplate?.hasDriftSchedule && state.checklistTemplate.driftScheduleConfig) {
         const config = state.checklistTemplate.driftScheduleConfig;
@@ -2005,15 +2017,28 @@ function renderDriftScheduleSection() {
         const days = config.days || ['Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lørdag', 'Søndag'];
         const fields = config.fields || ['Start', 'Stopp'];
         
-        let tableRowsHTML = days.map(day => `
+        let tableRowsHTML = days.map((day, dayIndex) => `
             <tr>
                 <td>${day}</td>
                 ${fields.map(field => `
-                    <td>
+                    <td style="position: relative;">
                         <input type="text" class="drift-time-input" 
                                data-day="${day}" 
                                data-field="${field}" 
                                placeholder="${field}">
+                        ${dayIndex === 0 ? `
+                            <button type="button" 
+                                    class="copy-down-btn" 
+                                    data-field="${field}"
+                                    title="Kopier ${field}-tid til alle dager"
+                                    style="position: absolute; right: 2px; top: 50%; transform: translateY(-50%); 
+                                           background: #0B5FAE; color: white; border: none; 
+                                           width: 20px; height: 20px; border-radius: 3px; 
+                                           cursor: pointer; font-size: 10px; padding: 0; 
+                                           display: flex; align-items: center; justify-content: center;">
+                                ↓
+                            </button>
+                        ` : ''}
                     </td>
                 `).join('')}
             </tr>
@@ -2035,6 +2060,52 @@ function renderDriftScheduleSection() {
                 </div>
             </div>
         `;
+        
+        // Legg til event listeners for copy-down knapper
+        setTimeout(() => {
+            document.querySelectorAll('.copy-down-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const field = btn.dataset.field;
+                    
+                    // Hent verdien fra Mandag-feltet
+                    const mandagInput = document.querySelector(
+                        `.drift-time-input[data-day="Mandag"][data-field="${field}"]`
+                    );
+                    
+                    if (!mandagInput || !mandagInput.value) {
+                        console.log(`⚠️ Ingen ${field}-tid å kopiere fra Mandag`);
+                        return;
+                    }
+                    
+                    const valueToCopy = mandagInput.value;
+                    
+                    // Kopier til alle andre dager
+                    const allInputs = document.querySelectorAll(
+                        `.drift-time-input[data-field="${field}"]`
+                    );
+                    
+                    let copiedCount = 0;
+                    allInputs.forEach(input => {
+                        if (input.dataset.day !== 'Mandag') {
+                            input.value = valueToCopy;
+                            copiedCount++;
+                        }
+                    });
+                    
+                    console.log(`✅ Kopierte ${field} "${valueToCopy}" til ${copiedCount} dager`);
+                    
+                    // Gi visuell feedback
+                    btn.style.background = '#10b981'; // Grønn
+                    btn.textContent = '✓';
+                    setTimeout(() => {
+                        btn.style.background = '#0B5FAE'; // Tilbake til blå
+                        btn.textContent = '↓';
+                    }, 1000);
+                });
+            });
+        }, 100);
+        
         container.style.display = 'block';
     } else {
         container.innerHTML = '';
@@ -2216,8 +2287,8 @@ function loadExistingReportData() {
         console.log('⚠️ No products to load');
     }
     
-    // 4. LAST INN TILLEGGSARBEID
-    if (reportData.additionalWork && Array.isArray(reportData.additionalWork) && reportData.additionalWork.length > 0) {
+    // 4. Load additional work hvis det finnes
+    if (reportData.additionalWork && reportData.additionalWork.length > 0) {
         console.log(`🔧 Loading ${reportData.additionalWork.length} additional work items...`);
         // Clear existing work items first
         const container = document.getElementById('additional-work-lines-container');
@@ -2230,6 +2301,34 @@ function loadExistingReportData() {
     } else {
         console.log('⚠️ No additional work to load');
     }
+
+// 4.5. Load driftstider hvis de finnes
+if (reportData.driftSchedule && Object.keys(reportData.driftSchedule).length > 0) {
+    console.log('📅 Loading drift schedule from database');
+    console.log('📅 Saved driftSchedule:', reportData.driftSchedule);
+    
+    Object.entries(reportData.driftSchedule).forEach(([day, times]) => {
+        Object.entries(times).forEach(([field, value]) => {
+            // Database har lowercase keys (mandag, start)
+            // HTML har capitalized data-attributes (Mandag, Start)
+            const dayCapitalized = day.charAt(0).toUpperCase() + day.slice(1);
+            const fieldCapitalized = field.charAt(0).toUpperCase() + field.slice(1);
+            
+            const input = document.querySelector(
+                `input.drift-time-input[data-day="${dayCapitalized}"][data-field="${fieldCapitalized}"]`
+            );
+            
+            if (input) {
+                input.value = value;
+                console.log(`  ✅ Loaded: ${dayCapitalized} ${fieldCapitalized} = "${value}"`);
+            } else {
+                console.warn(`  ⚠️ Input not found for day="${dayCapitalized}" field="${fieldCapitalized}"`);
+            }
+        });
+    });
+} else {
+    console.log('📅 No drift schedule data to load');
+}
     
     // 5. LAST INN OVERALL COMMENT
     const overallCommentEl = document.getElementById('overall-comment');
@@ -2852,6 +2951,7 @@ async function saveChecklist(event, showToastMessage = true) {
         state.serviceReport.reportData.systemData = componentData.systemData || componentData.systemFields;
         state.serviceReport.reportData.products = componentData.products;
         state.serviceReport.reportData.additionalWork = componentData.additionalWork;
+        state.serviceReport.reportData.driftSchedule = componentData.driftSchedule;  // ✅ LEGG TIL DENNE!
         // FIX: Oppdater overallComment FØRST
         const overallCommentEl = document.getElementById('overall-comment');
         if (overallCommentEl) {
@@ -2960,19 +3060,31 @@ function collectComponentData() {
         });
     }
     
-    // Collect drift schedule hvis aktuelt
-    const driftSchedule = {};
-    if (state.checklistTemplate?.hasDriftSchedule) {
-        document.querySelectorAll('.drift-time-input').forEach(input => {
-            const day = input.dataset.day;
-            const field = input.dataset.field;
-            
-            if (!driftSchedule[day]) {
-                driftSchedule[day] = {};
-            }
-            driftSchedule[day][field] = input.value;
-        });
-    }
+const driftSchedule = {};
+if (state.checklistTemplate?.hasDriftSchedule) {
+    console.log('Collecting drift schedule data');
+    let filledCount = 0;
+    
+    document.querySelectorAll('.drift-time-input').forEach(input => {
+        const day = input.dataset.day;
+        const field = input.dataset.field;
+        const value = input.value.trim();
+        
+        const dayLower = day.toLowerCase();
+        const fieldLower = field.toLowerCase();
+        
+        if (!driftSchedule[dayLower]) {
+            driftSchedule[dayLower] = {};
+        }
+        driftSchedule[dayLower][fieldLower] = value;
+        
+        if (value) {
+            filledCount++;
+        }
+    });
+    
+    console.log('Drift schedule collected:', filledCount, 'fields filled');
+}
 
     // FIX: Samle inn overall comment
     const overallCommentEl = document.getElementById('overall-comment');

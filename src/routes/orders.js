@@ -654,6 +654,49 @@ router.post('/', async (req, res) => {
     
     console.log('Customer data objekt:', customer_data);
     
+    // ✅ Hent faktisk adresser fra Tripletex basert på ID-er
+    if (customer_data.physicalAddressId) {
+      try {
+        const tripletexService = require('../services/tripletexService');
+        const addr = await tripletexService.getAddress(customer_data.physicalAddressId);
+        if (addr) {
+          const parts = [];
+          if (addr.addressLine1) parts.push(addr.addressLine1);
+          if (addr.addressLine2) parts.push(addr.addressLine2);
+          const loc = [];
+          if (addr.postalCode) loc.push(addr.postalCode);
+          if (addr.city) loc.push(addr.city);
+          if (loc.length) parts.push(loc.join(' '));
+          
+          customer_data.physicalAddress = parts.join(', ');
+          console.log('✅ Fetched physicalAddress for new order:', customer_data.physicalAddress);
+        }
+      } catch (error) {
+        console.error('⚠️ Could not fetch physical address for new order:', error.message);
+      }
+    }
+
+    if (customer_data.postalAddressId) {
+      try {
+        const tripletexService = require('../services/tripletexService');
+        const addr = await tripletexService.getAddress(customer_data.postalAddressId);
+        if (addr) {
+          const parts = [];
+          if (addr.addressLine1) parts.push(addr.addressLine1);
+          if (addr.addressLine2) parts.push(addr.addressLine2);
+          const loc = [];
+          if (addr.postalCode) loc.push(addr.postalCode);
+          if (addr.city) loc.push(addr.city);
+          if (loc.length) parts.push(loc.join(' '));
+          
+          customer_data.postalAddress = parts.join(', ');
+          console.log('✅ Fetched postalAddress for new order:', customer_data.postalAddress);
+        }
+      } catch (error) {
+        console.error('⚠️ Could not fetch postal address for new order:', error.message);
+      }
+    }
+    
     // Build INSERT query
     const insertQuery = `
       INSERT INTO orders (
