@@ -5,37 +5,25 @@ const path = require('path');
 const fs = require('fs').promises;
 const puppeteer = require('puppeteer');
 const { Storage } = require('@google-cloud/storage');
-const db = require('../config/database'); // getTenantConnection(tenantId)
+const db = require('../config/database');
 
 class UnifiedPDFGenerator {
   constructor() {
     this.browser = null;
-
-    // Init GCS (valgfritt i dev)
-    const bucketName =
-      process.env.GCS_BUCKET_NAME ||
-      process.env.GCS_BUCKET ||
-      process.env.GOOGLE_CLOUD_BUCKET ||
-      process.env.GCLOUD_STORAGE_BUCKET ||
-      null;
+    const bucketName = process.env.GCS_BUCKET_NAME || null;
 
     if (bucketName) {
       try {
-        // Cloud Run (default creds) eller lokale creds (GOOGLE_APPLICATION_CREDENTIALS peker til fil)
-        this.storage = new Storage({
-          projectId: process.env.GCP_PROJECT_ID || process.env.GCLOUD_PROJECT || undefined,
-        });
+        this.storage = new Storage({ projectId: process.env.GCP_PROJECT_ID || undefined });
         this.bucket = this.storage.bucket(bucketName);
         console.log('✅ GCS init:', bucketName);
       } catch (e) {
         console.warn('⚠️  GCS init feilet:', e.message);
-        this.storage = null;
-        this.bucket = null;
+        this.storage = null; this.bucket = null;
       }
     } else {
-      console.warn('ℹ️ Ingen GCS bucket konfigurert. Offentlig opplasting vil ikke fungere.');
-      this.storage = null;
-      this.bucket = null;
+      console.warn('ℹ️ Ingen GCS bucket konfigurert.');
+      this.storage = null; this.bucket = null;
     }
   }
 
@@ -44,40 +32,15 @@ class UnifiedPDFGenerator {
    * =========================== */
   async init() {
     if (this.browser) return;
-    const isProd = process.env.NODE_ENV === 'production';
     const opts = {
-      headless: isProd ? true : 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-      ],
+      headless: process.env.NODE_ENV === 'production' ? true : 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
     };
-
-    if (process.env.K_SERVICE) {
-      // Cloud Run
-      opts.executablePath = '/usr/bin/chromium';
-      opts.args.push(
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process'
-      );
-    } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-      opts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-    }
-
     try {
       this.browser = await puppeteer.launch(opts);
     } catch (err) {
       console.error('❌ Puppeteer launch feilet, fallback:', err.message);
-      this.browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
+      this.browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     }
   }
 
@@ -95,17 +58,12 @@ class UnifiedPDFGenerator {
       if (!input) return fallback;
       if (typeof input === 'object') return input;
       return JSON.parse(input);
-    } catch {
-      return fallback;
-    }
+    } catch { return fallback; }
   }
 
   escapeHtml(str) {
     if (str === null || str === undefined) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   /* ===========================
@@ -114,65 +72,21 @@ class UnifiedPDFGenerator {
   async loadCompanySettings(tenantId) {
     const defaults = {
       company: {
-        name: 'Air-Tech AS',
-        address: 'Stanseveien 18, 0975 Oslo',
-        phone: '+47 91 52 40 40',
-        email: 'post@air-tech.no',
-        orgnr: '889 558 652',
-        website: 'www.air-tech.no',
+        name: 'Air-Tech AS', address: 'Stanseveien 18, 0975 Oslo', phone: '+47 91 52 40 40',
+        email: 'post@air-tech.no', orgnr: '889 558 652', website: 'www.air-tech.no',
       },
       logoBase64: null,
     };
-
     if (!this.bucket) return defaults;
-
-    // 1) settings.json (valgfritt)
     try {
-      const settingsPath = `tenants/${tenantId}/assets/settings.json`;
-      const file = this.bucket.file(settingsPath);
+      const candidate = `tenants/${tenantId}/assets/logo.png`;
+      const file = this.bucket.file(candidate);
       const [exists] = await file.exists();
       if (exists) {
         const [buf] = await file.download();
-        const json = JSON.parse(buf.toString());
-        if (json.companyInfo) {
-          defaults.company = {
-            ...defaults.company,
-            ...json.companyInfo,
-          };
-        }
-        // 2) logo via settings (hvis gitt)
-        if (json.logo?.url) {
-          const bucketName = this.bucket.name;
-          const rel = json.logo.url.replace(`https://storage.googleapis.com/${bucketName}/`, '');
-          const logoFile = this.bucket.file(rel);
-          const [lexists] = await logoFile.exists();
-          if (lexists) {
-            const [lbuf] = await logoFile.download();
-            const ext = (rel.split('.').pop() || 'png').toLowerCase();
-            const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
-            defaults.logoBase64 = `data:${mime};base64,${lbuf.toString('base64')}`;
-          }
-        }
+        defaults.logoBase64 = `data:image/png;base64,${buf.toString('base64')}`;
       }
-    } catch (e) {
-      console.warn('⚠️  Kunne ikke lese settings.json:', e.message);
-    }
-
-    // 3) Fallback logo (fast sti)
-    if (!defaults.logoBase64) {
-      try {
-        const candidate = `tenants/${tenantId}/assets/logo.png`;
-        const file = this.bucket.file(candidate);
-        const [exists] = await file.exists();
-        if (exists) {
-          const [buf] = await file.download();
-          defaults.logoBase64 = `data:image/png;base64,${buf.toString('base64')}`;
-        }
-      } catch (e) {
-        // ignorer
-      }
-    }
-
+    } catch (e) { /* ignorer */ }
     return defaults;
   }
 
@@ -181,141 +95,76 @@ class UnifiedPDFGenerator {
    * =========================== */
   async fetchReportData(reportId, tenantId) {
     const pool = await db.getTenantConnection(tenantId);
-
-    // rapport + alle ferdigstilte rapporter på samme ordre
     const q = `
       SELECT 
         sr.id, sr.order_id, sr.equipment_id, sr.checklist_data, sr.photos,
-        sr.status, sr.completed_at, sr.created_at, sr.pdf_path, sr.pdf_generated,
-        o.id              AS order_number,
-        o.customer_name   AS customer_name,
-        o.customer_data   AS customer_data,
-        o.scheduled_date  AS service_date,
-        e.systemnavn      AS equipment_name,
-        e.systemtype      AS equipment_type,
-        e.location        AS equipment_location,
-        e.systemnummer    AS equipment_serial,
-        t.name            AS technician_name,
-
+        sr.status, sr.completed_at, sr.created_at,
+        o.id AS order_number, o.customer_name, o.customer_data, o.scheduled_date AS service_date,
+        e.systemnavn AS equipment_name, e.systemtype AS equipment_type, e.location AS equipment_location, e.systemnummer AS equipment_serial,
+        t.name AS technician_name,
         ARRAY_AGG(
           json_build_object(
-            'report_id',          sr2.id,
-            'equipment_id',       sr2.equipment_id,
-            'equipment_name',     e2.systemnavn,
-            'equipment_type',     e2.systemtype,
-            'equipment_location', e2.location,
-            'system_nummer',      e2.systemnummer,
-            'checklist_data',     sr2.checklist_data,
-            'photos',             sr2.photos
+            'report_id', sr2.id, 'equipment_id', sr2.equipment_id, 'equipment_name', e2.systemnavn,
+            'equipment_type', e2.systemtype, 'equipment_location', e2.location, 'system_nummer', e2.systemnummer,
+            'checklist_data', sr2.checklist_data, 'photos', sr2.photos
           )
         ) FILTER (WHERE sr2.id IS NOT NULL) AS all_reports
-
       FROM service_reports sr
-      LEFT JOIN orders o        ON o.id = sr.order_id
-      LEFT JOIN equipment e     ON e.id = sr.equipment_id
-      LEFT JOIN technicians t   ON t.id = o.technician_id
+      LEFT JOIN orders o ON o.id = sr.order_id
+      LEFT JOIN equipment e ON e.id = sr.equipment_id
+      LEFT JOIN technicians t ON t.id = o.technician_id
       LEFT JOIN service_reports sr2 ON sr2.order_id = sr.order_id AND sr2.status = 'completed'
-      LEFT JOIN equipment e2    ON e2.id = sr2.equipment_id
+      LEFT JOIN equipment e2 ON e2.id = sr2.equipment_id
       WHERE sr.id = $1
       GROUP BY sr.id, o.id, e.id, t.id
       LIMIT 1;
     `;
     const { rows } = await pool.query(q, [reportId]);
     if (!rows.length) throw new Error(`Report not found: ${reportId}`);
-
     const row = rows[0];
 
-    // parse JSON
     row.customer_data = this.safeJsonParse(row.customer_data, {});
     row.checklist_data = this.safeJsonParse(row.checklist_data, {});
-    row.photos = Array.isArray(row.photos) ? row.photos : this.safeJsonParse(row.photos, []) || [];
-
+    row.photos = this.safeJsonParse(row.photos, []) || [];
     row.all_reports = (row.all_reports || []).map(r => ({
       ...r,
       checklist_data: this.safeJsonParse(r.checklist_data, {}),
-      photos: Array.isArray(r.photos) ? r.photos : this.safeJsonParse(r.photos, []) || [],
+      photos: this.safeJsonParse(r.photos, []) || [],
     }));
 
-    // Avvik-bilder for denne rapporten (brukes i mapping etterpå)
-    const avvikImagesQ = `
-      SELECT checklist_item_id, image_url, avvik_number, uploaded_at
-      FROM avvik_images
-      WHERE service_report_id = $1
-      ORDER BY avvik_number ASC, uploaded_at ASC
-    `;
-    const avvikRes = await pool.query(avvikImagesQ, [reportId]);
-    row.avvik_images = avvikRes.rows || [];
+    const allReportIds = (row.all_reports || []).map(r => r.report_id).filter(id => id);
+    if (!allReportIds.includes(reportId)) allReportIds.push(reportId);
 
+    const avvikImagesQ = `
+      SELECT service_report_id, checklist_item_id, image_url, metadata
+      FROM avvik_images WHERE service_report_id = ANY($1::text[])
+    `;
+    const avvikRes = await pool.query(avvikImagesQ, [allReportIds]);
+    row.avvik_images = avvikRes.rows || [];
+    console.log(`📸 Loaded ${row.avvik_images.length} avvik images for order ${row.order_id}`);
+    
     return { ...row, tenant_id: tenantId };
   }
 
   /* ===========================
-   * Normalisering
+   * Normalisering & Data Helpers
    * =========================== */
   normalizeChecklistStructure(checklist) {
     if (!checklist) return { components: [] };
-
-    if (Array.isArray(checklist.components)) {
-      return checklist;
-    }
-
-    if (checklist?.checklist) {
-      const details = checklist.systemFields || checklist.details || {};
-      let componentName = 'Sjekkliste';
-      if (details.etasje && details.leilighet_nr) {
-        componentName = `Etasje ${details.etasje} - Leilighet ${details.leilighet_nr}`;
-      } else if (details.etasje) {
-        componentName = `Etasje ${details.etasje}`;
-      } else if (details.leilighet_nr) {
-        componentName = `Leilighet ${details.leilighet_nr}`;
-      }
-      return {
-        components: [{
-          name: componentName,
-          details,
-          checklist: checklist.checklist,
-          metadata: checklist.metadata || {},
-        }],
-        overallComment: checklist.overallComment || '',
-      };
-    }
-
+    if (Array.isArray(checklist.components)) return checklist;
+    if (checklist?.checklist) return { components: [{ name: 'Sjekkliste', checklist: checklist.checklist }] };
     return { components: [] };
   }
 
-  /* ===========================
-   * Templates (valgfritt)
-   * =========================== */
   async fetchChecklistTemplate(tenantId, equipmentType) {
     try {
       const pool = await db.getTenantConnection(tenantId);
-      const res = await pool.query(
-        'SELECT template_data FROM checklist_templates WHERE equipment_type = $1 LIMIT 1',
-        [equipmentType]
-      );
-      if (res.rows.length) {
-        return this.safeJsonParse(res.rows[0].template_data, { checklistItems: [] });
-      }
-      return { checklistItems: [] };
-    } catch {
-      return { checklistItems: [] };
-    }
+      const res = await pool.query('SELECT template_data FROM checklist_templates WHERE equipment_type = $1 LIMIT 1', [equipmentType]);
+      return res.rows.length ? this.safeJsonParse(res.rows[0].template_data, { checklistItems: [] }) : { checklistItems: [] };
+    } catch { return { checklistItems: [] }; }
   }
 
   generateFallbackName(itemId) {
-    const patterns = {
-      'item': 'Sjekkpunkt',
-      'temp': 'Temperatur',
-      'virkn': 'Virkningsgrad',
-      'tilstand': 'Tilstandsgrad',
-      'konsekvens': 'Konsekvensgrad',
-    };
-    for (const [p, name] of Object.entries(patterns)) {
-      if ((itemId || '').startsWith(p)) {
-        const num = (itemId || '').replace(p, '');
-        return `${name} ${num}`;
-      }
-    }
     if (!itemId) return 'Ukjent punkt';
     const text = itemId.replace(/_/g, ' ');
     return text.charAt(0).toUpperCase() + text.slice(1);
@@ -323,22 +172,11 @@ class UnifiedPDFGenerator {
 
   itemHasData(checkpoint) {
     const s = (checkpoint.status || '').toLowerCase();
-    if (!s) return false;
-    return s !== 'na' && s !== 'ikke relevant';
+    return s && s !== 'na' && s !== 'ikke relevant';
   }
 
   buildEquipmentOverview(data) {
-    if (!Array.isArray(data.all_reports) || !data.all_reports.length) {
-      data.all_equipment = [{
-        systemtype: data.equipment_type || 'System',
-        systemnummer: data.equipment_serial || 'N/A',
-        plassering: data.equipment_location || 'Ikke spesifisert',
-        betjener: 'Ikke spesifisert',
-      }];
-      return;
-    }
-
-    data.all_equipment = data.all_reports.map(r => ({
+    data.all_equipment = (data.all_reports || []).map(r => ({
       systemtype: r.equipment_type || 'System',
       systemnummer: r.system_nummer || 'N/A',
       plassering: r.equipment_location || 'Ikke spesifisert',
@@ -346,116 +184,41 @@ class UnifiedPDFGenerator {
     }));
   }
 
-  extractImagesFromChecklistData(checklistData) {
-    const out = [];
-    if (!checklistData?.components) return out;
-
-    checklistData.components.forEach((component, idx) => {
-      if (!component?.checklist) return;
-      Object.entries(component.checklist).forEach(([itemId, itemData]) => {
-        if (Array.isArray(itemData?.images)) {
-          itemData.images.forEach(url => {
-            out.push({
-              checklist_item_id: itemId,
-              image_url: url,
-              image_type: (itemData.status || '').toLowerCase() === 'avvik' ? 'avvik' : 'checklist',
-              component_index: idx,
-              source: 'checklist_data',
-            });
-          });
-        }
-        if (itemData?.comment && typeof itemData.comment === 'string') {
-          const urlRegex = /https:\/\/storage\.googleapis\.com\/[^\s)]+/g;
-          const urls = itemData.comment.match(urlRegex) || [];
-          urls.forEach(url => {
-            out.push({
-              checklist_item_id: itemId,
-              image_url: url,
-              image_type: (itemData.status || '').toLowerCase() === 'avvik' ? 'avvik' : 'checklist',
-              component_index: idx,
-              source: 'comment_urls',
-            });
-          });
-        }
-      });
-    });
-
-    return out;
+  /* ===========================
+   * Bildebehandling
+   * =========================== */
+  async fetchAsBuffer(url) {
+    if (url.startsWith('https://storage.googleapis.com/')) {
+      if (!this.bucket) throw new Error('GCS bucket is not initialized');
+      const bucketName = this.bucket.name;
+      const relativePath = url.replace(`https://storage.googleapis.com/${bucketName}/`, '');
+      const [buffer] = await this.bucket.file(relativePath).download();
+      return buffer;
+    }
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
   }
 
-  // --- [NEW] Inline helpers ---
-  async fetchAsDataURI(url) {
-    try {
-      // storage.googleapis.com/<bucket>/<path> → last med GCS SDK (stabilt i Cloud Run)
-      const m = url.match(/^https:\/\/storage\.googleapis\.com\/([^/]+)\/(.+)$/i);
-      if (m && this.storage) {
-        const [bucketName, objectPath] = [m[1], m[2]];
-        const file = this.storage.bucket(bucketName).file(objectPath);
-        const [buf] = await file.download();
-        // forsøk MIME fra endelse
-        const ext = (objectPath.split('.').pop() || '').toLowerCase();
-        const mime = ext === 'png' ? 'image/png'
-                  : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
-                  : 'application/octet-stream';
-        return `data:${mime};base64,${buf.toString('base64')}`;
-      }
-
-      // Fallback: bruk https-get (for andre URL-er)
-      const https = require('https');
-      const buff = await new Promise((resolve, reject) => {
-        https.get(url, res => {
-          const chunks = [];
-          res.on('data', c => chunks.push(c));
-          res.on('end', () => resolve(Buffer.concat(chunks)));
-          res.on('error', reject);
-        }).on('error', reject);
-      });
-
-      // grovt mime-gjett
-      let mime = 'application/octet-stream';
-      const lower = url.toLowerCase();
-      if (lower.endsWith('.png')) mime = 'image/png';
-      else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg';
-      else if (lower.endsWith('.webp')) mime = 'image/webp';
-
-      return `data:${mime};base64,${buff.toString('base64')}`;
-    } catch (e) {
-      console.warn('⚠️ inline fetch failed for', url, e.message);
-      return url; // behold originalen hvis inlining feiler
-    }
-  }
-
-  async inlineImagesArray(arr) {
-    if (!Array.isArray(arr)) return;
-    for (const img of arr) {
-      if (img && img.url && !String(img.url).startsWith('data:')) {
-        img.url = await this.fetchAsDataURI(img.url);
+  async inlineAllImages(data) {
+    const collect = [];
+    (data.documentation_photos || []).forEach(p => p?.url && collect.push(p));
+    (data.equipmentSections || []).forEach(sec => (sec.checkpoints || []).forEach(cp => (cp.images || []).forEach(img => img?.url && collect.push(img))));
+    (data.avvik || []).forEach(a => (a.images || []).forEach(img => img?.url && collect.push(img)));
+    
+    console.log(`🖼️ Converting ${collect.length} images to base64...`);
+    for (const obj of collect) {
+      if (!obj.url || obj.url.startsWith('data:')) continue;
+      try {
+        const buf = await this.fetchAsBuffer(obj.url);
+        const mime = obj.url.endsWith('.png') ? 'image/png' : obj.url.endsWith('.gif') ? 'image/gif' : 'image/jpeg';
+        obj.url = `data:${mime};base64,${buf.toString('base64')}`;
+      } catch (e) {
+        console.error(`  ❌ Image conversion failed:`, e.message);
       }
     }
-  }
-
-  async inlineAllImages(data /* processed */) {
-    try {
-      // førsteside-bilder
-      await this.inlineImagesArray(data.documentation_photos);
-      await this.inlineImagesArray(data.moreDocumentationPhotos);
-
-      // sjekkpunkt-bilder
-      for (const section of (data.equipmentSections || [])) {
-        for (const cp of (section.checkpoints || [])) {
-          await this.inlineImagesArray(cp.images);
-        }
-      }
-
-      // avvik-bilder
-      await this.inlineImagesArray(data.avvik?.map(a => a.images).flat().filter(Boolean) || []);
-      // direkte per avvik-objekt
-      for (const a of (data.avvik || [])) {
-        await this.inlineImagesArray(a.images);
-      }
-    } catch (e) {
-      console.warn('⚠️ inlineAllImages error:', e.message);
-    }
+    console.log(`✅ Image conversion complete`);
+    return data;
   }
 
   /* ===========================
@@ -463,614 +226,481 @@ class UnifiedPDFGenerator {
    * =========================== */
   async processAirTechData(row) {
     const data = { ...row };
-
-    // 1) Systemoversikt
     this.buildEquipmentOverview(data);
 
-    // 2) Navn-mapping fra template
+    // Hent mal for å oversette ID-er til lesbare navn
     const template = await this.fetchChecklistTemplate(data.tenant_id, data.equipment_type);
-    const nameLookup = {};
-    if (Array.isArray(template.checklistItems)) {
-      template.checklistItems.forEach(it => {
-        if (it?.id && (it.label || it.name)) {
-          nameLookup[it.id] = it.label || it.name;
-        }
-      });
-    }
-
-    // 3) Sjekklister + avvik (fra alle anlegg/rapporter)
+    
     const result = { equipmentSections: [], avvik: [] };
     let avvikCounter = 1;
 
+    // Bygg "super-kart" for avviksbilder med nøkkelen: "rapportId:tekniskId"
+    const imagesByReportAndItem = {};
+    (data.avvik_images || []).forEach(img => {
+      const normalizedId = (img.checklist_item_id || '').toLowerCase().trim();
+      if (!img.service_report_id || !normalizedId) return;
+      const key = `${img.service_report_id}:${normalizedId}`;
+      imagesByReportAndItem[key] = imagesByReportAndItem[key] || [];
+      imagesByReportAndItem[key].push(img);
+    });
+
+    // Gå gjennom alle rapporter på ordren for å bygge sjekklister og avvik
     if (Array.isArray(data.all_reports)) {
       for (const report of data.all_reports) {
         const normalized = this.normalizeChecklistStructure(report.checklist_data);
         if (!normalized?.components?.length) continue;
 
         const systemRef = `${report.system_nummer || 'N/A'} - ${report.equipment_name || ''}`;
-        const sectionNameFallback = report.equipment_name || systemRef;
-
+        
         normalized.components.forEach(component => {
           if (!component.checklist) return;
-
-          const sectionName = component.name || sectionNameFallback;
+          const sectionName = component.name || systemRef;
           const checkpoints = [];
 
-          Object.entries(component.checklist).forEach(([itemId, itemData]) => {
-            const actualName = nameLookup[itemId] || this.generateFallbackName(itemId) || `Sjekkpunkt ${itemId}`;
+          Object.entries(component.checklist).forEach(([transformedId, itemData]) => {
+            // ==================================================================
+            // START: Den "smarte" oversettelseslogikken fra Claude.ai
+            // ==================================================================
+            const templateItem = (template.checklistItems || []).find(tItem => {
+              const labelKey = ((tItem.label || tItem.name) || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/[^\w_æøå]/g, '');
+              return labelKey === transformedId;
+            });
+            // Bruk den originale, tekniske ID-en hvis den finnes.
+            const originalItemId = templateItem?.id || transformedId;
+            // ==================================================================
+            // SLUTT: Den "smarte" oversettelseslogikken
+            // ==================================================================
+            
+            const normalizedOriginalId = (originalItemId || '').toLowerCase().trim();
+            const imageKey = `${report.report_id}:${normalizedOriginalId}`;
+            const imagesForThisItem = imagesByReportAndItem[imageKey] || [];
+            
+            const actualName = templateItem?.label || templateItem?.name || this.generateFallbackName(transformedId);
 
             const cp = {
-              item_id: itemId,
+              item_id: originalItemId,
               name: actualName,
               status: (itemData.status || 'ok').toUpperCase(),
               comment: itemData.avvikComment || itemData.byttetComment || itemData.comment || '',
-              system_ref: systemRef,
-              images: [],
+              images: imagesForThisItem.map(img => ({ url: img.image_url, description: img.metadata?.description || '' })),
             };
             checkpoints.push(cp);
 
             if ((itemData.status || '').toLowerCase() === 'avvik') {
               result.avvik.push({
-                item_id: itemId,
+                item_id: originalItemId,
                 avvik_id: String(avvikCounter++).padStart(3, '0'),
                 systemnummer: report.system_nummer || 'N/A',
                 systemnavn: report.equipment_name || '',
                 komponent: actualName,
-                seksjon: sectionName,
                 kommentar: itemData.avvikComment || itemData.comment || 'Ingen beskrivelse',
-                images: [],
+                images: imagesForThisItem.map(img => ({ url: img.image_url, description: img.metadata?.description || '' })),
               });
             }
           });
-
+          
           const filtered = checkpoints.filter(cp => this.itemHasData(cp));
           if (filtered.length > 0) {
-            result.equipmentSections.push({
-              name: sectionName,
-              system_ref: systemRef,
-              checkpoints: filtered,
-            });
+            result.equipmentSections.push({ name: sectionName, system_ref: systemRef, checkpoints: filtered });
           }
         });
       }
     }
+    
+    // Håndter dokumentasjonsbilder (generelle bilder)
+    data.documentation_photos = (data.all_reports || []).reduce((acc, r) => acc.concat(r.photos || []), [])
+      .map(url => typeof url === 'string' ? { url, caption: '' } : url);
+    
+    // Hent ut oppsummeringstekst for hovedrapporten
+    const primaryReportData = data.checklist_data || (data.all_reports && data.all_reports[0]?.checklist_data);
+    if (primaryReportData) {
+      data.overallComment = primaryReportData.overallComment || '';
+      data.products = primaryReportData.products || [];
+      data.additionalWork = primaryReportData.additionalWork || [];
+    }
 
-    // 4) Bilder: bygg maps (avvik + sjekkliste)
-    const byItemAvvik = {};
-    const byItemChk = {};
-    (data.avvik_images || []).forEach(x => {
-      if (!x.checklist_item_id) return;
-      byItemAvvik[x.checklist_item_id] = byItemAvvik[x.checklist_item_id] || [];
-      byItemAvvik[x.checklist_item_id].push(x);
-    });
-    const extractedFromChecklist = this.extractImagesFromChecklistData(
-      this.normalizeChecklistStructure(data.checklist_data)
-    );
-    extractedFromChecklist.forEach(x => {
-      if (!x.checklist_item_id) return;
-      byItemChk[x.checklist_item_id] = byItemChk[x.checklist_item_id] || [];
-      byItemChk[x.checklist_item_id].push(x);
-    });
-
-    // 4a) Injiser bilder på checkpoints
-    result.equipmentSections.forEach(section => {
-      section.checkpoints.forEach(cp => {
-        const imgs = [
-          ...(byItemChk[cp.item_id] || []),
-          ...(byItemAvvik[cp.item_id] || []),
-        ];
-        if (imgs.length) {
-          cp.images = imgs.map(x => ({
-            url: x.image_url || x.url,
-            description: x.caption || x.metadata?.description || '',
-          }));
-        }
-      });
-    });
-
-    // 4b) Injiser bilder på avvik
-    result.avvik.forEach(a => {
-      const imgs = [
-        ...(byItemAvvik[a.item_id] || []),
-        ...(byItemChk[a.item_id] || []),
-      ];
-      if (imgs.length) {
-        a.images = imgs.map(x => ({
-          url: x.image_url || x.url,
-          description: x.caption || x.metadata?.description || '',
-        }));
-      }
-    });
-
-    // 5) Førsteside-splitt for systemer/bilder
-    const MAX_SYSTEMS_ON_PAGE_1 = 7;
-    const MAX_IMAGES_ON_PAGE_1 = 4;
-    data.all_equipment = data.all_equipment || [];
-    data.systemsFirstPage = data.all_equipment.slice(0, MAX_SYSTEMS_ON_PAGE_1);
-    data.systemsAppendix = data.all_equipment.slice(MAX_SYSTEMS_ON_PAGE_1);
-
-    const allPhotos = Array.isArray(data.photos) ? data.photos : [];
-    data.documentation_photos = allPhotos.slice(0, MAX_IMAGES_ON_PAGE_1);
-    data.moreDocumentationPhotos = allPhotos.slice(MAX_IMAGES_ON_PAGE_1);
-
-    return {
-      ...data,
-      equipmentSections: result.equipmentSections,
-      avvik: result.avvik,
-    };
+    return { ...data, equipmentSections: result.equipmentSections, avvik: result.avvik };
   }
 
   /* ===========================
-   * Theming & Rendering
+   * Rendering (HTML & CSS)
    * =========================== */
   getReportTheme(equipmentTypeRaw) {
     const equipmentType = (equipmentTypeRaw || '').toLowerCase();
     const themes = {
-      boligventilasjon: {
-        title: 'SERVICERAPPORT BOLIGVENTILASJON',
-        table: {
-          equipmentOverviewHeadings: ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'],
-          checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat'],
-        },
-      },
-      vifter: {
-        title: 'SERVICERAPPORT VIFTER',
-        table: {
-          equipmentOverviewHeadings: ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'],
-          checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat'],
-        },
-      },
-      default: {
-        title: 'SERVICERAPPORT',
-        table: {
-          equipmentOverviewHeadings: ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'],
-          checklistHeadings: ['Sjekkpunkt', 'Status', 'Merknad / Resultat'],
-        },
-      },
+      boligventilasjon: { title: 'SERVICERAPPORT BOLIGVENTILASJON' },
+      default: { title: 'SERVICERAPPORT' },
     };
     return themes[equipmentType] || themes.default;
   }
 
-  renderEquipmentOverviewTable(data, theme) {
-    const systems = data.systemsFirstPage || data.all_equipment || [];
+  renderEquipmentOverviewTable(data) {
+    const systems = data.all_equipment || [];
     if (!systems.length) return '';
-
-    const headings = theme.table.equipmentOverviewHeadings || ['Systemtype', 'Systemnummer', 'Plassering', 'Betjener'];
     const rows = systems.map(e => `
       <tr>
-        <td>${this.escapeHtml(e.systemtype || '')}</td>
-        <td>${this.escapeHtml(e.systemnummer || '')}</td>
-        <td>${this.escapeHtml(e.plassering || '')}</td>
-        <td>${this.escapeHtml(e.betjener || '')}</td>
-      </tr>
-    `).join('');
-
-    const more = data.systemsAppendix && data.systemsAppendix.length
-      ? `<p class="muted-note">+ ${data.systemsAppendix.length} flere anlegg – se neste side.</p>`
-      : '';
-
+        <td>${this.escapeHtml(e.systemtype)}</td><td>${this.escapeHtml(e.systemnummer)}</td>
+        <td>${this.escapeHtml(e.plassering)}</td><td>${this.escapeHtml(e.betjener)}</td>
+      </tr>`).join('');
     return `
       <section class="section avoid-break">
         <h2 class="section-header">Systemoversikt</h2>
-        <table class="styled-table overview-table">
-          <thead>
-            <tr>${headings.map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}</tr>
-          </thead>
+        <table class="styled-table">
+          <thead><tr><th>Systemtype</th><th>Systemnummer</th><th>Plassering</th><th>Betjener</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
-        ${more}
-      </section>
-    `;
+      </section>`;
   }
 
   renderAvvikTable(data) {
     if (!data.avvik || !data.avvik.length) return '';
-    const rows = data.avvik.map(a => {
-      const id = String(a.avvik_id || '').padStart(3, '0');
-      const imagesRow = (a.images && a.images.length)
-        ? `
-          <tr class="avvik-images-row">
-            <td colspan="5">
-              <div class="avvik-images">
-                <strong>Bilder for AVVIK ${this.escapeHtml(id)}:</strong>
-                <div class="images-grid">
-                  ${a.images.map(img => `
-                    <img class="avvik-image" src="${img.url}" alt="${this.escapeHtml(img.description || 'Avvikbilde')}"/>
-                  `).join('')}
-                </div>
-              </div>
-            </td>
-          </tr>
-        `
-        : '';
-
-      return `
-        <tr>
-          <td>${this.escapeHtml(id)}</td>
-          <td>${this.escapeHtml(a.systemnavn || '')}</td>
-          <td>${this.escapeHtml(a.systemnummer || '')}</td>
-          <td>${this.escapeHtml(a.komponent || '')}</td>
-          <td>${this.escapeHtml(a.kommentar || '')}</td>
-        </tr>
-        ${imagesRow}
-      `;
-    }).join('');
-
+    const rows = data.avvik.map(a => `
+      <tr>
+        <td>${this.escapeHtml(a.avvik_id)}</td><td>${this.escapeHtml(a.systemnavn)}</td>
+        <td>${this.escapeHtml(a.systemnummer)}</td><td>${this.escapeHtml(a.komponent)}</td>
+        <td>${this.escapeHtml(a.kommentar)}</td>
+      </tr>`).join('');
     return `
-      <section class="section avoid-break">
+      <section class="section avoid-break avvik-section">
         <h2 class="section-header">Registrerte avvik</h2>
-        <p>Følgende avvik ble registrert under servicen:</p>
+        <p>Følgende avvik ble registrert under servicen. Tiltak avtales separat.</p>
         <table class="styled-table avvik-table">
-          <thead>
-            <tr class="avvik-header-row">
-              <th>Avvik ID</th>
-              <th>Anlegg</th>
-              <th>Systemnummer</th>
-              <th>Komponent</th>
-              <th>Kommentar</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Avvik ID</th><th>Anlegg</th><th>Systemnummer</th><th>Komponent</th><th>Kommentar</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
-      </section>
-    `;
+      </section>`;
   }
 
-  renderChecklistResults(data, theme) {
-    if (!data.equipmentSections || !data.equipmentSections.length) {
-      return '<p>Ingen sjekkpunkter registrert.</p>';
-    }
-
-    const html = data.equipmentSections.map(section => {
+  renderChecklistResults(data) {
+    if (!data.equipmentSections || !data.equipmentSections.length) return '';
+    return data.equipmentSections.map(section => {
       const rows = section.checkpoints.map(cp => {
         const statusClass = `status-${(cp.status || '').toLowerCase()}`;
-        const imagesHtml = (cp.images && cp.images.length)
-          ? `
-            <tr class="image-row">
-              <td colspan="3">
-                <div class="checklist-images">
-                  ${cp.images.map(img => `
-                    <div class="image-container">
-                      <img src="${img.url}" class="checklist-image" alt="${this.escapeHtml(img.description || 'Bilde')}"/>
-                      ${img.description ? `<span class="image-caption">${this.escapeHtml(img.description)}</span>` : ''}
-                    </div>
-                  `).join('')}
-                </div>
-              </td>
-            </tr>
-          `
-          : '';
+        
+        // Bygg HTML for bilder (hvis de finnes)
+        const imagesHtml = (cp.images && cp.images.length > 0) ? `
+          <div class="checklist-images">
+            <div class="images-grid-inline">
+              ${cp.images.map(img => `
+                <div class="image-container-inline">
+                  <img src="${img.url}" class="checklist-image" alt="${this.escapeHtml(img.description || 'Bilde')}"/>
+                  ${img.description ? `<span class="image-caption">${this.escapeHtml(img.description)}</span>` : ''}
+                </div>`).join('')}
+            </div>
+          </div>` : '';
 
+        // Returner én enkelt rad med tekst og bilder i siste celle
         return `
           <tr>
             <td>${this.escapeHtml(cp.name)}</td>
             <td class="status-cell ${statusClass}">${this.escapeHtml(cp.status)}</td>
-            <td>${this.escapeHtml(cp.comment || '')}</td>
-          </tr>
-          ${imagesHtml}
-        `;
+            <td class="merknad-cell">
+              <div class="merknad-text">${this.escapeHtml(cp.comment || '')}</div>
+              ${imagesHtml}
+            </td>
+          </tr>`;
       }).join('');
 
       return `
         <div class="section avoid-break">
-          <h3 class="section-subheader">${this.escapeHtml(section.system_ref || section.name)}</h3>
+          <h3 class="section-subheader">${this.escapeHtml(section.system_ref)}</h3>
           <table class="styled-table">
-            <thead>
-              <tr>${(theme.table.checklistHeadings || ['Sjekkpunkt', 'Status', 'Merknad / Resultat']).map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}</tr>
-            </thead>
+            <thead><tr><th>Sjekkpunkt</th><th>Status</th><th>Merknad / Resultat</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
-        </div>
-      `;
+        </div>`;
     }).join('');
+  }
 
-    return html;
+  groupDataByEquipment(data) {
+    const equipmentGroups = {};
+    (data.all_reports || []).forEach(report => {
+      const key = report.report_id;
+      if (!equipmentGroups[key]) {
+        equipmentGroups[key] = {
+          name: report.equipment_name || 'Ukjent anlegg',
+          systemNummer: report.system_nummer || 'N/A',
+          overallComment: '', 
+          products: [], 
+          additionalWork: [],
+          avvik: [], 
+          photos: [],
+        };
+      }
+      const group = equipmentGroups[key];
+      const checklistData = report.checklist_data || {};
+      
+      // ✅ RETT: Bruk camelCase (som frontend bruker)
+      if (checklistData.overallComment) group.overallComment = checklistData.overallComment;
+      if (checklistData.products) group.products = checklistData.products;
+      if (checklistData.additionalWork) group.additionalWork = checklistData.additionalWork;
+      
+      // ❌ FEIL: Dette var snake_case før:
+      // if (checklistData.overall_comment) group.overallComment = checklistData.overall_comment;
+      // if (checklistData.products_used) group.products = checklistData.products_used;
+      // if (checklistData.additional_work) group.additionalWork = checklistData.additional_work;
+      
+      if (report.photos) group.photos = report.photos.map(url => 
+        typeof url === 'string' ? { url, caption: '' } : url
+      );
+    });
+    
+    return Object.values(equipmentGroups);
   }
 
   generateSummarySection(data, settings) {
-    const products = Array.isArray(data.products_used) ? data.products_used : [];
-    const work = Array.isArray(data.additional_work) ? data.additional_work : [];
-    const overall = data.overall_comment;
+    const equipmentGroups = this.groupDataByEquipment(data);
+    if (equipmentGroups.length === 0) return '';
 
-    const productsHtml = products.length
-      ? `<h3>Produkter brukt:</h3><ul>${products.map(p => `<li>${this.escapeHtml(p.name || '')} (${this.escapeHtml(p.quantity || '')})</li>`).join('')}</ul>`
-      : '';
+    const equipmentSections = equipmentGroups.map(group => {
+      // Endret: Sjekker ikke lenger for avvik for å avgjøre om seksjonen skal vises
+      const hasContent = group.overallComment || group.products.length > 0 || group.additionalWork.length > 0 || group.photos.length > 0;
+      if (!hasContent) return '';
 
-    const workHtml = work.length
-      ? `<h3>Utførte tilleggsarbeider:</h3><ul>${work.map(w => `<li>${this.escapeHtml(w.description || '')}</li>`).join('')}</ul>`
-      : '';
+      const commentHtml = group.overallComment ? `<p class="equipment-comment">${this.escapeHtml(group.overallComment)}</p>` : '';
+      const productsHtml = group.products.length > 0 ? `<h4>Produkter brukt:</h4><ul>${group.products.map(p => `<li>${this.escapeHtml(p.name || '')} (${this.escapeHtml(p.quantity || '')})</li>`).join('')}</ul>` : '';
+      const workHtml = group.additionalWork.length > 0 ? `<h4>Utførte tilleggsarbeider:</h4><ul>${group.additionalWork.map(w => `<li>${this.escapeHtml(w.description || '')}</li>`).join('')}</ul>` : '';
+      
+      // Fjernet: 'avvikHtml'-blokken er borte
+      
+      const photosHtml = group.photos.length > 0 ? `<h4>Dokumentasjonsbilder:</h4><div class="photos-grid">${group.photos.map(photo => `<div class="photo-container"><img src="${photo.url}" class="photo" alt="${this.escapeHtml(photo.caption || 'Bilde')}"/></div>`).join('')}</div>` : '';
 
-    const overallHtml = overall
-      ? `<h3>Generell kommentar:</h3><p>${this.escapeHtml(overall)}</p>`
-      : '';
+      return `
+        <div class="equipment-summary avoid-break">
+          <h3 class="equipment-header">${this.escapeHtml(group.name)} <span class="system-number">(System: ${this.escapeHtml(group.systemNummer)})</span></h3>
+          ${commentHtml}${productsHtml}${workHtml}${photosHtml}
+        </div>`;
+    }).filter(Boolean).join('');
 
-    const photos = Array.isArray(data.documentation_photos) ? data.documentation_photos : [];
-    const photosHtml = photos.length
-      ? `
-        <div class="documentation-photos">
-          <h3>Dokumentasjonsbilder:</h3>
-          <div class="photos-grid">
-            ${photos.map(photo => `
-              <div class="photo-container">
-                <img src="${photo.url}" class="photo" alt="${this.escapeHtml(photo.caption || 'Dokumentasjonsbilde')}"/>
-                ${photo.caption ? `<span class="photo-caption">${this.escapeHtml(photo.caption)}</span>` : ''}
-              </div>
-            `).join('')}
-          </div>
-          ${Array.isArray(data.moreDocumentationPhotos) && data.moreDocumentationPhotos.length
-            ? `<p class="muted-note">+ ${data.moreDocumentationPhotos.length} flere bilder – se appendix.</p>`
-            : ''
-          }
-        </div>
-      `
-      : '';
+    if (!equipmentSections) return '';
+    return `<section class="section"><h2 class="section-header">Oppsummering og utførte arbeider</h2>${equipmentSections}</section>`;
+  }
 
-    const signSection = `
+  generateSignSection(settings) {
+    return `
       <section class="section sign-section avoid-break">
         <h2 class="section-header">Signatur</h2>
-        <div class="sign-row">
-          <div class="sign-block">
-            <div class="sign-line"></div>
-            <div class="sign-label">Tekniker</div>
-          </div>
-          <div class="sign-block">
-            <div class="sign-line"></div>
-            <div class="sign-label">Kunde</div>
-          </div>
-        </div>
+        <div class="sign-row"><div class="sign-block"><div class="sign-line"></div><div class="sign-label">Tekniker</div></div><div class="sign-block"><div class="sign-line"></div><div class="sign-label">Kunde</div></div></div>
         <p class="closing">Med vennlig hilsen<br><strong>${this.escapeHtml((settings.company || {}).name || 'Air-Tech AS')}</strong></p>
-      </section>
-    `;
-
-    if (!productsHtml && !workHtml && !overallHtml && !photosHtml) {
-      return signSection;
-    }
-
-    return `
-      <section class="section avoid-break">
-        <h2 class="section-header">Oppsummering og utførte arbeider</h2>
-        ${overallHtml}
-        ${productsHtml}
-        ${workHtml}
-        ${photosHtml}
-      </section>
-      ${signSection}
-    `;
+      </section>`;
   }
 
   getAirTechCSS() {
-    // Ingen blå bakgrunn på toppen – cleaner look.
     return `
-      @page { size: A4; margin: 28mm 15mm 20mm 15mm; }
-      html, body { font-family: Arial, Helvetica, sans-serif; color:#111; font-size:10.5pt; }
-      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-
-      /* Fast logo øverst til høyre på alle sider */
-      .page-logo-fixed {
-        position: fixed;
-        top: 5mm;
-        right: 15mm;
-        width: 80px;
-        height: auto;
-        max-height: 50px;
-        object-fit: contain;
-        z-index: 1000;
-      }
-
-      .pdf-container { max-width: 210mm; margin: 0 auto; background: #fff; }
-      .header-section { position: relative; margin: 0 0 10px 0; padding: 0 0 6px 0; }
-      .main-title { font-size: 20pt; margin: 0 0 4px 0; color:#0B5FAE; }
+      @page { size: A4; margin: 25mm 15mm 20mm 15mm; }
+      html, body { font-family: Arial, sans-serif; color:#111; font-size:10pt; line-height: 1.4; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; box-sizing: border-box; }
+      .header-container { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0B5FAE; padding-bottom: 8px; margin-bottom: 10px; }
+      .header-text { flex-grow: 1; }
+      .header-logo { width: 80px; height: auto; max-height: 40px; object-fit: contain; margin-left: 20px; }
+      .main-title { font-size: 19pt; margin: 0 0 4px 0; color:#0B5FAE; }
       .report-id { color:#374151; margin: 0; font-size: 10pt; }
-      .header-divider { border-bottom: 2px solid #0B5FAE; margin-top: 10px; }
-
-      .section { margin-top: 14px; }
-      .section-header { font-size: 13pt; margin: 0 0 8px 0; color:#0B5FAE; border-bottom:2px solid #0B5FAE; padding-bottom: 4px; }
-      .section-subheader { font-size: 12pt; margin: 10px 0; }
+      .section { margin-top: 16px; }
+      .section-header { font-size: 13pt; margin: 0 0 8px 0; color:#0B5FAE; border-bottom:1px solid #0B5FAE; padding-bottom: 4px; }
+      .section-subheader { font-size: 12pt; margin: 12px 0 6px 0; }
       .avoid-break { page-break-inside: avoid; }
-
-      table.styled-table { width: 100%; border-collapse: collapse; }
-      table.styled-table th, table.styled-table td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; }
-      table.styled-table thead tr { background: #f3f4f6; }
-      .overview-table th:nth-child(1){ width: 28%; }
-      .overview-table th:nth-child(2){ width: 22%; }
-      .overview-table th:nth-child(3){ width: 28%; }
-      .overview-table th:nth-child(4){ width: 22%; }
-
-      .status-cell { font-weight: 600; text-transform: uppercase; text-align:center; }
-      .status-ok { color:#059669; }
-      .status-byttet { color:#0369a1; }
-      .status-avvik { color:#dc2626; }
-      .status-na { color:#6b7280; }
-
-      /* Avvik – tydelig header uten stor fargeflate */
-      .avvik-header-row { background:#fee2e2; }
-      .avvik-table tbody tr:nth-child(even){ background: #fef7f7; }
-
-      .avvik-images-row { background:#fef2f2; border-top: 2px dashed #fca5a5; }
-      .avvik-images { padding: 10px 0; }
-      .images-grid { display:flex; gap: 10px; flex-wrap: wrap; }
-      .avvik-image { max-width: 180px; max-height: 120px; object-fit: cover; border: 2px solid #fee; border-radius: 6px; }
-
-      .checklist-images { padding: 10px 0; display:flex; gap:12px; flex-wrap: wrap; }
-      .checklist-image { max-width: 120px; max-height: 80px; object-fit: cover; border: 2px solid #e2e8f0; border-radius: 6px; display: block; }
-      .image-caption { font-size: 9pt; color:#64748b; display:block; margin-top:2px; max-width: 120px; }
-
-      .documentation-photos .photo { max-width: 150px; max-height: 100px; object-fit: cover; border:2px solid #e2e8f0; border-radius: 6px; }
-      .muted-note { color:#666; font-style: italic; margin: 6px 0 0 0; font-size: 10pt; }
-
-      .sign-section .sign-row{ display:flex; gap:24px; }
-      .sign-section .sign-block{ flex:1; }
-      .sign-section .sign-line{ border-bottom:1px solid #9ca3af; height:38px; margin-bottom:6px; }
-      .sign-section .sign-label{ color:#6b7280; font-size:10pt; }
-      .closing{ margin-top:10px; }
-
-
-
-      @media print {
-        .section { page-break-inside: avoid; }
+      .page-break { page-break-before: always; }
+      /* === KUNDEINFO-TABELL (ENKEL TABELL-MODELL) === */
+      .main-info-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        border: 1px solid #dee2e6;
       }
+      .main-info-table td {
+        width: 33.33%;
+        vertical-align: top;
+        border: 1px solid #dee2e6;
+        padding: 8px 12px;
+      }
+      .main-info-table .meta-row td {
+        /* Tykkere toppkant kun for den nederste raden */
+        border-top: 2px solid #adb5bd;
+      }
+      .nested-table { width: 100%; border-collapse: collapse; }
+      .nested-table td { padding: 5px 0; }
+      .info-cell .label { font-size: 8pt; color: #6c757d; text-transform: uppercase; margin-bottom: 2px; }
+      .info-cell .data { font-size: 10pt; font-weight: 600; color: #212529; }
+      table.styled-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+      table.styled-table th, table.styled-table td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: top; }
+      table.styled-table thead tr { background: #f3f4f6; font-size: 9.5pt; }
+      .status-cell { font-weight: 600; text-transform: uppercase; text-align:center; }
+      .status-ok { color:#059669; } .status-byttet { color:#0369a1; } .status-avvik { color:#dc2626; background: #fee2e2; } .status-na { color:#6b7280; }
+      .avvik-section .section-header { color: #dc2626; border-bottom-color: #dc2626; }
+      .avvik-table thead { background:#fee2e2; }
+      .avvik-table tbody tr { background: #fff7f7; }
+      .avvik-table tbody tr:nth-child(even) { background: #fef2f2; }
+      /* === STILER FOR BILDER I SJEKKLISTE (NY OG FORBEDRET) === */
+      .merknad-cell {
+        /* ENDRET HER: Stabler elementer vertikalt (under hverandre) */
+        display: flex;
+        flex-direction: column; 
+        align-items: flex-start; /* Venstrejusterer alt innhold */
+        gap: 10px; /* Mellomrom mellom tekst og bilde-seksjon */
+      }
+      .merknad-text {
+        /* Ingen endring nødvendig her */
+      }
+      .checklist-images {
+        /* Ingen endring nødvendig her */
+      }
+      .images-grid-inline {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        /* ENDRET HER: Venstrejusterer bildene i gridden */
+        justify-content: flex-start; 
+      }
+      .image-container-inline {
+        max-width: 100px;
+      }
+      .checklist-image {
+        max-width: 100px;
+        max-height: 75px;
+        object-fit: contain;
+        border: 2px solid #e2e8f0;
+        border-radius: 4px;
+        display: block;
+      }
+      .image-caption {
+        font-size: 8pt;
+        color: #64748b;
+        display: block;
+        margin-top: 3px;
+        line-height: 1.2;
+        max-width: 100px;
+      }
+      .photos-grid { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+      .photo-container { display: inline-block; max-width: 140px; }
+      .photo { max-width: 140px; max-height: 95px; object-fit: contain; border: 2px solid #e2e8f0; border-radius: 4px; }
+      .sign-section { margin-top: 25px; }
+      .sign-section .sign-row { display:flex; gap:40px; margin-top: 15px; }
+      .sign-section .sign-block { flex:1; }
+      .sign-section .sign-line { border-bottom:1px solid #9ca3af; height:45px; margin-bottom:6px; }
+      .sign-section .sign-label { color:#6b7280; font-size:10pt; }
+      .closing { margin-top:20px; }
+      table.styled-table th:nth-child(1) { width: 50%; }
+      table.styled-table th:nth-child(2) { width: 15%; text-align: center; }
+      table.styled-table th:nth-child(3) { width: 35%; }
+      .equipment-summary { margin: 20px 0; padding: 15px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fafafa; }
+      .equipment-header { font-size: 14pt; color: #0B5FAE; margin: 0 0 10px 0; padding-bottom: 5px; border-bottom: 1px solid #0B5FAE; }
+      .system-number { font-size: 11pt; color: #6b7280; font-weight: normal; }
+      .equipment-comment { margin: 10px 0; padding: 10px; background: #fff; border-left: 3px solid #0B5FAE; font-style: italic; }
+      .equipment-summary h4 { font-size: 11pt; margin: 15px 0 8px 0; color: #374151; }
+      .equipment-avvik-section { margin-top: 15px; }
+      .avvik-detail { margin: 10px 0; padding: 10px; background: #fff; border-left: 3px solid #dc2626; }
+      .avvik-images-inline { margin-top: 10px; }
+      .images-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+      .image-container { display: inline-block; max-width: 140px; text-align: center; }
+      .avvik-image-small { max-width: 140px; max-height: 100px; object-fit: contain; border: 2px solid #fca5a5; border-radius: 4px; }
     `;
   }
 
   getRecipientFromCustomerData(customerData) {
     if (!customerData) return '';
-    const contacts = customerData.contacts || customerData.kontakter || [];
-    const match = contacts.find(c => (c.last_name || c.etternavn || '').toLowerCase() === 'servfixmail');
-    if (match?.email) return match.email;
-    return customerData.email || customerData.contactPerson || '';
+    const contacts = customerData.contacts || [];
+    const match = contacts.find(c => (c.last_name || '').toLowerCase() === 'servfixmail');
+    return match?.email || customerData.email || '';
   }
 
   getOrderLocationFromCustomer(customerData) {
-    const post = customerData?.post_address
-      || customerData?.postadresse
-      || customerData?.postalAddress
-      || {};
-    const loc = customerData?.location || customerData?.lokasjon || {};
+    const post = customerData?.post_address || {};
+    const loc = customerData?.location || {};
     return {
-      buildingName: loc.name || loc.byggnavn || '',
-      address: post.addressLine1 || post.address || post.adresse || customerData?.address || '',
-      postalCode: post.postalCode || post.postnr || post.postal_code || customerData?.postalCode || '',
+      buildingName: loc.name || '', address: post.addressLine1 || '',
+      postalCode: post.postalCode || '',
     };
   }
 
   generateHTML(data, settings) {
-    const theme = this.getReportTheme((data.equipment_type || '').toLowerCase());
-    const logoTag = settings.logoBase64 ? `<img src="${settings.logoBase64}" alt="logo" class="page-logo-fixed"/>` : '';
-    const customerName = data.customer_name || data.customerData?.name || '';
-    const recipient = this.getRecipientFromCustomerData(data.customer_data || {});
-    const where = this.getOrderLocationFromCustomer(data.customer_data || {});
+    const theme = this.getReportTheme(data.equipment_type);
+    const logoTag = settings.logoBase64 ? `<img src="${settings.logoBase64}" alt="logo" class="header-logo"/>` : '';
+    const customerName = data.customer_name || '';
+    const recipient = this.getRecipientFromCustomerData(data.customer_data);
+    const where = this.getOrderLocationFromCustomer(data.customer_data);
     const technician = data.technician_name || 'Ukjent tekniker';
 
-    const equipmentOverview = this.renderEquipmentOverviewTable(data, theme);
+    const equipmentOverview = this.renderEquipmentOverviewTable(data);
     const avvikTable = this.renderAvvikTable(data);
-    const checklistSections = this.renderChecklistResults(data, theme);
     const summarySection = this.generateSummarySection(data, settings);
-
-    const appendixSystems = (data.systemsAppendix && data.systemsAppendix.length)
-      ? `
-        <div class="page-break"></div>
-        <section class="section avoid-break">
-          <h2 class="section-header">Systemoversikt (fortsettelse)</h2>
-          <table class="styled-table overview-table">
-            <thead>
-              <tr>${theme.table.equipmentOverviewHeadings.map(h => `<th>${this.escapeHtml(h)}</th>`).join('')}</tr>
-            </thead>
-            <tbody>
-              ${data.systemsAppendix.map(equip => `
-                <tr>
-                  <td>${this.escapeHtml(equip.systemtype || '')}</td>
-                  <td>${this.escapeHtml(equip.systemnummer || '')}</td>
-                  <td>${this.escapeHtml(equip.plassering || '')}</td>
-                  <td>${this.escapeHtml(equip.betjener || '')}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </section>
-      `
-      : '';
+    const checklistSections = this.renderChecklistResults(data);
+    const signSection = this.generateSignSection(settings);
 
     return `
-<!DOCTYPE html>
-<html lang="no">
-<head>
-  <meta charset="utf-8"/>
-  <title>${this.escapeHtml(theme.title)} ${this.escapeHtml(data.id)}</title>
-  <style>${this.getAirTechCSS()}</style>
-</head>
-<body>
-  ${logoTag}
-  <div class="pdf-container">
-    <header class="header-section">
-      <h1 class="main-title">${this.escapeHtml(theme.title)}</h1>
-      <p class="report-id">
-        ${this.escapeHtml(customerName)} • Ordre ${this.escapeHtml(data.order_number || '')}
-        • ${(data.service_date || '').toString().slice(0,10)}
-      </p>
-      <div class="header-divider"></div>
-    </header>
+      <!DOCTYPE html><html lang="no"><head><meta charset="utf-8"/>
+      <title>${this.escapeHtml(theme.title)} ${this.escapeHtml(data.id)}</title>
+      <style>${this.getAirTechCSS()}</style></head><body>
+      <div class="pdf-container">
+      <header class="header-container">
+        <div class="header-text">
+          <h1 class="main-title">Servicerapport: ${this.escapeHtml(customerName)}</h1>
+          <p class="report-id">
+            Ordre ${this.escapeHtml(data.order_number || '')} • ${new Date(data.completed_at || data.created_at).toLocaleDateString('nb-NO')}
+          </p>
+        </div>
+        ${logoTag}
+      </header>
 
-    <section class="section avoid-break">
-      <table class="styled-table">
-        <thead>
-          <tr>
-            <th>Avtalenummer</th><th>Besøk nr</th><th>Årstall</th>
-            <th>Kundenummer</th><th>Kundenavn</th><th>Mottaker av rapport</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td></td><td></td><td>${new Date(data.created_at).getFullYear()}</td>
-            <td>${this.escapeHtml(data.customer_data?.id || data.customer_id || '')}</td>
-            <td>${this.escapeHtml(customerName)}</td>
-            <td>${this.escapeHtml(recipient)}</td>
-          </tr>
-          <tr>
-            <th>Byggnavn</th><th>Adresse</th><th>Post nr.</th>
-            <th>Rapport dato</th><th>Utført av</th><th>Vår kontaktperson</th>
-          </tr>
-          <tr>
-            <td>${this.escapeHtml(where.buildingName)}</td>
-            <td>${this.escapeHtml(where.address)}</td>
-            <td>${this.escapeHtml(where.postalCode)}</td>
-            <td>${new Date(data.created_at).toLocaleDateString('nb-NO')}</td>
-            <td>${this.escapeHtml(technician)}</td>
-            <td>${this.escapeHtml(technician)}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section class="section">
-      <p>Servicearbeidet som ble avtalt for de angitte anleggene er nå fullført i tråd med avtalen. 
-      I henhold til vår serviceavtale oversender vi en servicerapport etter fullført servicebesøk.</p>
-    </section>
-
-    ${equipmentOverview}
-    ${avvikTable}
-    ${summarySection}
-
-    ${appendixSystems}
-
-    <div class="page-break"></div>
-    <section class="section">
-      <h2 class="section-header">Detaljerte sjekkpunkter og resultater</h2>
-      ${checklistSections}
-    </section>
-  </div>
-</body>
-</html>`;
+      <section class="section avoid-break">
+        <table class="main-info-table">
+          <tbody>
+            <tr>
+              <td><div class="info-cell"><div class="label">Avtalenummer</div><div class="data">${this.escapeHtml(data.customer_data?.agreementId || 'N/A')}</div></div></td>
+              <td><div class="info-cell"><div class="label">Besøk nr</div><div class="data">N/A</div></div></td>
+              <td><div class="info-cell"><div class="label">Årstall</div><div class="data">${new Date(data.created_at).getFullYear()}</div></div></td>
+            </tr>
+            <tr>
+              <td><div class="info-cell"><div class="label">Kundenummer</div><div class="data">${this.escapeHtml(data.customer_data?.id || '')}</div></div></td>
+              <td><div class="info-cell"><div class="label">Kundenavn</div><div class="data">${this.escapeHtml(customerName)}</div></div></td>
+              <td><div class="info-cell"><div class="label">Mottaker av rapport</div><div class="data">${this.escapeHtml(recipient)}</div></div></td>
+            </tr>
+            <tr>
+              <td><div class="info-cell"><div class="label">Byggnavn</div><div class="data">${this.escapeHtml(where.buildingName || 'Ikke spesifisert')}</div></div></td>
+              <td><div class="info-cell"><div class="label">Adresse</div><div class="data">${this.escapeHtml(where.address || 'Ikke spesifisert')}</div></div></td>
+              <td><div class="info-cell"><div class="label">Post nr. / Poststed</div><div class="data">${this.escapeHtml(where.postalCode || 'Ikke spesifisert')}</div></div></td>
+            </tr>
+            {/* Den separerte raden med en egen klasse */}
+            <tr class="meta-row">
+              <td><div class="info-cell"><div class="label">Rapport dato</div><div class="data">${new Date(data.completed_at || data.created_at).toLocaleDateString('nb-NO')}</div></div></td>
+              <td><div class="info-cell"><div class="label">Utført av</div><div class="data">${this.escapeHtml(technician)}</div></div></td>
+              <td><div class="info-cell"><div class="label">Vår kontaktperson</div><div class="data">${this.escapeHtml(technician)}</div></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+        <section class="section"><p>Servicearbeidet som ble avtalt for de angitte anleggene er nå fullført i tråd med avtalen. I henhold til vår serviceavtale oversender vi en servicerapport etter fullført servicebesøk.</p></section>
+        ${equipmentOverview}
+        // ${avvikTable} // Fjernet for å unngå duplisering
+        ${summarySection}
+        <div class="page-break"></div>
+        <section class="section">
+          <h2 class="section-header">Detaljerte sjekkpunkter og resultater</h2>
+          ${checklistSections}
+        </section>
+        ${signSection}
+      </div></body></html>`;
   }
 
   /* ===========================
-   * PDF / Upload
+   * PDF / Upload / Orkestrering
    * =========================== */
   async generatePDF(html) {
     if (!this.browser) throw new Error('Browser not initialized');
     const page = await this.browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle2', timeout: 45000 });
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 45000 });
     await page.emulateMediaType('print');
-    await page.waitForTimeout(1500);
-
     const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      displayHeaderFooter: true,
+      format: 'A4', printBackground: true, displayHeaderFooter: true,
       headerTemplate: '<span></span>',
-      footerTemplate: `
-    <div style="font-size:9px; color:#4b5563; width:100%; text-align:center;">
-      Side <span class="pageNumber"></span> av <span class="totalPages"></span>
-    </div>`,
+      footerTemplate: `<div style="font-size:9px; color:#4b5563; width:100%; text-align:center;">Side <span class="pageNumber"></span> av <span class="totalPages"></span></div>`,
       margin: { top: '20mm', right: '15mm', bottom: '22mm', left: '15mm' }
     });
-
     await page.close();
     return pdfBuffer;
   }
 
   async uploadToGCS(tenantId, buffer, reportId, orderId) {
     if (!this.bucket) throw new Error('GCS bucket not initialized');
-    
     const d = new Date();
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -1078,27 +708,17 @@ class UnifiedPDFGenerator {
     const gcsPath = `tenants/${tenantId}/service-reports/${yyyy}/${mm}/${orderId}/${fileName}`;
     
     const file = this.bucket.file(gcsPath);
-    await file.save(buffer, {
-      metadata: { contentType: 'application/pdf' }
-    });
+    await file.save(buffer, { metadata: { contentType: 'application/pdf' } });
     
-    // LAGRE RELATIV PATH i database, men logg full URL
-    const publicUrl = `https://storage.googleapis.com/${this.bucket.name}/${gcsPath}`;
     const relativePath = `service-reports/${yyyy}/${mm}/${orderId}/${fileName}`;
-    
-    console.log(`✅ PDF uploaded to GCS: ${publicUrl}`);
-    console.log(`📁 Relative path stored: ${relativePath}`);
-    
+    console.log(`✅ PDF uploaded to GCS. Relative path: ${relativePath}`);
     return relativePath;
   }
 
   async updateReportPDFPath(reportId, pdfPath, tenantId) {
     const pool = await db.getTenantConnection(tenantId);
-    await pool.query(
-      'UPDATE service_reports SET pdf_path = $1, pdf_generated = true WHERE id = $2',
-      [pdfPath, reportId]
-    );
-    console.log(`✅ Database updated: ${reportId}`);
+    await pool.query('UPDATE service_reports SET pdf_path = $1, pdf_generated = true WHERE id = $2', [pdfPath, reportId]);
+    console.log(`✅ Database updated for: ${reportId}`);
   }
 
   async debugSaveHTML(html, reportId) {
@@ -1114,27 +734,27 @@ class UnifiedPDFGenerator {
     }
   }
 
-  /* ===========================
-   * Orkestrering
-   * =========================== */
   async generateReport(reportId, tenantId) {
     await this.init();
     try {
       const reportData = await this.fetchReportData(reportId, tenantId);
       const settings = await this.loadCompanySettings(tenantId);
       const processed = await this.processAirTechData(reportData);
+      
+      console.log('📊 BEFORE INLINE IMAGES:');
+      if (processed.avvik?.length) {
+        processed.avvik.forEach((a, i) => {
+          console.log(`  - Avvik ${i+1} (ID: ${a.avvik_id}): ${a.images?.length || 0} bilder`);
+        });
+      }
 
-      // Inline all images to base64
       await this.inlineAllImages(processed);
-
+      
       const html = this.generateHTML(processed, settings);
       await this.debugSaveHTML(html, reportId);
+      
       const pdfBuffer = await this.generatePDF(html);
-      
-      // UPLOAD til GCS - KUN DETTE
       const relativePath = await this.uploadToGCS(tenantId, pdfBuffer, reportId, reportData.order_id);
-      
-      // OPPDATER database med URL
       await this.updateReportPDFPath(reportId, relativePath, tenantId);
       
       return relativePath;
