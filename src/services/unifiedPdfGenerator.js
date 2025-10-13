@@ -70,25 +70,87 @@ class UnifiedPDFGenerator {
    * Company settings (logo / info)
    * =========================== */
   async loadCompanySettings(tenantId) {
-    const defaults = {
-      company: {
-        name: 'Air-Tech AS', address: 'Stanseveien 18, 0975 Oslo', phone: '+47 91 52 40 40',
-        email: 'post@air-tech.no', orgnr: '889 558 652', website: 'www.air-tech.no',
-      },
-      logoBase64: null,
-    };
-    if (!this.bucket) return defaults;
-    try {
-      const candidate = `tenants/${tenantId}/assets/logo.png`;
-      const file = this.bucket.file(candidate);
-      const [exists] = await file.exists();
-      if (exists) {
-        const [buf] = await file.download();
-        defaults.logoBase64 = `data:image/png;base64,${buf.toString('base64')}`;
-      }
-    } catch (e) { /* ignorer */ }
+  console.log(`🔧 Loading company settings from JSON for tenant: ${tenantId}`);
+  
+  // Default settings
+  const defaults = {
+    company: {
+      name: 'Air-Tech AS',
+      address: 'Stanseveien 18, 0975 Oslo',
+      phone: '+47 91 52 40 40',
+      email: 'post@air-tech.no',
+      orgnr: '889 558 652',
+      website: 'www.air-tech.no',
+    },
+    logoBase64: null,
+  };
+
+  if (!this.bucket) {
+    console.warn('⚠️ No GCS bucket, using defaults');
     return defaults;
   }
+
+  try {
+    // Last settings.json fra GCS
+    const settingsPath = `tenants/${tenantId}/assets/settings.json`;
+    const settingsFile = this.bucket.file(settingsPath);
+    const [settingsExists] = await settingsFile.exists();
+    
+    let settings = {};
+    if (settingsExists) {
+      const [contents] = await settingsFile.download();
+      settings = JSON.parse(contents.toString());
+      console.log('✅ Settings loaded from GCS JSON');
+      
+      // Oppdater company-info fra settings.json
+      if (settings.companyInfo) {
+        defaults.company = {
+          name: settings.companyInfo.name || defaults.company.name,
+          address: settings.companyInfo.address || defaults.company.address,
+          phone: settings.companyInfo.phone || defaults.company.phone,
+          email: settings.companyInfo.email || defaults.company.email,
+          orgnr: settings.companyInfo.cvr || defaults.company.orgnr,
+          website: defaults.company.website,
+        };
+        console.log('✅ Company info loaded from settings:', defaults.company);
+      }
+    } else {
+      console.log('ℹ️ No settings file found, using defaults');
+    }
+    
+    // Last logo hvis det finnes
+    if (settings.logo && settings.logo.url) {
+      try {
+        console.log(`📥 Attempting to load logo from: ${settings.logo.url}`);
+        
+        const bucketName = this.bucket.name;
+        const logoPath = settings.logo.url.replace(`https://storage.googleapis.com/${bucketName}/`, '');
+        const logoFile = this.bucket.file(logoPath);
+        const [logoExists] = await logoFile.exists();
+        
+        if (logoExists) {
+          const [logoBuffer] = await logoFile.download();
+          const logoExtension = logoPath.split('.').pop().toLowerCase();
+          const mimeType = logoExtension === 'png' ? 'image/png' : 'image/jpeg';
+          defaults.logoBase64 = `data:${mimeType};base64,${logoBuffer.toString('base64')}`;
+          console.log('✅ Logo loaded and converted to base64');
+        } else {
+          console.warn('⚠️ Logo file does not exist in GCS:', logoPath);
+        }
+      } catch (logoError) {
+        console.error('❌ Error loading logo:', logoError.message);
+      }
+    } else {
+      console.log('ℹ️ No logo URL in settings');
+    }
+    
+    return defaults;
+    
+  } catch (error) {
+    console.error('❌ Error loading settings:', error.message);
+    return defaults;
+  }
+}
 
   /* ===========================
    * DB Fetch
@@ -377,7 +439,6 @@ class UnifiedPDFGenerator {
       const rows = section.checkpoints.map(cp => {
         const statusClass = `status-${(cp.status || '').toLowerCase()}`;
         
-        // Bygg HTML for bilder (hvis de finnes)
         const imagesHtml = (cp.images && cp.images.length > 0) ? `
           <div class="checklist-images">
             <div class="images-grid-inline">
@@ -389,11 +450,12 @@ class UnifiedPDFGenerator {
             </div>
           </div>` : '';
 
-        // Returner én enkelt rad med tekst og bilder i siste celle
         return `
           <tr>
             <td>${this.escapeHtml(cp.name)}</td>
-            <td class="status-cell ${statusClass}">${this.escapeHtml(cp.status)}</td>
+            <td class="status-cell">
+              <span class="status-badge ${statusClass}">${this.escapeHtml(cp.status)}</span>
+            </td>
             <td class="merknad-cell">
               <div class="merknad-text">${this.escapeHtml(cp.comment || '')}</div>
               ${imagesHtml}
@@ -473,15 +535,26 @@ class UnifiedPDFGenerator {
     }).filter(Boolean).join('');
 
     if (!equipmentSections) return '';
-    return `<section class="section"><h2 class="section-header">Oppsummering og utførte arbeider</h2>${equipmentSections}</section>`;
+    return `<section class="section avoid-break"><h2 class="section-header">Oppsummering og utførte arbeider</h2>${equipmentSections}</section>`;
   }
 
-  generateSignSection(settings) {
+  generateSignSection(data, settings) {
+    const technician = data.technician_name || 'Ukjent tekniker';
+    const reportDate = new Date(data.completed_at || data.created_at).toLocaleDateString('nb-NO');
+
     return `
       <section class="section sign-section avoid-break">
-        <h2 class="section-header">Signatur</h2>
-        <div class="sign-row"><div class="sign-block"><div class="sign-line"></div><div class="sign-label">Tekniker</div></div><div class="sign-block"><div class="sign-line"></div><div class="sign-label">Kunde</div></div></div>
         <p class="closing">Med vennlig hilsen<br><strong>${this.escapeHtml((settings.company || {}).name || 'Air-Tech AS')}</strong></p>
+        
+        <div class="signature-details">
+          <div class="technician-info">
+            ${this.escapeHtml(technician)}<br>
+            Servicetekniker
+          </div>
+          <div class="location-date">
+            Oslo, ${reportDate}
+          </div>
+        </div>
       </section>`;
   }
 
@@ -492,8 +565,8 @@ class UnifiedPDFGenerator {
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; box-sizing: border-box; }
       .header-container { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0B5FAE; padding-bottom: 8px; margin-bottom: 10px; }
       .header-text { flex-grow: 1; }
-      .header-logo { width: 80px; height: auto; max-height: 40px; object-fit: contain; margin-left: 20px; }
-      .main-title { font-size: 19pt; margin: 0 0 4px 0; color:#0B5FAE; }
+      
+      .main-title { font-size: 24pt; margin: 0 0 4px 0; color:#0B5FAE; }
       .report-id { color:#374151; margin: 0; font-size: 10pt; }
       .section { margin-top: 16px; }
       .section-header { font-size: 13pt; margin: 0 0 8px 0; color:#0B5FAE; border-bottom:1px solid #0B5FAE; padding-bottom: 4px; }
@@ -522,10 +595,14 @@ class UnifiedPDFGenerator {
       .info-cell .label { font-size: 8pt; color: #6c757d; text-transform: uppercase; margin-bottom: 2px; }
       .info-cell .data { font-size: 10pt; font-weight: 600; color: #212529; }
       table.styled-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
-      table.styled-table th, table.styled-table td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: top; }
+      table.styled-table th, table.styled-table td { padding: 8px 10px; text-align: left; vertical-align: top; } /* Fjernet border-bottom */
+      table.styled-table tr { border-bottom: 1px solid #e5e7eb; } /* Lagt til border på raden */
       table.styled-table thead tr { background: #f3f4f6; font-size: 9.5pt; }
       .status-cell { font-weight: 600; text-transform: uppercase; text-align:center; }
-      .status-ok { color:#059669; } .status-byttet { color:#0369a1; } .status-avvik { color:#dc2626; background: #fee2e2; } .status-na { color:#6b7280; }
+      .status-ok { color:#059669; } .status-byttet { color:#0369a1; } .status-avvik { color:#dc2626; } .status-na { color:#6b7280; }
+      .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-weight: 600; min-width: 60px; text-align: center; }
+      .status-badge.status-byttet { background-color: #e0f2fe; color: #0369a1; }
+      .status-badge.status-avvik { background-color: #fee2e2; color: #b91c1c; }
       .avvik-section .section-header { color: #dc2626; border-bottom-color: #dc2626; }
       .avvik-table thead { background:#fee2e2; }
       .avvik-table tbody tr { background: #fff7f7; }
@@ -573,12 +650,24 @@ class UnifiedPDFGenerator {
       .photos-grid { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
       .photo-container { display: inline-block; max-width: 140px; }
       .photo { max-width: 140px; max-height: 95px; object-fit: contain; border: 2px solid #e2e8f0; border-radius: 4px; }
-      .sign-section { margin-top: 25px; }
-      .sign-section .sign-row { display:flex; gap:40px; margin-top: 15px; }
-      .sign-section .sign-block { flex:1; }
-      .sign-section .sign-line { border-bottom:1px solid #9ca3af; height:45px; margin-bottom:6px; }
-      .sign-section .sign-label { color:#6b7280; font-size:10pt; }
-      .closing { margin-top:20px; }
+      /* === SIGNATUR-SEKSJON (NY) === */
+      .sign-section {
+        margin-top: 50px; /* Mer luft over */
+        border-top: 1px solid #0B5FAE; /* Tynn blå linje over */
+        padding-top: 20px;
+      }
+      .closing {
+        margin-bottom: 25px;
+        line-height: 1.5;
+      }
+      .signature-details {
+        display: flex;
+        justify-content: space-between; /* Plasserer elementer på hver sin side */
+        align-items: flex-end; /* Justerer bunnen av tekstblokkene */
+        font-size: 10pt;
+        color: #374151;
+        line-height: 1.5;
+      }
       table.styled-table th:nth-child(1) { width: 50%; }
       table.styled-table th:nth-child(2) { width: 15%; text-align: center; }
       table.styled-table th:nth-child(3) { width: 35%; }
@@ -603,28 +692,74 @@ class UnifiedPDFGenerator {
     return match?.email || customerData.email || '';
   }
 
-  getOrderLocationFromCustomer(customerData) {
-    const post = customerData?.post_address || {};
-    const loc = customerData?.location || {};
+  getOrderLocationFromCustomer(customerData, equipmentLocation) {
+    console.log('🔍 DEBUG Location Data:', JSON.stringify({
+      hasCustomerData: !!customerData,
+      customerDataKeys: customerData ? Object.keys(customerData) : [],
+      physicalAddress: customerData?.physicalAddress,
+      post_address: customerData?.post_address,
+      equipmentLocation: equipmentLocation,
+      fullCustomerData: customerData
+    }, null, 2));
+    // Prioriter:
+    // 1. equipment.location (byggnavn) - fra equipment-tabellen
+    // 2. physicalAddress fra Tripletex (via customerData)
+    // 3. Fallback til post_address
+    
+    const physicalAddress = customerData?.physicalAddress || '';
+    const postAddress = customerData?.post_address || {};
+    
+    // Parse physicalAddress hvis det finnes (format: "Adresse, PostnrBy")
+    let address = '';
+    let postalCode = '';
+    
+    if (physicalAddress) {
+      // Split på komma for å separere adresse og postnr/by
+      const parts = physicalAddress.split(',').map(p => p.trim());
+      if (parts.length >= 2) {
+        address = parts[0];
+        // Siste del inneholder postnr og by
+        const postalPart = parts[parts.length - 1];
+        // Ekstraher postnummer (4 siffer i starten)
+        const postalMatch = postalPart.match(/^(\d{4})\s+(.+)$/);
+        if (postalMatch) {
+          postalCode = `${postalMatch[1]} ${postalMatch[2]}`;
+        } else {
+          postalCode = postalPart;
+        }
+      } else {
+        address = physicalAddress;
+      }
+    } else {
+      // Fallback til post_address struktur
+      address = postAddress.addressLine1 || '';
+      postalCode = postAddress.postalCode ? 
+        `${postAddress.postalCode} ${postAddress.city || ''}`.trim() : '';
+    }
+    
     return {
-      buildingName: loc.name || '', address: post.addressLine1 || '',
-      postalCode: post.postalCode || '',
+      buildingName: equipmentLocation || customerData?.location?.name || '',
+      address: address,
+      postalCode: postalCode,
     };
   }
 
   generateHTML(data, settings) {
     const theme = this.getReportTheme(data.equipment_type);
-    const logoTag = settings.logoBase64 ? `<img src="${settings.logoBase64}" alt="logo" class="header-logo"/>` : '';
+    const logoTag = ''; // Logo er nå i headerTemplate i stedet
     const customerName = data.customer_name || '';
     const recipient = this.getRecipientFromCustomerData(data.customer_data);
-    const where = this.getOrderLocationFromCustomer(data.customer_data);
+    const where = this.getOrderLocationFromCustomer(data.customer_data, data.equipment_location);
+
+    console.log('🔍 DEBUG Where Result:', JSON.stringify(where, null, 2));
+    console.log('🔍 DEBUG Full data.customer_data:', JSON.stringify(data.customer_data, null, 2));
     const technician = data.technician_name || 'Ukjent tekniker';
 
     const equipmentOverview = this.renderEquipmentOverviewTable(data);
     const avvikTable = this.renderAvvikTable(data);
     const summarySection = this.generateSummarySection(data, settings);
     const checklistSections = this.renderChecklistResults(data);
-    const signSection = this.generateSignSection(settings);
+    const signSection = this.generateSignSection(data, settings);
 
     return `
       <!DOCTYPE html><html lang="no"><head><meta charset="utf-8"/>
@@ -638,7 +773,7 @@ class UnifiedPDFGenerator {
             Ordre ${this.escapeHtml(data.order_number || '')} • ${new Date(data.completed_at || data.created_at).toLocaleDateString('nb-NO')}
           </p>
         </div>
-        ${logoTag}
+
       </header>
 
       <section class="section avoid-break">
@@ -659,7 +794,6 @@ class UnifiedPDFGenerator {
               <td><div class="info-cell"><div class="label">Adresse</div><div class="data">${this.escapeHtml(where.address || 'Ikke spesifisert')}</div></div></td>
               <td><div class="info-cell"><div class="label">Post nr. / Poststed</div><div class="data">${this.escapeHtml(where.postalCode || 'Ikke spesifisert')}</div></div></td>
             </tr>
-            {/* Den separerte raden med en egen klasse */}
             <tr class="meta-row">
               <td><div class="info-cell"><div class="label">Rapport dato</div><div class="data">${new Date(data.completed_at || data.created_at).toLocaleDateString('nb-NO')}</div></div></td>
               <td><div class="info-cell"><div class="label">Utført av</div><div class="data">${this.escapeHtml(technician)}</div></div></td>
@@ -670,11 +804,11 @@ class UnifiedPDFGenerator {
       </section>
         <section class="section"><p>Servicearbeidet som ble avtalt for de angitte anleggene er nå fullført i tråd med avtalen. I henhold til vår serviceavtale oversender vi en servicerapport etter fullført servicebesøk.</p></section>
         ${equipmentOverview}
-        // ${avvikTable} // Fjernet for å unngå duplisering
+        ${avvikTable}
         ${summarySection}
         <div class="page-break"></div>
-        <section class="section">
-          <h2 class="section-header">Detaljerte sjekkpunkter og resultater</h2>
+        <section class="section avoid-break">
+          <h2 class="section-header">Sjekkpunkter og resultater</h2>
           ${checklistSections}
         </section>
         ${signSection}
@@ -684,17 +818,55 @@ class UnifiedPDFGenerator {
   /* ===========================
    * PDF / Upload / Orkestrering
    * =========================== */
-  async generatePDF(html) {
+  async generatePDF(html, settings) {
     if (!this.browser) throw new Error('Browser not initialized');
     const page = await this.browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 45000 });
     await page.emulateMediaType('print');
+    
+    // Bruk settings i stedet for hardkodede verdier
+    const company = settings.company || {
+      name: 'Air-Tech AS',
+      address: 'Stanseveien 18, 0975 Oslo',
+      phone: '+47 91 52 40 40',
+      email: 'post@air-tech.no',
+      orgnr: '889 558 652',
+      website: 'www.air-tech.no'
+    };
+
+    const footerTemplate = `
+      <div style="width: 100%; font-size: 9px; color: #374151; padding: 10px 40px 0; border-top: 1px solid #c7c7c7; display: flex; justify-content: space-between;">
+        <div style="text-align: left;">
+          <strong>${company.name}</strong><br>
+          ${company.address}<br>
+          <a href="https://${company.website}" style="color: #374151; text-decoration: none;">${company.website}</a>
+        </div>
+        <div style="text-align: left;">
+          Telefon: ${company.phone}<br>
+          Epost: ${company.email}<br>
+          Org.nr: ${company.orgnr}
+        </div>
+        <div style="text-align: right; align-self: flex-end;">
+          Side <span class="pageNumber"></span> av <span class="totalPages"></span>
+        </div>
+      </div>
+    `;
+
     const pdfBuffer = await page.pdf({
       format: 'A4', printBackground: true, displayHeaderFooter: true,
-      headerTemplate: '<span></span>',
-      footerTemplate: `<div style="font-size:9px; color:#4b5563; width:100%; text-align:center;">Side <span class="pageNumber"></span> av <span class="totalPages"></span></div>`,
-      margin: { top: '20mm', right: '15mm', bottom: '22mm', left: '15mm' }
+      headerTemplate: `
+  <div style="width: 100%; padding: 0 40px;">
+    ${settings.logoBase64 ? `
+      <img src="${settings.logoBase64}" 
+           alt="logo" 
+           style="position: absolute; top: 8mm; right: 15mm; width: 120px; height: auto; max-height: 60px;" />
+    ` : ''}
+  </div>
+`,
+      footerTemplate: footerTemplate,
+      margin: { top: '20mm', right: '15mm', bottom: '28mm', left: '15mm' } // Økt bunnmarg for å få plass til footer
     });
+
     await page.close();
     return pdfBuffer;
   }
@@ -753,7 +925,7 @@ class UnifiedPDFGenerator {
       const html = this.generateHTML(processed, settings);
       await this.debugSaveHTML(html, reportId);
       
-      const pdfBuffer = await this.generatePDF(html);
+      const pdfBuffer = await this.generatePDF(html, settings);
       const relativePath = await this.uploadToGCS(tenantId, pdfBuffer, reportId, reportData.order_id);
       await this.updateReportPDFPath(reportId, relativePath, tenantId);
       

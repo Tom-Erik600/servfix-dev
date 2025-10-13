@@ -598,7 +598,7 @@ router.get('/service-report/:reportId/preview', async (req, res) => {
     const reportData = await pdfGenerator.fetchReportData(reportId, tenantId);
     const companySettings = await pdfGenerator.loadCompanySettings(tenantId);
     const html = await pdfGenerator.generateHTML(reportData, companySettings);
-    const pdfBuffer = await pdfGenerator.generatePDF(html);
+    const pdfBuffer = await pdfGenerator.generatePDF(html, companySettings);
     await pdfGenerator.close();
     
     res.setHeader('Content-Type', 'application/pdf');
