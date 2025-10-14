@@ -550,7 +550,7 @@ const workHtml = (data.additional_work && data.additional_work.length > 0) ? thi
       // ==================================================
 
       return `
-        <div class="checklist-section avoid-break">
+        <div class="checklist-section">
           <h3 class="checklist-section-header">${this.escapeHtml(section.name)}</h3>
           <table class="styled-table">
             <thead>
@@ -1047,10 +1047,8 @@ renderWorkTable(work) {
         
         ${checklistSections ? `
         <div class="page-break"></div>
-        <section class="section">
-          <h2 class="section-header">Sjekkpunkter og detaljer</h2>
-          ${checklistSections}
-        </section>
+        <h2 class="section-header" style="margin-top: 0;">Sjekkpunkter og detaljer</h2>
+        ${checklistSections}
         ` : ''}
         
         ${summarySection ? '<div class="page-break"></div>' : ''}

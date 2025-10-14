@@ -1026,6 +1026,29 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+/* Sørg for at alle moderne knapper har riktig avrunding */
+.btn-modern {
+    border-radius: 8px !important;
+}
+
+/* Spesifikk styling for action-buttons-modern container */
+.action-buttons-modern {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.action-buttons-modern .btn-modern {
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
 .btn-icon {
     font-size: 16px;
 }

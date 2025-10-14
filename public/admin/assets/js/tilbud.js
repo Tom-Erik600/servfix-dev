@@ -151,7 +151,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <button class="btn-modern btn-preview" onclick="generateQuotePDF('${quote.id}')">
                     📄 Forhåndsvisning
                 </button>
-                <button class="btn-modern btn-edit" onclick="editQuote('${quote.id}')">
+                <button class="btn-modern btn-edit-orange" onclick="editQuote('${quote.id}')">
                     ✏️ Rediger
                 </button>
                 ${quote.status === 'pending' || quote.status === 'rejected' ? `
