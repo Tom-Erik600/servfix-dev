@@ -190,6 +190,17 @@ class UnifiedPDFGenerator {
     row.customer_data = this.safeJsonParse(row.customer_data, {});
     row.checklist_data = this.safeJsonParse(row.checklist_data, {});
     row.photos = this.safeJsonParse(row.photos, []) || [];
+    row.products_used = this.safeJsonParse(row.products_used, []) || [];
+    row.additional_work = this.safeJsonParse(row.additional_work, []) || [];
+    console.log('Products from DB:', row.products_used.length);
+    console.log('Work from DB:', row.additional_work.length);
+    
+    // ✅ LEGG TIL: Parse products og additional work fra database-kolonner
+    row.products_used = this.safeJsonParse(row.products_used, []) || [];
+    row.additional_work = this.safeJsonParse(row.additional_work, []) || [];
+
+    console.log('📦 Products from DB:', row.products_used.length, 'items');
+    console.log('🔧 Additional work from DB:', row.additional_work.length, 'items');
     row.all_reports = (row.all_reports || []).map(r => ({
       ...r,
       checklist_data: this.safeJsonParse(r.checklist_data, {}),
@@ -397,8 +408,9 @@ class UnifiedPDFGenerator {
     const primaryReportData = data.checklist_data || (data.all_reports && data.all_reports[0]?.checklist_data);
     if (primaryReportData) {
       data.overallComment = primaryReportData.overallComment;
-      data.products = primaryReportData.products;
-      data.additionalWork = primaryReportData.additionalWork;
+      // IKKE overskriv fra checklist_data, men bruk data fra DB
+      // data.products = primaryReportData.products;
+      // data.additionalWork = primaryReportData.additionalWork;
     }
 
     return { ...data, ...result };
@@ -597,68 +609,39 @@ renderDriftSchedule(schedule) {
     </div>`;
 }
 
-  groupDataByEquipment(data) {
-    const equipmentGroups = {};
-    (data.all_reports || []).forEach(report => {
-      const key = report.report_id;
-      if (!equipmentGroups[key]) {
-        equipmentGroups[key] = {
-          name: report.equipment_name || 'Ukjent anlegg',
-          systemNummer: report.system_nummer || 'N/A',
-          overallComment: '', 
-          products: [], 
-          additionalWork: [],
-          avvik: [], 
-          photos: [],
-        };
-      }
-      const group = equipmentGroups[key];
-      const checklistData = report.checklist_data || {};
-      
-      // ✅ RETT: Bruk camelCase (som frontend bruker)
-      if (checklistData.overallComment) group.overallComment = checklistData.overallComment;
-      if (checklistData.products) group.products = checklistData.products;
-      if (checklistData.additionalWork) group.additionalWork = checklistData.additionalWork;
-      
-      // ❌ FEIL: Dette var snake_case før:
-      // if (checklistData.overall_comment) group.overallComment = checklistData.overall_comment;
-      // if (checklistData.products_used) group.products = checklistData.products_used;
-      // if (checklistData.additional_work) group.additionalWork = checklistData.additional_work;
-      
-      if (report.photos) group.photos = report.photos.map(url => 
-        typeof url === 'string' ? { url, caption: '' } : url
-      );
-    });
-    
-    return Object.values(equipmentGroups);
-  }
-
   generateSummarySection(data, settings) {
-    const equipmentGroups = this.groupDataByEquipment(data);
-    if (equipmentGroups.length === 0) return '';
+    // Endret: Bruker nå data direkte fra rapporten (products_used, additional_work)
+    const hasContent = data.overallComment || 
+                     (data.products_used && data.products_used.length > 0) || 
+                     (data.additional_work && data.additional_work.length > 0) || 
+                     (data.documentation_photos && data.documentation_photos.length > 0);
 
-    const equipmentSections = equipmentGroups.map(group => {
-      // Endret: Sjekker ikke lenger for avvik for å avgjøre om seksjonen skal vises
-      const hasContent = group.overallComment || group.products.length > 0 || group.additionalWork.length > 0 || group.photos.length > 0;
-      if (!hasContent) return '';
+    if (!hasContent) return '';
 
-      const commentHtml = group.overallComment ? `<p class="equipment-comment">${this.escapeHtml(group.overallComment)}</p>` : '';
-      const productsHtml = group.products.length > 0 ? `<h4>Produkter brukt:</h4><ul>${group.products.map(p => `<li>${this.escapeHtml(p.name || '')} (${this.escapeHtml(p.quantity || '')})</li>`).join('')}</ul>` : '';
-      const workHtml = group.additionalWork.length > 0 ? `<h4>Utførte tilleggsarbeider:</h4><ul>${group.additionalWork.map(w => `<li>${this.escapeHtml(w.description || '')}</li>`).join('')}</ul>` : '';
+    const commentHtml = data.overallComment ? `<p class="equipment-comment">${this.escapeHtml(data.overallComment)}</p>` : '';
+    
+    const productsHtml = (data.products_used && data.products_used.length > 0) 
+      ? `<h4>Produkter brukt:</h4><ul>${data.products_used.map(p => `<li>${this.escapeHtml(p.name || '')} (${this.escapeHtml(p.quantity || '1')})</li>`).join('')}</ul>` 
+      : '';
       
-      // Fjernet: 'avvikHtml'-blokken er borte
-      
-      const photosHtml = group.photos.length > 0 ? `<h4>Dokumentasjonsbilder:</h4><div class="photos-grid">${group.photos.map(photo => `<div class="photo-container"><img src="${photo.url}" class="photo" alt="${this.escapeHtml(photo.caption || 'Bilde')}"/></div>`).join('')}</div>` : '';
+    const workHtml = (data.additional_work && data.additional_work.length > 0) 
+      ? `<h4>Utførte tilleggsarbeider:</h4><ul>${data.additional_work.map(w => `<li>${this.escapeHtml(w.description || '')}</li>`).join('')}</ul>` 
+      : '';
+    
+    const photosHtml = (data.documentation_photos && data.documentation_photos.length > 0) 
+      ? `<h4>Dokumentasjonsbilder:</h4><div class="photos-grid">${data.documentation_photos.map(photo => `<div class="photo-container"><img src="${photo.url}" class="photo" alt="${this.escapeHtml(photo.caption || 'Bilde')}"/></div>`).join('')}</div>` 
+      : '';
 
-      return `
-        <div class="equipment-summary avoid-break">
-          <h3 class="equipment-header">${this.escapeHtml(group.name)} <span class="system-number">(System: ${this.escapeHtml(group.systemNummer)})</span></h3>
-          ${commentHtml}${productsHtml}${workHtml}${photosHtml}
-        </div>`;
-    }).filter(Boolean).join('');
+    // Endret: Returnerer én enkelt oppsummeringsseksjon, ikke lenger gruppert per utstyr
+    const summaryContent = `
+      <div class="equipment-summary avoid-break">
+        ${commentHtml}
+        ${productsHtml}
+        ${workHtml}
+        ${photosHtml}
+      </div>`;
 
-    if (!equipmentSections) return '';
-    return `<section class="section avoid-break"><h2 class="section-header">Oppsummering og utførte arbeider</h2>${equipmentSections}</section>`;
+    return `<section class="section"><h2 class="section-header">Oppsummering og utførte arbeider</h2>${summaryContent}</section>`;
   }
 
   generateSignSection(data, settings) {
@@ -983,7 +966,7 @@ renderDriftSchedule(schedule) {
         ${avvikTable}
         ${signSection}
         
-        <section class="section avoid-break">
+        <section class="section">
           <h2 class="section-header">Sjekkpunkter og detaljer</h2>
           ${checklistSections}
         </section>
