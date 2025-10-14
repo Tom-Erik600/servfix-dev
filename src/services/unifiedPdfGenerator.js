@@ -160,6 +160,7 @@ class UnifiedPDFGenerator {
     const q = `
       SELECT 
         sr.id, sr.order_id, sr.equipment_id, sr.checklist_data, sr.photos,
+        sr.products_used, sr.additional_work,
         sr.status, sr.completed_at, sr.created_at,
         o.id AS order_number, o.customer_name, o.customer_data, o.scheduled_date AS service_date,
         e.systemnavn AS equipment_name, e.systemtype AS equipment_type, e.location AS equipment_location, e.systemnummer AS equipment_serial,
@@ -190,12 +191,7 @@ class UnifiedPDFGenerator {
     row.customer_data = this.safeJsonParse(row.customer_data, {});
     row.checklist_data = this.safeJsonParse(row.checklist_data, {});
     row.photos = this.safeJsonParse(row.photos, []) || [];
-    row.products_used = this.safeJsonParse(row.products_used, []) || [];
-    row.additional_work = this.safeJsonParse(row.additional_work, []) || [];
-    console.log('Products from DB:', row.products_used.length);
-    console.log('Work from DB:', row.additional_work.length);
-    
-    // ✅ LEGG TIL: Parse products og additional work fra database-kolonner
+    // Parse products og additional work fra database-kolonner
     row.products_used = this.safeJsonParse(row.products_used, []) || [];
     row.additional_work = this.safeJsonParse(row.additional_work, []) || [];
 
@@ -407,11 +403,19 @@ class UnifiedPDFGenerator {
     // ==================================================================
     const primaryReportData = data.checklist_data || (data.all_reports && data.all_reports[0]?.checklist_data);
     if (primaryReportData) {
-      data.overallComment = primaryReportData.overallComment;
-      // IKKE overskriv fra checklist_data, men bruk data fra DB
-      // data.products = primaryReportData.products;
-      // data.additionalWork = primaryReportData.additionalWork;
+      data.overallComment = primaryReportData.overallComment || '';
     }
+
+    // Bruk alltid row-level products_used og additional_work (ikke fra checklist_data)
+    data.products_used = data.products_used || [];
+    data.additional_work = data.additional_work || [];
+
+    console.log('🔍 processAirTechData - Final data check:', {
+      hasProducts: data.products_used.length > 0,
+      hasWork: data.additional_work.length > 0,
+      productCount: data.products_used.length,
+      workCount: data.additional_work.length
+    });
 
     return { ...data, ...result };
   }
@@ -541,6 +545,8 @@ class UnifiedPDFGenerator {
 
       // ============ NYT TILLEGG: DRIFTSTIDER =============
       const driftScheduleHtml = section.driftSchedule ? this.renderDriftSchedule(section.driftSchedule) : '';
+const productsHtml = (data.products_used && data.products_used.length > 0) ? this.renderProductsTable(data.products_used) : '';
+const workHtml = (data.additional_work && data.additional_work.length > 0) ? this.renderWorkTable(data.additional_work) : '';
       // ==================================================
 
       return `
@@ -557,6 +563,8 @@ class UnifiedPDFGenerator {
             <tbody>${rows}</tbody>
           </table>
           ${driftScheduleHtml}
+${productsHtml}
+${workHtml}
         </div>`;
     }).join('');
   }
@@ -609,40 +617,93 @@ renderDriftSchedule(schedule) {
     </div>`;
 }
 
+renderProductsTable(products) {
+  if (!products || products.length === 0) return '';
+  
+  const rows = products.map(p => `
+    <tr>
+      <td>${this.escapeHtml(p.name || '')}</td>
+      <td style="text-align: center;">${this.escapeHtml(String(p.quantity || '1'))}</td>
+      <td style="text-align: right;">${p.price ? `kr ${p.price.toLocaleString('nb-NO')}` : '-'}</td>
+      <td style="text-align: right;">${p.total ? `kr ${p.total.toLocaleString('nb-NO')}` : '-'}</td>
+    </tr>
+  `).join('');
+  
+  return `
+    <div style="margin-top: 20px;">
+      <h4 style="color: #0B5FAE; font-size: 11pt; margin-bottom: 10px;">Produkter brukt</h4>
+      <table class="styled-table products-table">
+        <thead>
+          <tr>
+            <th style="width: 50%;">Produkt</th>
+            <th style="width: 10%; text-align: center;">Antall</th>
+            <th style="width: 20%; text-align: right;">Pris</th>
+            <th style="width: 20%; text-align: right;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+renderWorkTable(work) {
+  if (!work || work.length === 0) return '';
+  
+  const rows = work.map(w => `
+    <tr>
+      <td>${this.escapeHtml(w.description || '')}</td>
+      <td style="text-align: center;">${this.escapeHtml(String(w.hours || '-'))}</td>
+      <td style="text-align: right;">${w.price ? `kr ${w.price.toLocaleString('nb-NO')}` : '-'}</td>
+      <td style="text-align: right;">${w.total ? `kr ${w.total.toLocaleString('nb-NO')}` : '-'}</td>
+    </tr>
+  `).join('');
+  
+  return `
+    <div style="margin-top: 20px;">
+      <h4 style="color: #0B5FAE; font-size: 11pt; margin-bottom: 10px;">Utførte tilleggsarbeider</h4>
+      <table class="styled-table work-table">
+        <thead>
+          <tr>
+            <th style="width: 50%;">Beskrivelse</th>
+            <th style="width: 10%; text-align: center;">Timer</th>
+            <th style="width: 20%; text-align: right;">Timepris</th>
+            <th style="width: 20%; text-align: right;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    </div>`;
+}
+
   generateSummarySection(data, settings) {
-    // Endret: Bruker nå data direkte fra rapporten (products_used, additional_work)
-    const hasContent = data.overallComment || 
-                     (data.products_used && data.products_used.length > 0) || 
-                     (data.additional_work && data.additional_work.length > 0) || 
+  const hasContent = data.overallComment || 
                      (data.documentation_photos && data.documentation_photos.length > 0);
 
-    if (!hasContent) return '';
+  if (!hasContent) return '';
 
-    const commentHtml = data.overallComment ? `<p class="equipment-comment">${this.escapeHtml(data.overallComment)}</p>` : '';
-    
-    const productsHtml = (data.products_used && data.products_used.length > 0) 
-      ? `<h4>Produkter brukt:</h4><ul>${data.products_used.map(p => `<li>${this.escapeHtml(p.name || '')} (${this.escapeHtml(p.quantity || '1')})</li>`).join('')}</ul>` 
-      : '';
-      
-    const workHtml = (data.additional_work && data.additional_work.length > 0) 
-      ? `<h4>Utførte tilleggsarbeider:</h4><ul>${data.additional_work.map(w => `<li>${this.escapeHtml(w.description || '')}</li>`).join('')}</ul>` 
-      : '';
-    
-    const photosHtml = (data.documentation_photos && data.documentation_photos.length > 0) 
-      ? `<h4>Dokumentasjonsbilder:</h4><div class="photos-grid">${data.documentation_photos.map(photo => `<div class="photo-container"><img src="${photo.url}" class="photo" alt="${this.escapeHtml(photo.caption || 'Bilde')}"/></div>`).join('')}</div>` 
-      : '';
+  const commentHtml = data.overallComment 
+    ? `<p style="margin: 0 0 20px 0; line-height: 1.6;">${this.escapeHtml(data.overallComment)}</p>` 
+    : '';
+  
+  const photosHtml = (data.documentation_photos && data.documentation_photos.length > 0) 
+    ? `<div class="photos-grid">${data.documentation_photos.map(photo => 
+        `<div class="photo-container">
+          <img src="${photo.url}" class="photo" alt="${this.escapeHtml(photo.caption || 'Bilde')}"/>
+        </div>`
+      ).join('')}</div>` 
+    : '';
 
-    // Endret: Returnerer én enkelt oppsummeringsseksjon, ikke lenger gruppert per utstyr
-    const summaryContent = `
-      <div class="equipment-summary avoid-break">
-        ${commentHtml}
-        ${productsHtml}
-        ${workHtml}
-        ${photosHtml}
-      </div>`;
-
-    return `<section class="section"><h2 class="section-header">Oppsummering og utførte arbeider</h2>${summaryContent}</section>`;
-  }
+  return `
+    <section class="section">
+      <h2 class="section-header">Oppsummering og utførte arbeider</h2>
+      ${commentHtml}
+      ${photosHtml}
+    </section>`;
+}
 
   generateSignSection(data, settings) {
     const technician = data.technician_name || 'Ukjent tekniker';
@@ -791,7 +852,25 @@ renderDriftSchedule(schedule) {
 .avvik-table th:nth-child(3) { width: 20%; }  /* Komponent */
 .avvik-table th:nth-child(4) { width: 10%; }  /* Status */
 .avvik-table th:nth-child(5) { width: 49%; }  /* Kommentar - økt fra ~40% */
-      .equipment-summary { margin: 20px 0; padding: 15px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fafafa; }
+      .equipment-summary { margin: 20px 0; }
+
+/* Produkter tabell */
+.products-table th:nth-child(1) { width: 50%; }
+.products-table th:nth-child(2) { width: 10%; text-align: center; }
+.products-table th:nth-child(3) { width: 20%; text-align: right; }
+.products-table th:nth-child(4) { width: 20%; text-align: right; }
+.products-table td:nth-child(2) { text-align: center; }
+.products-table td:nth-child(3) { text-align: right; }
+.products-table td:nth-child(4) { text-align: right; }
+
+/* Arbeid tabell */
+.work-table th:nth-child(1) { width: 50%; }
+.work-table th:nth-child(2) { width: 10%; text-align: center; }
+.work-table th:nth-child(3) { width: 20%; text-align: right; }
+.work-table th:nth-child(4) { width: 20%; text-align: right; }
+.work-table td:nth-child(2) { text-align: center; }
+.work-table td:nth-child(3) { text-align: right; }
+.work-table td:nth-child(4) { text-align: right; }
       .equipment-header { font-size: 14pt; color: #0B5FAE; margin: 0 0 10px 0; padding-bottom: 5px; border-bottom: 1px solid #0B5FAE; }
       .system-number { font-size: 11pt; color: #6b7280; font-weight: normal; }
       .equipment-comment { margin: 10px 0; padding: 10px; background: #fff; border-left: 3px solid #0B5FAE; font-style: italic; }
@@ -966,12 +1045,15 @@ renderDriftSchedule(schedule) {
         ${avvikTable}
         ${signSection}
         
+        ${checklistSections ? `
+        <div class="page-break"></div>
         <section class="section">
           <h2 class="section-header">Sjekkpunkter og detaljer</h2>
           ${checklistSections}
         </section>
+        ` : ''}
         
-        <div class="page-break"></div>
+        ${summarySection ? '<div class="page-break"></div>' : ''}
         
         ${summarySection}
       </div></body></html>`;
