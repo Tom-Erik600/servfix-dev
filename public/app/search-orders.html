@@ -77,12 +77,38 @@
         </div>
     </div>
 
-    <!-- Fix Lucide-problemet: bruk riktig CDN og sjekk at det laster -->
+    <!-- Auth check først - VIKTIG! -->
+    <script src="./assets/js/auth-check.js"></script>
+    <script src="./assets/js/header.js"></script>
+    
+    <!-- Deretter Lucide og app JS -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <script src="./assets/js/search-orders.js"></script>
+    
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // Vent litt for å sikre at lucide er lastet
+        // Render header med felles funksjon
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Vent på auth
+            if (window.authManager) {
+                await window.authManager.waitForInitialization();
+            }
+            
+            // Hent brukerinfo
+            const user = window.authManager?.getCurrentUser();
+            if (!user || !user.technician) {
+                console.warn('Ingen bruker funnet for header');
+                return;
+            }
+            
+            // Bruk den felles renderAppHeader funksjonen
+            await renderAppHeader({
+                backUrl: '/app/home.html',
+                subtitle: 'Søk & Ta Over Ordre',
+                technician: user.technician,
+                showDate: false  // Fjerner datoen/ikonet
+            });
+            
+            // Sørg for at lucide ikoner rendres
             setTimeout(() => {
                 if (typeof lucide !== 'undefined') {
                     lucide.createIcons();

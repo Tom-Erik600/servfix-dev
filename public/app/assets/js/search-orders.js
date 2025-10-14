@@ -211,7 +211,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const filteredOrders = getFilteredOrders();
 
         if (filteredOrders.length === 0) {
-            orderListContainer.innerHTML = `&lt;div class="placeholder-text"&gt;Ingen ordre matchet filtrene.&lt;/div&gt;`;
+            orderListContainer.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px; background: white; border-radius: 12px; border: 2px dashed #e5e7eb; margin: 20px 0;">
+                <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.3;">🔍</div>
+                <h3 style="font-size: 18px; font-weight: 600; color: #374151; margin: 0 0 8px 0;">Ingen ordre funnet</h3>
+                <p style="color: #6b7280; font-size: 14px; margin: 0;">Ingen ordre matchet de valgte filtrene. Prøv å endre søkekriteriene.</p>
+            </div>
+        `;
             return;
         }
 
@@ -235,12 +241,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const isOwnOrder = technicianId === state.currentTechnicianId;
 
-        // OPPRINNELIG DESIGN
+        // Hent adresse fra order.customer_data
+        const address = order.customer_data?.physicalAddress || 
+                       customer?.physicalAddress || 
+                       '';
+
         card.innerHTML = `
             <div class="card-main-info">
                 <div class="order-summary">
                     <h3 class="customer-name">${customer ? customer.name : 'Ukjent kunde'}</h3>
                     <p class="order-description">#${order.id.slice(-6)} - ${order.type || order.service_type || 'Service'}</p>
+                    ${address ? `<p class="customer-address" style="font-size: 13px; color: #9ca3af; margin: 4px 0 0 0;">📍 ${address}</p>` : ''}
                 </div>
                 <div class="order-meta">
                     <span class="technician-name">Tildelt: ${technician ? technician.name : 'Ingen'}</span>
@@ -360,22 +371,91 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const customer = state.customers.get(String(customerId));
         const technician = technicianId ? state.technicians.get(technicianId) : null;
+        const isOwnOrder = technicianId === state.currentTechnicianId;
+
+        // VIKTIG: Hent adresse fra order.customer_data (som har riktig data fra databasen)
+        const address = order.customer_data?.physicalAddress || 
+                       customer?.physicalAddress || 
+                       'Ikke registrert';
+        
+        const phone = order.customer_data?.phone || 
+                     customer?.phone || 
+                     'Ikke registrert';
 
         modalBody.innerHTML = `
-            <p><strong>Ordre ID:</strong> ${order.id}</p>
-            <p><strong>Kunde:</strong> ${customer ? customer.name : 'N/A'}</p>
-            <p><strong>Adresse:</strong> ${customer?.physicalAddress || 'N/A'}</p>
-            <p><strong>Telefon:</strong> ${customer ? customer.phone : 'N/A'}</p>
-            <hr>
-            <p><strong>Ordretype:</strong> ${order.type || order.service_type || 'Service'}</p>
-            <p><strong>Planlagt dato:</strong> ${new Date(order.plannedDate || order.scheduled_date).toLocaleString('no-NO')}</p>
-            <p><strong>Status:</strong> ${deriveOrderStatus(order)}</p>
-            <p><strong>Nåværende tekniker:</strong> ${technician ? technician.name : 'Ikke tildelt'}</p>
-            <hr>
-            <p><strong>Beskrivelse:</strong></p>
-            <p>${order.description || 'Ingen beskrivelse.'}</p>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px; align-items: start;">
+                    <strong style="color: #6b7280; font-size: 13px;">Ordre ID:</strong>
+                    <span style="font-family: monospace; font-size: 12px; color: #374151;">${order.id}</span>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px;">
+                    <strong style="color: #6b7280; font-size: 13px;">Kunde:</strong>
+                    <span style="color: #1f2937; font-weight: 600;">${customer ? customer.name : 'N/A'}</span>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px;">
+                    <strong style="color: #6b7280; font-size: 13px;">Adresse:</strong>
+                    <span style="color: #374151;">${address}</span>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px;">
+                    <strong style="color: #6b7280; font-size: 13px;">Telefon:</strong>
+                    <span style="color: #374151;">${phone}</span>
+                </div>
+                
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 8px 0;">
+                
+                <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px;">
+                    <strong style="color: #6b7280; font-size: 13px;">Ordretype:</strong>
+                    <span style="color: #374151;">${order.type || order.service_type || 'Service'}</span>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px;">
+                    <strong style="color: #6b7280; font-size: 13px;">Planlagt dato:</strong>
+                    <span style="color: #374151;">${new Date(order.plannedDate || order.scheduled_date).toLocaleString('no-NO')}</span>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px;">
+                    <strong style="color: #6b7280; font-size: 13px;">Status:</strong>
+                    <span style="color: #374151; text-transform: capitalize;">${deriveOrderStatus(order)}</span>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px;">
+                    <strong style="color: #6b7280; font-size: 13px;">Nåværende tekniker:</strong>
+                    <span style="color: #374151;">${technician ? technician.name : 'Ikke tildelt'}</span>
+                </div>
+                
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 8px 0;">
+                
+                <div>
+                    <strong style="color: #6b7280; font-size: 13px; display: block; margin-bottom: 6px;">Beskrivelse:</strong>
+                    <p style="color: #374151; margin: 0; line-height: 1.5;">${order.description || 'Ingen beskrivelse.'}</p>
+                </div>
+                
+                <div style="display: flex; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb; flex-direction: column;">
+                    ${!isOwnOrder ? `
+                        <button 
+                            onclick="window.takeOverOrderFromModal('${orderId}')" 
+                            style="width: 100%; padding: 14px 20px; border: none; background: #4A90E2; color: white; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 15px; transition: all 0.2s;">
+                            ⚡ Ta over ordre
+                        </button>
+                    ` : ''}
+                    <button 
+                        onclick="document.getElementById('order-details-modal').style.display='none'" 
+                        style="width: 100%; padding: 12px 20px; border: 1px solid #d1d5db; background: white; color: #374151; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                        Lukk
+                    </button>
+                </div>
+            </div>
         `;
         modal.style.display = 'flex';
+    };
+
+    // Global funksjon for å ta over ordre fra modal
+    window.takeOverOrderFromModal = (orderId) => {
+        document.getElementById('order-details-modal').style.display = 'none';
+        takeOverOrder(orderId);
     };
 
     const handleFilterChange = () => {
