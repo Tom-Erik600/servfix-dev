@@ -193,15 +193,12 @@ router.put('/:id', async (req, res) => {
         
         const result = await pool.query(`
             UPDATE quotes 
-            SET description = $1, 
-                total_amount = $2, 
-                status = $3,
-                items = $4,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $5 
+            SET total_amount = $1, 
+                status = $2,
+                items = $3
+            WHERE id = $4 
             RETURNING *
         `, [
-            description || '',
             total_amount || 0,
             status || 'pending',
             JSON.stringify(itemsJson),
@@ -212,8 +209,28 @@ router.put('/:id', async (req, res) => {
             return res.status(404).json({ error: 'Tilbud ikke funnet' });
         }
         
-        const updatedQuote = transformQuoteForFrontend(result.rows[0]);
-        console.log('Quote updated successfully:', id);
+        // Hent komplett quote data med customer info fra orders tabellen
+        // RETURNING * gir ikke customer_name og customer_data som transformQuoteForFrontend trenger
+        const completeQuoteResult = await pool.query(`
+            SELECT q.*, q.items::jsonb as items_data,
+                   o.customer_name, o.customer_data,
+                   COALESCE(o.customer_name, 'Ukjent kunde') as customer_name
+            FROM quotes q 
+            LEFT JOIN orders o ON q.order_id = o.id
+            WHERE q.id = $1
+        `, [id]);
+
+        if (completeQuoteResult.rows.length === 0) {
+            console.error('❌ Could not fetch updated quote with customer data for id:', id);
+            return res.status(500).json({ error: 'Kunne ikke hente oppdatert tilbud' });
+        }
+
+        // Prepare data for transform function
+        const completeQuote = completeQuoteResult.rows[0];
+        completeQuote.items = completeQuote.items_data;
+
+        const updatedQuote = transformQuoteForFrontend(completeQuote);
+        console.log('✅ Quote updated successfully with customer data:', id);
         
         res.json(updatedQuote);
         
