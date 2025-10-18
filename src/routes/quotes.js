@@ -210,7 +210,6 @@ router.put('/:id', async (req, res) => {
         }
         
         // Hent komplett quote data med customer info fra orders tabellen
-        // RETURNING * gir ikke customer_name og customer_data som transformQuoteForFrontend trenger
         const completeQuoteResult = await pool.query(`
             SELECT q.*, q.items::jsonb as items_data,
                    o.customer_name, o.customer_data,
