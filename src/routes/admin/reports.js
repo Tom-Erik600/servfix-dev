@@ -61,6 +61,10 @@ router.get('/', async (req, res) => {
           BOOL_AND(sr.is_invoiced) as all_invoiced,
           -- PDF status
           BOOL_AND(sr.pdf_generated) as all_pdfs_generated,
+          -- ✅ FAKTURA-INFO (NYTT)
+          MAX(sr.invoice_number) as invoice_number,
+          MAX(sr.invoice_date) as invoice_date,
+          MAX(sr.invoice_comment) as invoice_comment,
           -- Samle alle rapport-IDer for denne ordren
           ARRAY_AGG(sr.id ORDER BY sr.created_at) as report_ids
         FROM service_reports sr
@@ -288,6 +292,64 @@ router.post('/:reportId/mark-invoiced', async (req, res) => {
       message: req.body.isInvoiced ? 'Merket som fakturert' : 'Fjernet fakturert-markering'
     });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ NYTT ENDPOINT: Fakturer hele ordren
+router.put('/order/:orderId/invoice', async (req, res) => {
+  const { orderId } = req.params;
+  const { invoiced, invoiceNumber, comment } = req.body;
+  
+  console.log('📄 Invoice endpoint called:', { orderId, invoiced, invoiceNumber });
+  
+  try {
+    const pool = await db.getTenantConnection(req.adminTenantId);
+    
+    if (invoiced && !invoiceNumber?.trim()) {
+      return res.status(400).json({ 
+        error: 'Fakturanummer er påkrevd' 
+      });
+    }
+    
+    const query = `
+      UPDATE service_reports 
+      SET 
+        is_invoiced = $1,
+        invoice_number = $2,
+        invoice_date = $3,
+        invoice_comment = $4
+      WHERE order_id = $5 AND status = 'completed'
+      RETURNING id, equipment_id, invoice_number
+    `;
+    
+    const result = await pool.query(query, [
+      invoiced,
+      invoiced ? invoiceNumber.trim() : null,
+      invoiced ? new Date() : null,
+      comment?.trim() || null,
+      orderId
+    ]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ 
+        error: 'Ingen fullførte rapporter funnet' 
+      });
+    }
+    
+    console.log(`✅ Updated ${result.rows.length} reports`);
+    
+    res.json({ 
+      success: true,
+      message: invoiced 
+        ? `Faktura ${invoiceNumber} registrert for ${result.rows.length} anlegg`
+        : `Fakturastatus fjernet`,
+      updatedCount: result.rows.length,
+      invoiceNumber: invoiceNumber
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating invoice:', error);
     res.status(500).json({ error: error.message });
   }
 });

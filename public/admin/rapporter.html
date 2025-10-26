@@ -82,6 +82,7 @@
                                 <th>TEKNIKER</th>
                                 <th>ANLEGG</th>
                                 <th>STATUS</th>
+                                <th>FAKTURA</th>
                                 <th>E-POST</th>
                                 <th>HANDLING</th>
                             </tr>
@@ -118,6 +119,44 @@
                 </button>
                 <button type="button" class="btn btn-success" id="save-and-send-btn">
                     ✉️ Lagre og send
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invoice Modal -->
+    <div id="invoice-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📄 Registrer faktura</h3>
+                <button type="button" class="close-btn" onclick="closeInvoiceModal()">×</button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="info-box">
+                    <strong>Ordre:</strong> <span id="invoice-order-id"></span><br>
+                    <strong>Kunde:</strong> <span id="invoice-customer-name"></span>
+                </div>
+                
+                <div class="form-group">
+                    <label>Fakturanummer *</label>
+                    <input type="text" id="invoice-number-input" 
+                           placeholder="F.eks: F-2025-001" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Kommentar (valgfritt)</label>
+                    <textarea id="invoice-comment-input" rows="3" 
+                              placeholder="Ekstra informasjon..."></textarea>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeInvoiceModal()">
+                    Avbryt
+                </button>
+                <button type="button" class="btn btn-success" onclick="saveInvoice()">
+                    💾 Lagre faktura
                 </button>
             </div>
         </div>

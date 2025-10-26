@@ -5,6 +5,61 @@
 
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('🔧 Loading servicerapporter admin system...');
+
+    let allReports = [];
+    let currentInvoiceOrderId = null;
+
+    window.openInvoiceModal = function(orderId, customerName) {
+        currentInvoiceOrderId = orderId;
+        document.getElementById('invoice-order-id').textContent = orderId;
+        document.getElementById('invoice-customer-name').textContent = customerName;
+        document.getElementById('invoice-number-input').value = '';
+        document.getElementById('invoice-comment-input').value = '';
+        document.getElementById('invoice-modal').classList.add('show');
+    };
+
+    window.closeInvoiceModal = function() {
+        document.getElementById('invoice-modal').classList.remove('show');
+        currentInvoiceOrderId = null;
+    };
+
+    window.saveInvoice = async function() {
+        const invoiceNumber = document.getElementById('invoice-number-input').value.trim();
+        const comment = document.getElementById('invoice-comment-input').value.trim();
+        
+        if (!invoiceNumber) {
+            showToast('❌ Fakturanummer er påkrevd', 'error');
+            return;
+        }
+        
+        try {
+            showToast('💾 Lagrer faktura...', 'info');
+            
+            const response = await fetch(`/api/admin/reports/order/${currentInvoiceOrderId}/invoice`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ 
+                    invoiced: true,
+                    invoiceNumber: invoiceNumber,
+                    comment: comment
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                showToast(`✅ ${result.message}`, 'success');
+                closeInvoiceModal();
+                await loadReports();
+            } else {
+                throw new Error(result.error || 'Ukjent feil');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showToast('❌ Feil: ' + error.message, 'error');
+        }
+    };
     
     // State management
     const state = {
@@ -232,6 +287,19 @@ function createOrderReportRow(order) {
                 <span class="status-indicator status-${isSent ? 'sent' : 'pending'}">
                     ${isSent ? '✅ Sendt til kunde' : '⏳ Venter sending'}
                 </span>
+            </td>
+            <td>
+                ${isInvoiced ? `
+                    <div class="invoice-status invoiced">
+                        <span class="invoice-badge">✓ Fakturert</span>
+                        <div class="invoice-number">${order.invoice_number || 'Mangler nr'}</div>
+                    </div>
+                ` : `
+                    <button class="btn btn-sm btn-invoice" 
+                            onclick="openInvoiceModal('${order.order_id}', '${order.customer_name}')">
+                        📄 Fakturer
+                    </button>
+                `}
             </td>
             <td>
                 <div style="font-weight: 400;">
