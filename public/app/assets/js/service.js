@@ -383,11 +383,10 @@ function validateRequiredFields() {
 const state = {
     orderId: null,
     equipmentId: null, 
-    equipment: null,
-    order: null,
-    technician: null,
-    serviceReport: { reportData: { components: [] } },
+    serviceReport: null,
+    equipmentData: null,
     checklistTemplate: null,
+    instructions: {},
     editingComponentIndex: null
 };
 
@@ -1417,9 +1416,17 @@ function renderChecklist() {
             console.log('📸 Step 2: Re-initializing photo handlers...');
             reinitializePhotoHandlers();
             
+            // NYTT: Step 3 - Hent og vis instruksjoner
+            setTimeout(async () => {
+                console.log('📚 Step 3: Fetching instructions...');
+                await fetchInstructions();
+                addInstructionIcons();
+                console.log('✅ Instructions loaded and displayed');
+            }, 100);
+            
             console.log('✅ Checklist rendered without automatic image loading');
             
-            // NYTT: Last inn lagrede data etter at checklist er fullstendig rendret
+            // Last inn lagrede data etter at checklist er fullstendig rendret
             if (state.serviceReport?.reportData?.checklist) {
                 console.log('📥 Loading saved checklist data...');
                 loadExistingReportData();
@@ -1451,6 +1458,432 @@ function reinitializePhotoHandlers() {
     const photoButtons = document.querySelectorAll('.photo-btn');
     console.log(`✅ Found ${photoButtons.length} photo buttons after re-init`);
 }
+// ==================== INSTRUKSJONER ====================
+
+/**
+ * Hent alle instruksjoner for aktiv template
+ */
+async function fetchInstructions() {
+    if (!state.checklistTemplate?.name) {
+        console.log('⚠️ No template name, skipping instructions');
+        return;
+    }
+
+    try {
+        const templateName = state.checklistTemplate.name;
+        console.log(`📚 Fetching instructions for: ${templateName}`);
+
+        const response = await api.get(`/checklist-instructions/${templateName}`);
+        
+        if (response?.instructions) {
+            // Backend returnerer array, vi må transformere til object
+            if (Array.isArray(response.instructions)) {
+                const instructionsObj = {};
+                response.instructions.forEach(item => {
+                    instructionsObj[item.checklist_item_id] = item.instruction_text;
+                });
+                state.instructions = instructionsObj;
+                console.log(`✅ Loaded ${Object.keys(instructionsObj).length} instructions (transformed from array)`);
+            } else {
+                // Hvis backend allerede returnerer object format
+                state.instructions = response.instructions;
+                console.log(`✅ Loaded ${Object.keys(response.instructions).length} instructions`);
+            }
+        } else {
+            state.instructions = {};
+            console.log('ℹ️ No instructions found');
+        }
+    } catch (error) {
+        console.error('❌ Error fetching instructions:', error);
+        state.instructions = {};
+    }
+}
+
+/**
+ * Legg til instruksjonsikoner på sjekkpunkter
+ */
+function addInstructionIcons() {
+    if (!state.instructions || Object.keys(state.instructions).length === 0) {
+        console.log('ℹ️ No instructions to display');
+        return;
+    }
+
+    console.log('🔍 Adding instruction icons...');
+    let iconsAdded = 0;
+
+    Object.keys(state.instructions).forEach(itemId => {
+        const checklistItem = document.querySelector(`[data-item-id="${itemId}"]`);
+        
+        if (checklistItem) {
+            const label = checklistItem.querySelector('.item-label');
+            
+            if (label && !label.querySelector('.instruction-icon')) {
+                const icon = document.createElement('span');
+                icon.className = 'instruction-icon';
+                icon.textContent = 'i';
+                icon.dataset.itemId = itemId;
+                icon.title = 'Klikk for å se instruksjon';
+                
+                label.appendChild(icon);
+                iconsAdded++;
+            }
+        }
+    });
+
+    console.log(`✅ Added ${iconsAdded} instruction icons`);
+    setupInstructionClickHandlers();
+}
+
+/**
+ * Setup klikk-handlers for instruksjonsikoner
+ */
+function setupInstructionClickHandlers() {
+    document.querySelectorAll('.instruction-icon').forEach(icon => {
+        // Fjern gamle handlers (hvis noen) ved å erstatte med klon
+        const newIcon = icon.cloneNode(true);
+        icon.parentNode.replaceChild(newIcon, icon);
+        
+        // Legg til ny handler
+        newIcon.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const itemId = newIcon.dataset.itemId;
+            const instructionText = state.instructions[itemId];
+            
+            if (instructionText) {
+                showInstructionModal(itemId, instructionText);
+            }
+        });
+    });
+    
+    console.log('✅ Click handlers setup complete');
+}
+
+/**
+ * Vis instruksjonsmodal
+ */
+function showInstructionModal(itemId, instructionText) {
+    // Finn sjekkpunktets label for visning i modal header
+    const itemElement = document.querySelector(`[data-item-id="${itemId}"]`);
+    const labelElement = itemElement?.querySelector('.item-label');
+    let itemLabel = 'Sjekkpunkt';
+    
+    if (labelElement) {
+        // Hent label-tekst uten 'i'-ikonet
+        const labelClone = labelElement.cloneNode(true);
+        const iconInClone = labelClone.querySelector('.instruction-icon');
+        if (iconInClone) iconInClone.remove();
+        itemLabel = labelClone.textContent.trim();
+    }
+
+    // Fjern eksisterende modal hvis den finnes
+    const existingModal = document.getElementById('instruction-modal-overlay');
+    if (existingModal) existingModal.remove();
+
+    // Opprett modal HTML
+    const modalHTML = `
+        <div id="instruction-modal-overlay" class="instruction-modal-overlay">
+            <div class="instruction-modal">
+                <div class="instruction-modal-header">
+                    <h3>
+                        <span class="instruction-icon" style="pointer-events: none; margin: 0;">i</span>
+                        ${itemLabel}
+                    </h3>
+                    <button class="instruction-modal-close" onclick="closeInstructionModal()">×</button>
+                </div>
+                <div class="instruction-modal-body">
+                    <div class="instruction-content">${instructionText}</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Lukk ved klikk på overlay (utenfor modal)
+    document.getElementById('instruction-modal-overlay').addEventListener('click', (e) => {
+        if (e.target.id === 'instruction-modal-overlay') {
+            closeInstructionModal();
+        }
+    });
+
+    console.log(`✅ Showing instruction for: ${itemLabel}`);
+}
+
+/**
+ * Lukk instruksjonsmodal
+ */
+function closeInstructionModal() {
+    const modal = document.getElementById('instruction-modal-overlay');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+// ==================== INSTRUKSJONER ====================
+
+async function fetchInstructions() {
+    if (!state.checklistTemplate?.name) {
+        console.log('⚠️ No template name, skipping instructions');
+        return;
+    }
+
+    try {
+        const templateName = state.checklistTemplate.name;
+        console.log(`📚 Fetching instructions for: ${templateName}`);
+
+        const response = await api.get(`/checklist-instructions/${templateName}`);
+        
+        if (response?.instructions) {
+            state.instructions = response.instructions;
+            console.log(`✅ Loaded ${Object.keys(response.instructions).length} instructions`);
+        } else {
+            state.instructions = {};
+            console.log('ℹ️ No instructions found');
+        }
+    } catch (error) {
+        console.error('❌ Error fetching instructions:', error);
+        state.instructions = {};
+    }
+}
+
+function addInstructionIcons() {
+    if (!state.instructions || Object.keys(state.instructions).length === 0) {
+        console.log('ℹ️ No instructions to display');
+        return;
+    }
+
+    console.log('🔍 Adding instruction icons...');
+    let iconsAdded = 0;
+
+    Object.keys(state.instructions).forEach(itemId => {
+        const checklistItem = document.querySelector(`[data-item-id="'${itemId}'"]`);
+        
+        if (checklistItem) {
+            const label = checklistItem.querySelector('.item-label');
+            
+            if (label && !label.querySelector('.instruction-icon')) {
+                const icon = document.createElement('span');
+                icon.className = 'instruction-icon';
+                icon.textContent = 'i';
+                icon.dataset.itemId = itemId;
+                icon.title = 'Klikk for å se instruksjon';
+                
+                label.appendChild(icon);
+                iconsAdded++;
+            }
+        }
+    });
+
+    console.log(`✅ Added ${iconsAdded} instruction icons`);
+    setupInstructionClickHandlers();
+}
+
+function setupInstructionClickHandlers() {
+    document.querySelectorAll('.instruction-icon').forEach(icon => {
+        const newIcon = icon.cloneNode(true);
+        icon.parentNode.replaceChild(newIcon, icon);
+        
+        newIcon.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const itemId = newIcon.dataset.itemId;
+            const instructionText = state.instructions[itemId];
+            
+            if (instructionText) {
+                showInstructionModal(itemId, instructionText);
+            }
+        });
+    });
+    
+    console.log('✅ Click handlers setup complete');
+}
+
+function showInstructionModal(itemId, instructionText) {
+    const itemElement = document.querySelector(`[data-item-id="'${itemId}'"]`);
+    const labelElement = itemElement?.querySelector('.item-label');
+    let itemLabel = 'Sjekkpunkt';
+    
+    if (labelElement) {
+        const labelClone = labelElement.cloneNode(true);
+        const iconInClone = labelClone.querySelector('.instruction-icon');
+        if (iconInClone) iconInClone.remove();
+        itemLabel = labelClone.textContent.trim();
+    }
+
+    const existingModal = document.getElementById('instruction-modal-overlay');
+    if (existingModal) existingModal.remove();
+
+    const modalHTML = `
+        <div id="instruction-modal-overlay" class="instruction-modal-overlay">
+            <div class="instruction-modal">
+                <div class="instruction-modal-header">
+                    <h3>
+                        <span class="instruction-icon" style="pointer-events: none; margin: 0;">i</span>
+                        '${itemLabel}'
+                    </h3>
+                    <button class="instruction-modal-close" onclick="closeInstructionModal()">×</button>
+                </div>
+                <div class="instruction-modal-body">
+                    <div class="instruction-content">'${instructionText}'</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    document.getElementById('instruction-modal-overlay').addEventListener('click', (e) => {
+        if (e.target.id === 'instruction-modal-overlay') {
+            closeInstructionModal();
+        }
+    });
+
+    console.log(`✅ Showing instruction for: '${itemLabel}'`);
+}
+
+function closeInstructionModal() {
+    const modal = document.getElementById('instruction-modal-overlay');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+window.closeInstructionModal = closeInstructionModal;
+// ==================== INSTRUKSJONER ====================
+
+async function fetchInstructions() {
+    if (!state.checklistTemplate?.name) {
+        console.log('⚠️ No template name, skipping instructions');
+        return;
+    }
+
+    try {
+        const templateName = state.checklistTemplate.name;
+        console.log(`📚 Fetching instructions for: ${templateName}`);
+
+        const response = await api.get(`/checklist-instructions/${templateName}`);
+        
+        if (response?.instructions) {
+            state.instructions = response.instructions;
+            console.log(`✅ Loaded ${Object.keys(response.instructions).length} instructions`);
+        } else {
+            state.instructions = {};
+            console.log('ℹ️ No instructions found');
+        }
+    } catch (error) {
+        console.error('❌ Error fetching instructions:', error);
+        state.instructions = {};
+    }
+}
+
+function addInstructionIcons() {
+    if (!state.instructions || Object.keys(state.instructions).length === 0) {
+        console.log('ℹ️ No instructions to display');
+        return;
+    }
+
+    console.log('🔍 Adding instruction icons...');
+    let iconsAdded = 0;
+
+    Object.keys(state.instructions).forEach(itemId => {
+        const checklistItem = document.querySelector(`[data-item-id="${itemId}"]`);
+        
+        if (checklistItem) {
+            const label = checklistItem.querySelector('.item-label');
+            
+            if (label && !label.querySelector('.instruction-icon')) {
+                const icon = document.createElement('span');
+                icon.className = 'instruction-icon';
+                icon.textContent = 'i';
+                icon.dataset.itemId = itemId;
+                icon.title = 'Klikk for å se instruksjon';
+                
+                label.appendChild(icon);
+                iconsAdded++;
+            }
+        }
+    });
+
+    console.log(`✅ Added ${iconsAdded} instruction icons`);
+    setupInstructionClickHandlers();
+}
+
+function setupInstructionClickHandlers() {
+    document.querySelectorAll('.instruction-icon').forEach(icon => {
+        const newIcon = icon.cloneNode(true);
+        icon.parentNode.replaceChild(newIcon, icon);
+        
+        newIcon.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const itemId = newIcon.dataset.itemId;
+            const instructionText = state.instructions[itemId];
+            
+            if (instructionText) {
+                showInstructionModal(itemId, instructionText);
+            }
+        });
+    });
+    
+    console.log('✅ Click handlers setup complete');
+}
+
+function showInstructionModal(itemId, instructionText) {
+    const itemElement = document.querySelector(`[data-item-id="${itemId}"]`);
+    const labelElement = itemElement?.querySelector('.item-label');
+    let itemLabel = 'Sjekkpunkt';
+    
+    if (labelElement) {
+        const labelClone = labelElement.cloneNode(true);
+        const iconInClone = labelClone.querySelector('.instruction-icon');
+        if (iconInClone) iconInClone.remove();
+        itemLabel = labelClone.textContent.trim();
+    }
+
+    const existingModal = document.getElementById('instruction-modal-overlay');
+    if (existingModal) existingModal.remove();
+
+    const modalHTML = `
+        <div id="instruction-modal-overlay" class="instruction-modal-overlay">
+            <div class="instruction-modal">
+                <div class="instruction-modal-header">
+                    <h3>
+                        <span class="instruction-icon" style="pointer-events: none; margin: 0;">i</span>
+                        ${itemLabel}
+                    </h3>
+                    <button class="instruction-modal-close" onclick="closeInstructionModal()">×</button>
+                </div>
+                <div class="instruction-modal-body">
+                    <div class="instruction-content">${instructionText}</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    document.getElementById('instruction-modal-overlay').addEventListener('click', (e) => {
+        if (e.target.id === 'instruction-modal-overlay') {
+            closeInstructionModal();
+        }
+    });
+
+    console.log(`✅ Showing instruction for: ${itemLabel}`);
+}
+
+function closeInstructionModal() {
+    const modal = document.getElementById('instruction-modal-overlay');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+window.closeInstructionModal = closeInstructionModal;
+
 function createChecklistItemHTML(item) {
     // Fiks for gamle datastrukturer som mangler inputType og har 'text' i stedet for 'label'
     if (!item.inputType) {

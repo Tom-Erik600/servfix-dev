@@ -88,6 +88,39 @@ router.get('/:templateName/:itemId', async (req, res) => {
   }
 });
 
+// GET alle instruksjoner for en template (bulk fetch)
+router.get('/:templateName', async (req, res) => {
+  try {
+    const { templateName } = req.params;
+    let tenantId = req.tenantId || req.session?.tenantId || 'airtech';
+    
+    console.log('📚 [INSTRUCTIONS BULK] Fetching all for template:', templateName);
+    
+    const pool = await db.getTenantConnection(tenantId);
+    
+    const result = await pool.query(
+      'SELECT checklist_item_id, instruction_text, created_at, updated_at FROM checklist_instructions WHERE template_name = $1 ORDER BY checklist_item_id',
+      [templateName]
+    );
+
+    // Konverter til object med checklist_item_id som key (for rask frontend lookup)
+    const instructions = {};
+    result.rows.forEach(row => {
+      instructions[row.checklist_item_id] = row.instruction_text;
+    });
+
+    console.log('✅ [INSTRUCTIONS] Found instructions:', result.rows.length);
+    res.json({ instructions }); // Returnerer object i stedet for array
+    
+  } catch (error) {
+    console.error('❌ [INSTRUCTIONS BULK] Error:', error);
+    res.status(500).json({ 
+      error: 'Server error', 
+      details: error.message 
+    });
+  }
+});
+
 // POST/PUT lagre eller oppdater instruksjon
 router.post('/:templateName/:itemId', async (req, res) => {
   try {
@@ -216,39 +249,6 @@ router.delete('/:templateName/:itemId', async (req, res) => {
     });
     res.status(500).json({ 
       error: 'Kunne ikke slette instruksjon',
-      details: error.message 
-    });
-  }
-});
-
-// GET alle instruksjoner for en mal (for admin-oversikt)
-router.get('/:templateName', async (req, res) => {
-  try {
-    const { templateName } = req.params;
-    let tenantId = req.tenantId || req.session?.tenantId || 'airtech';
-    
-    console.log('📋 [INSTRUCTIONS] GET ALL for template:', {
-      templateName,
-      tenantId
-    });
-    
-    const pool = await db.getTenantConnection(tenantId);
-    
-    const result = await pool.query(
-      'SELECT checklist_item_id, instruction_text, created_at, updated_at FROM checklist_instructions WHERE template_name = $1 ORDER BY checklist_item_id',
-      [templateName]
-    );
-    
-    console.log('✅ [INSTRUCTIONS] Found instructions:', result.rows.length);
-    res.json({ instructions: result.rows });
-    
-  } catch (error) {
-    console.error('❌ [INSTRUCTIONS] Error in GET ALL:', {
-      error: error.message,
-      templateName: req.params.templateName
-    });
-    res.status(500).json({ 
-      error: 'Server error',
       details: error.message 
     });
   }
