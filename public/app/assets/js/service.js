@@ -390,6 +390,23 @@ const state = {
     editingComponentIndex: null
 };
 
+// DEBUG: Test instruksjonsikonet
+window.testInstructionIcon = function() {
+    console.log('🧪 Testing instruction icon...');
+    const icon = document.querySelector('.instruction-icon');
+    if (!icon) {
+        console.error('❌ No instruction icon found in DOM');
+        return;
+    }
+    console.log('✅ Icon found:', icon);
+    console.log('📋 Item ID:', icon.dataset.itemId);
+    console.log('📦 Instructions:', state.instructions);
+    console.log('🎯 Instruction text:', state.instructions[icon.dataset.itemId]);
+    
+    // Test klikk direkte
+    icon.click();
+};
+
 
 
 function showToast(message, type = 'info') {
@@ -1499,9 +1516,6 @@ async function fetchInstructions() {
     }
 }
 
-/**
- * Legg til instruksjonsikoner på sjekkpunkter
- */
 function addInstructionIcons() {
     if (!state.instructions || Object.keys(state.instructions).length === 0) {
         console.log('ℹ️ No instructions to display');
@@ -1512,6 +1526,7 @@ function addInstructionIcons() {
     let iconsAdded = 0;
 
     Object.keys(state.instructions).forEach(itemId => {
+        // VIKTIG: Riktig selector (UTEN ekstra apostrof)
         const checklistItem = document.querySelector(`[data-item-id="${itemId}"]`);
         
         if (checklistItem) {
@@ -1534,30 +1549,48 @@ function addInstructionIcons() {
     setupInstructionClickHandlers();
 }
 
-/**
- * Setup klikk-handlers for instruksjonsikoner
- */
 function setupInstructionClickHandlers() {
-    document.querySelectorAll('.instruction-icon').forEach(icon => {
-        // Fjern gamle handlers (hvis noen) ved å erstatte med klon
-        const newIcon = icon.cloneNode(true);
-        icon.parentNode.replaceChild(newIcon, icon);
+    console.log('🔧 Setting up instruction click handlers (SIMPLE VERSION)...');
+    
+    // Tell hvor mange ikoner vi finner
+    const icons = document.querySelectorAll('.instruction-icon');
+    console.log(`📊 Found ${icons.length} instruction icons in DOM`);
+    
+    if (icons.length === 0) {
+        console.warn('⚠️ No instruction icons found! Aborting handler setup.');
+        return;
+    }
+    
+    // Legg til click handler på hvert ikon DIREKTE (ingen cloneNode tull)
+    icons.forEach((icon, index) => {
+        console.log(`  🔗 Setting up handler for icon ${index + 1}/${icons.length}`);
+        console.log(`     Item ID: "${icon.dataset.itemId}"`);
         
-        // Legg til ny handler
-        newIcon.addEventListener('click', (e) => {
+        icon.onclick = function(e) {
+            console.log('🎯 ICON CLICKED!');
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation();
             
-            const itemId = newIcon.dataset.itemId;
+            const itemId = this.dataset.itemId;
+            console.log(`  📋 Item ID: "${itemId}"`);
+            
             const instructionText = state.instructions[itemId];
+            console.log(`  📝 Instruction text:`, instructionText);
             
             if (instructionText) {
+                console.log('  ✅ Showing modal...');
                 showInstructionModal(itemId, instructionText);
+            } else {
+                console.error(`  ❌ No instruction found for: "${itemId}"`);
+                console.log(`  📦 Available instructions:`, Object.keys(state.instructions));
             }
-        });
+        };
+        
+        console.log(`  ✅ Handler attached for: "${icon.dataset.itemId}"`);
     });
     
-    console.log('✅ Click handlers setup complete');
+    console.log('✅ All instruction click handlers setup complete!');
 }
 
 /**
@@ -1600,6 +1633,8 @@ function showInstructionModal(itemId, instructionText) {
     `;
 
     document.body.insertAdjacentHTML('beforeend', modalHTML);
+    const modal = document.getElementById('instruction-modal-overlay');
+    modal.classList.add('visible');  // ← LEGG TIL DENNE LINJEN
 
     // Lukk ved klikk på overlay (utenfor modal)
     document.getElementById('instruction-modal-overlay').addEventListener('click', (e) => {
@@ -1658,7 +1693,8 @@ function addInstructionIcons() {
     let iconsAdded = 0;
 
     Object.keys(state.instructions).forEach(itemId => {
-        const checklistItem = document.querySelector(`[data-item-id="'${itemId}'"]`);
+        // VIKTIG: Riktig selector (UTEN ekstra apostrof)
+        const checklistItem = document.querySelector(`[data-item-id="${itemId}"]`);
         
         if (checklistItem) {
             const label = checklistItem.querySelector('.item-label');
@@ -1680,69 +1716,7 @@ function addInstructionIcons() {
     setupInstructionClickHandlers();
 }
 
-function setupInstructionClickHandlers() {
-    document.querySelectorAll('.instruction-icon').forEach(icon => {
-        const newIcon = icon.cloneNode(true);
-        icon.parentNode.replaceChild(newIcon, icon);
-        
-        newIcon.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const itemId = newIcon.dataset.itemId;
-            const instructionText = state.instructions[itemId];
-            
-            if (instructionText) {
-                showInstructionModal(itemId, instructionText);
-            }
-        });
-    });
-    
-    console.log('✅ Click handlers setup complete');
-}
 
-function showInstructionModal(itemId, instructionText) {
-    const itemElement = document.querySelector(`[data-item-id="'${itemId}'"]`);
-    const labelElement = itemElement?.querySelector('.item-label');
-    let itemLabel = 'Sjekkpunkt';
-    
-    if (labelElement) {
-        const labelClone = labelElement.cloneNode(true);
-        const iconInClone = labelClone.querySelector('.instruction-icon');
-        if (iconInClone) iconInClone.remove();
-        itemLabel = labelClone.textContent.trim();
-    }
-
-    const existingModal = document.getElementById('instruction-modal-overlay');
-    if (existingModal) existingModal.remove();
-
-    const modalHTML = `
-        <div id="instruction-modal-overlay" class="instruction-modal-overlay">
-            <div class="instruction-modal">
-                <div class="instruction-modal-header">
-                    <h3>
-                        <span class="instruction-icon" style="pointer-events: none; margin: 0;">i</span>
-                        '${itemLabel}'
-                    </h3>
-                    <button class="instruction-modal-close" onclick="closeInstructionModal()">×</button>
-                </div>
-                <div class="instruction-modal-body">
-                    <div class="instruction-content">'${instructionText}'</div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-
-    document.getElementById('instruction-modal-overlay').addEventListener('click', (e) => {
-        if (e.target.id === 'instruction-modal-overlay') {
-            closeInstructionModal();
-        }
-    });
-
-    console.log(`✅ Showing instruction for: '${itemLabel}'`);
-}
 
 function closeInstructionModal() {
     const modal = document.getElementById('instruction-modal-overlay');
@@ -1789,6 +1763,7 @@ function addInstructionIcons() {
     let iconsAdded = 0;
 
     Object.keys(state.instructions).forEach(itemId => {
+        // VIKTIG: Riktig selector (UTEN ekstra apostrof)
         const checklistItem = document.querySelector(`[data-item-id="${itemId}"]`);
         
         if (checklistItem) {
@@ -1811,42 +1786,27 @@ function addInstructionIcons() {
     setupInstructionClickHandlers();
 }
 
-function setupInstructionClickHandlers() {
-    document.querySelectorAll('.instruction-icon').forEach(icon => {
-        const newIcon = icon.cloneNode(true);
-        icon.parentNode.replaceChild(newIcon, icon);
-        
-        newIcon.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const itemId = newIcon.dataset.itemId;
-            const instructionText = state.instructions[itemId];
-            
-            if (instructionText) {
-                showInstructionModal(itemId, instructionText);
-            }
-        });
-    });
-    
-    console.log('✅ Click handlers setup complete');
-}
+
 
 function showInstructionModal(itemId, instructionText) {
+    // Finn sjekkpunktets label for visning i modal header
     const itemElement = document.querySelector(`[data-item-id="${itemId}"]`);
     const labelElement = itemElement?.querySelector('.item-label');
     let itemLabel = 'Sjekkpunkt';
     
     if (labelElement) {
+        // Hent label-tekst uten 'i'-ikonet
         const labelClone = labelElement.cloneNode(true);
         const iconInClone = labelClone.querySelector('.instruction-icon');
         if (iconInClone) iconInClone.remove();
         itemLabel = labelClone.textContent.trim();
     }
 
+    // Fjern eksisterende modal hvis den finnes
     const existingModal = document.getElementById('instruction-modal-overlay');
     if (existingModal) existingModal.remove();
 
+    // Opprett modal HTML
     const modalHTML = `
         <div id="instruction-modal-overlay" class="instruction-modal-overlay">
             <div class="instruction-modal">
@@ -1865,7 +1825,10 @@ function showInstructionModal(itemId, instructionText) {
     `;
 
     document.body.insertAdjacentHTML('beforeend', modalHTML);
+    const modal = document.getElementById('instruction-modal-overlay');
+    modal.classList.add('visible');  // ← LEGG TIL DENNE LINJEN
 
+    // Lukk ved klikk på overlay (utenfor modal)
     document.getElementById('instruction-modal-overlay').addEventListener('click', (e) => {
         if (e.target.id === 'instruction-modal-overlay') {
             closeInstructionModal();
