@@ -299,208 +299,685 @@
     }
 }
 
-/* MODERNE SERVICEORDE-MODAL */
-.modern-order-modal {
-    padding: 8px;
-}
+/* ================================================
+   MASTERPIECE MODAL DESIGN
+   ================================================ */
 
-.order-modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-    padding: 16px;
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
-}
-
-.order-number-section {
+.masterpiece-modal {
     display: flex;
     flex-direction: column;
+    height: 100%;
+    overflow: hidden;
 }
 
-.order-number-label {
-    font-size: 10px;
+/* ================================================
+   GRADIENT HERO HEADER
+   ================================================ */
+
+.modal-hero-header {
+    position: relative;
+    padding: 32px 24px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%);
+    border-radius: 12px 12px 0 0;
+}
+
+.hero-gradient {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.08) 0%, transparent 50%);
+    pointer-events: none;
+}
+
+.hero-content {
+    position: relative;
+    z-index: 1;
+}
+
+.hero-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.order-number-badge {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.badge-label {
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #64748b;
-    margin-bottom: 2px;
+    letter-spacing: 1px;
+    color: rgba(255, 255, 255, 0.8);
 }
 
-.order-number-value {
-    font-size: 18px;
+.badge-number {
+    font-size: 28px;
     font-weight: 700;
-    color: var(--primary-color);
+    color: white;
+    letter-spacing: -0.5px;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-.order-status-section {
-    text-align: right;
-}
-
-.status-badge {
-    padding: 6px 12px;
-    border-radius: 12px;
-    font-size: 12px;
+.status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 100px;
+    font-size: 13px;
     font-weight: 600;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.status-icon {
+    font-size: 14px;
+}
+
+.status-text {
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
-.status-badge.status-scheduled {
-    background-color: #dbeafe;
-    color: #1d4ed8;
+.hero-subtitle {
+    font-size: 16px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.95);
+    max-width: 80%;
 }
 
-.status-badge.status-completed {
-    background-color: #dcfce7;
-    color: #16a34a;
+/* ================================================
+   MAIN CONTENT AREA
+   ================================================ */
+
+.modal-content-area {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+    background: #f8fafc;
 }
 
-.status-badge.status-in-progress {
-    background-color: #fef3c7;
-    color: #d97706;
+.modal-content-area::-webkit-scrollbar {
+    width: 6px;
 }
 
-.status-badge.status-pending {
-    background-color: #f3f4f6;
-    color: #6b7280;
+.modal-content-area::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 3px;
 }
 
-/* DETALJ-KORT GRID */
-.order-details-grid {
+.modal-content-area::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+.modal-content-area::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* ================================================
+   INFO GRID
+   ================================================ */
+
+.info-grid-modern {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 16px;
     margin-bottom: 24px;
 }
 
-.detail-card {
+.info-card {
     display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px;
-    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    align-items: flex-start;
+    gap: 14px;
+    padding: 18px;
+    background: white;
     border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    transition: all 0.2s ease;
+    border-radius: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
 }
 
-.detail-card:hover {
-    border-color: var(--primary-color);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+.info-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
-.detail-icon {
-    font-size: 20px;
-    width: 32px;
-    height: 32px;
+.info-card:hover {
+    border-color: #3b82f6;
+    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.12);
+    transform: translateY(-2px);
+}
+
+.info-card:hover::before {
+    opacity: 1;
+}
+
+.info-card.full-width {
+    grid-column: 1 / -1;
+}
+
+.info-card-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: var(--background-light);
-    border-radius: 6px;
+    color: white;
     flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.detail-content {
+.info-card-content {
     flex: 1;
     min-width: 0;
 }
 
-.detail-label {
-    font-size: 10px;
+.info-card-label {
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
     color: #64748b;
-    margin-bottom: 4px;
-    display: block;
-}
-
-.detail-value {
-    font-size: 14px;
-    color: #1e293b;
-    font-weight: 500;
-    line-height: 1.3;
-    word-break: break-word;
-}
-
-/* UTSTYR-SEKSJON */
-.equipment-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 12px;
-}
-
-.equipment-item {
-    background-color: var(--background-light);
-    border: 1px solid var(--border-light);
-    padding: 6px 12px;
-    border-radius: 16px;
-    font-size: 12px;
-    color: #64748b;
-    font-weight: 500;
-}
-
-/* META-INFO */
-.order-meta-info {
-    background-color: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 12px;
-    margin-top: 24px;
-}
-
-.meta-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     margin-bottom: 6px;
 }
 
-.meta-item:last-child {
-    margin-bottom: 0;
-}
-
-.meta-label {
-    font-size: 12px;
-    color: #64748b;
-    font-weight: 500;
-}
-
-.meta-value {
-    font-size: 12px;
+.info-card-value {
+    font-size: 15px;
+    font-weight: 600;
     color: #1e293b;
-    font-weight: 500;
+    line-height: 1.4;
+    word-break: break-word;
 }
 
-/* RESPONSIVE */
+/* ================================================
+   EQUIPMENT SECTION
+   ================================================ */
+
+.equipment-section-modern {
+    margin-bottom: 24px;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.section-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+}
+
+.section-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+}
+
+.equipment-card-modern {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    transition: all 0.3s ease;
+}
+
+.equipment-card-modern:hover {
+    border-color: #f59e0b;
+    box-shadow: 0 8px 24px rgba(245, 158, 11, 0.12);
+}
+
+.equipment-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+}
+
+.equipment-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #64748b;
+}
+
+.equipment-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: #334155;
+    text-align: right;
+}
+
+.equipment-value.primary {
+    color: #1e40af;
+}
+
+.equipment-divider {
+    height: 1px;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        #e2e8f0 20%, 
+        #e2e8f0 80%, 
+        transparent 100%
+    );
+}
+
+/* ================================================
+   PDF BUTTON
+   ================================================ */
+
+.pdf-action-section {
+    margin-bottom: 24px;
+}
+
+.pdf-button-modern {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.25);
+    position: relative;
+    overflow: hidden;
+}
+
+.pdf-button-modern::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, 
+        transparent, 
+        rgba(255, 255, 255, 0.2), 
+        transparent
+    );
+    transition: left 0.5s ease;
+}
+
+.pdf-button-modern:hover::before {
+    left: 100%;
+}
+
+.pdf-button-modern:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.35);
+}
+
+.pdf-button-modern:active {
+    transform: translateY(0);
+}
+
+.pdf-button-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    flex-shrink: 0;
+}
+
+.pdf-button-content {
+    flex: 1;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pdf-button-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: white;
+    letter-spacing: -0.2px;
+}
+
+.pdf-button-subtitle {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.pdf-button-arrow {
+    width: 32px;
+    height: 32px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    transition: transform 0.3s ease;
+}
+
+.pdf-button-modern:hover .pdf-button-arrow {
+    transform: translateX(4px);
+}
+
+/* ================================================
+   METADATA FOOTER
+   ================================================ */
+
+.metadata-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 16px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    margin-bottom: 8px;
+}
+
+.metadata-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #64748b;
+}
+
+.metadata-item svg {
+    opacity: 0.6;
+}
+
+/* ================================================
+   RESPONSIVE DESIGN
+   ================================================ */
+
 @media (max-width: 768px) {
-    .order-modal-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 12px;
+    .modal-hero-header {
+        padding: 24px 20px;
     }
-    
-    .order-status-section {
-        text-align: left;
+
+    .badge-number {
+        font-size: 24px;
     }
-    
-    .order-details-grid {
+
+    .hero-subtitle {
+        font-size: 14px;
+        max-width: 100%;
+    }
+
+    .modal-content-area {
+        padding: 20px;
+    }
+
+    .info-grid-modern {
         grid-template-columns: 1fr;
         gap: 12px;
     }
-    
-    .detail-card {
-        padding: 12px;
+
+    .info-card {
+        padding: 16px;
     }
-    
-    .detail-icon {
-        font-size: 16px;
-        width: 28px;
-        height: 28px;
+
+    .info-card-icon {
+        width: 40px;
+        height: 40px;
     }
+
+    .pdf-button-modern {
+        padding: 16px;
+    }
+
+    .pdf-button-icon {
+        width: 44px;
+        height: 44px;
+    }
+
+    .equipment-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .equipment-value {
+        text-align: left;
+    }
+}
+
+/* ================================================
+   ANIMATIONS
+   ================================================ */
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.masterpiece-modal {
+    animation: fadeIn 0.3s ease;
+}
+
+.info-card {
+    animation: slideInUp 0.4s ease backwards;
+}
+
+.info-card:nth-child(1) { animation-delay: 0.05s; }
+.info-card:nth-child(2) { animation-delay: 0.1s; }
+.info-card:nth-child(3) { animation-delay: 0.15s; }
+.info-card:nth-child(4) { animation-delay: 0.2s; }
+
+.equipment-card-modern {
+    animation: slideInUp 0.4s ease 0.25s backwards;
+}
+
+.pdf-button-modern {
+    animation: slideInUp 0.4s ease 0.3s backwards;
+}
+
+.metadata-footer {
+    animation: slideInUp 0.4s ease 0.35s backwards;
+}
+
+.modal-overlay.show {
+    animation: fadeIn 0.2s ease;
+}
+
+.modal-overlay .modal-content {
+    animation: slideInUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* === FORENKLET MODAL - SISTE VERSJON === */
+
+/* Header uten blå bakgrunn */
+.modal-simple-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 0;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+/* Ordrenummer - sort og bold */
+.order-number-black {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+/* Status badge - blå bakgrunn */
+.status-badge-blue {
+    background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
+    color: white;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Info-rader */
+.modal-info-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+.modal-info-rows .info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.modal-info-rows .label {
+    font-size: 13px;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.modal-info-rows .value {
+    font-size: 13px;
+    color: #374151;
+    font-weight: 600;
+    text-align: right;
+}
+
+/* Anlegg-seksjon */
+.equipment-section {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.equipment-header {
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 12px;
+}
+
+/* Anlegg-tabell med kolonner */
+.equipment-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.equipment-table thead th {
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 8px 12px;
+    border-bottom: 2px solid #e9ecef;
+    background: #f8f9fa;
+}
+
+.equipment-table tbody td {
+    padding: 10px 12px;
+    font-size: 13px;
+    color: #374151;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.equipment-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.equipment-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+/* Lukk-knapp blå */
+.modal-footer .btn-primary {
+    background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
+    color: white;
+    border: none;
+}
+
+.modal-footer .btn-primary:hover {
+    background: linear-gradient(135deg, #357ABD 0%, #2868a8 100%);
+}
+
+/* Anlegg-kort - mellomrom mellom flere anlegg */
+.equipment-card {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.equipment-card:last-child {
+    margin-bottom: 0;
+}
+
+/* Skjul det grå krysset i modal */
+#order-modal .modal-header .close-btn {
+    display: none;
+}
+
+/* Skjul modal-header overskrift */
+#order-modal .modal-header h3 {
+    display: none;
+}
+
+/* Gjør modal-header usynlig (men behold strukturen) */
+#order-modal .modal-header {
+    padding: 0;
+    border: none;
+    min-height: 0;
 }

@@ -352,11 +352,7 @@ window.selectCustomer = async function(customerId) {
     if (customerServiceHistory.length === 0) {
         serviceHistoryContent.innerHTML = `
             <div class="empty-history">
-                <p>Ingen servicehistorikk funnet for ${customer.name}</p>
-                <div class="debug-info">
-                    <small>Debug: Kunde-ID = "${customer.id}" | Total ordre = ${customerHistory.length}</small>
-                    ${customerHistory.length > 0 ? `<small>Første ordre kunde-ID = "${customerHistory[0].customer_id || customerHistory[0].customerId}"</small>` : ''}
-                </div>
+                <p>Ingen service funnet</p>
             </div>
         `;
         return;
@@ -380,9 +376,8 @@ window.selectCustomer = async function(customerId) {
                 const orderDate = order.scheduled_date || order.scheduledDate || order.created_at;
                 const formattedDate = orderDate ? formatDate(orderDate) : 'Ikke planlagt';
                 
-                // Finn tekniker
-                const technician = order.technician_name || order.technicianName || 
-                               (order.technicianId ? 'Tekniker tildelt' : 'Ikke tildelt');
+                // Finn tekniker - viser navn hvis tilgjengelig
+                const technician = order.technician_name || order.technicianName || 'Ikke tildelt';
                 
                 return `
                     <div class="service-history-order" onclick="showOrderDetails('${order.id}')">
@@ -402,7 +397,7 @@ window.selectCustomer = async function(customerId) {
     /**
      * Viser detaljer for en serviceordre i modal
      */
-    window.showOrderDetails = function(orderId) {
+    window.showOrderDetails = async function(orderId) {
     console.log('🔍 Viser detaljer for ordre:', orderId);
     
     const order = customerHistory.find(o => o.id === orderId);
@@ -452,97 +447,107 @@ window.selectCustomer = async function(customerId) {
     if (order.service_type || order.serviceType) {
         serviceType = order.service_type || order.serviceType;
     }
-    
-    // Vis utstyr hvis tilgjengelig
-    let equipmentInfo = '';
-    if (order.included_equipment_ids && Array.isArray(order.included_equipment_ids) && order.included_equipment_ids.length > 0) {
-        equipmentInfo = `
-            <div class="report-section">
-                <h4>📱 Inkludert utstyr</h4>
-                <div class="equipment-list">
-                    ${order.included_equipment_ids.map(eqId => `
-                        <div class="equipment-item">ID: ${eqId}</div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-    }
 
+    // === HENT ANLEGG FRA RAPPORT-API ===
+    let equipmentList = [];
+    let reportId = null;
+
+    try {
+        console.log('📡 Henter anlegg for ordre:', order.id);
+        
+        const reportResponse = await fetch(`/api/admin/reports?orderId=${order.id}`, {
+            credentials: 'include'
+        });
+        
+        if (reportResponse.ok) {
+            const reportData = await reportResponse.json();
+            console.log('📊 Rapport-data:', reportData);
+            
+            if (reportData.reports && reportData.reports.length > 0) {
+                const orderReport = reportData.reports[0];
+                
+                // Hent rapport-ID for PDF
+                if (orderReport.report_ids && orderReport.report_ids.length > 0) {
+                    reportId = orderReport.report_ids[0];
+                }
+                
+                // Parse anlegg (kan være flere, komma-separert)
+                if (orderReport.equipment_names) {
+                    const names = orderReport.equipment_names.split(', ');
+                    const types = (orderReport.equipment_types || '').split(', ');
+                    
+                    equipmentList = names.map((name, index) => ({
+                        name: name.trim(),
+                        type: types[index] ? types[index].trim() : 'Ikke spesifisert'
+                    }));
+                    
+                    console.log('🏢 Anlegg funnet:', equipmentList.length);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('❌ Feil ved henting av anlegg:', error);
+    }
+    
     const modalBody = document.getElementById('order-modal-body');
     modalBody.innerHTML = `
-        <div class="modern-order-modal">
-            <!-- Ordre-header -->
-            <div class="order-modal-header">
-                <div class="order-number-section">
-                    <span class="order-number-label">Ordrenummer</span>
-                    <span class="order-number-value">#${orderNumber}</span>
-                </div>
-                <div class="order-status-section">
-                    <span class="status-badge status-${order.status || 'scheduled'}">
-                        ${getStatusText(order.status || 'scheduled')}
-                    </span>
-                </div>
+    <div class="simple-order-modal">
+        <!-- Header uten bakgrunn -->
+        <div class="modal-simple-header">
+            <div class="order-number-black">#${orderNumber}</div>
+            <div class="status-badge-blue">${getStatusText(order.status || 'scheduled')}</div>
+        </div>
+
+        <!-- Info-liste -->
+        <div class="modal-info-rows">
+            <div class="info-row">
+                <span class="label">🔧 Servicetype</span>
+                <span class="value">${serviceType}</span>
             </div>
-
-            <!-- Hovedinformasjon -->
-            <div class="order-details-grid">
-                <div class="detail-card">
-                    <div class="detail-icon">🔧</div>
-                    <div class="detail-content">
-                        <div class="detail-label">Servicetype / Anleggstype</div>
-                        <div class="detail-value">${serviceType}</div>
-                    </div>
-                </div>
-
-                <div class="detail-card">
-                    <div class="detail-icon">📅</div>
-                    <div class="detail-content">
-                        <div class="detail-label">Planlagt tidspunkt</div>
-                        <div class="detail-value">${planlagtDateTime}</div>
-                    </div>
-                </div>
-
-                <div class="detail-card">
-                    <div class="detail-icon">👨‍🔧</div>
-                    <div class="detail-content">
-                        <div class="detail-label">Tekniker</div>
-                        <div class="detail-value">${technicianInfo}</div>
-                    </div>
-                </div>
-
-                <div class="detail-card">
-                    <div class="detail-icon">📝</div>
-                    <div class="detail-content">
-                        <div class="detail-label">Beskrivelse</div>
-                        <div class="detail-value">${order.description || 'Ingen beskrivelse angitt'}</div>
-                    </div>
-                </div>
+            <div class="info-row">
+                <span class="label">📅 Planlagt</span>
+                <span class="value">${planlagtDateTime}</span>
             </div>
-
-            ${equipmentInfo}
-
-            <!-- Opprettelsesinfo -->
-            <div class="order-meta-info">
-                <div class="meta-item">
-                    <span class="meta-label">Opprettet:</span>
-                    <span class="meta-value">${order.created_at ? formatDate(order.created_at) : 'Ukjent'}</span>
-                </div>
-                ${order.updated_at ? `
-                    <div class="meta-item">
-                        <span class="meta-label">Sist oppdatert:</span>
-                        <span class="meta-value">${formatDate(order.updated_at)}</span>
-                    </div>
-                ` : ''}
+            <div class="info-row">
+                <span class="label">👨‍🔧 Tekniker</span>
+                <span class="value">${technicianInfo}</span>
             </div>
         </div>
-    `;
 
-    // Oppdater "Se full ordre" knapp
-    const viewOrderBtn = document.getElementById('view-order-details-btn');
-    if (viewOrderBtn) {
-        viewOrderBtn.onclick = function() {
-            window.open(`/app/orders.html?id=${order.id}`, '_blank');
+        <!-- Anlegg som tabell med kolonner -->
+        ${equipmentList && equipmentList.length > 0 ? `
+        <div class="equipment-section">
+            <div class="equipment-header">🏢 Anlegg</div>
+            <table class="equipment-table">
+                <thead>
+                    <tr>
+                        <th>Systemnavn</th>
+                        <th>Systemtype</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${equipmentList.map(eq => `
+                        <tr>
+                            <td>${eq.name}</td>
+                            <td>${eq.type}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+        ` : ''}
+    </div>
+`;
+
+    // Oppdater "Vis PDF" knapp
+    const viewPdfBtn = document.getElementById('view-pdf-btn');
+    if (viewPdfBtn && reportId) {
+        viewPdfBtn.onclick = function() {
+            window.open(`/api/admin/reports/${reportId}/pdf`, '_blank');
         };
+    } else if (viewPdfBtn) {
+        viewPdfBtn.disabled = true;
+        viewPdfBtn.textContent = '📄 PDF ikke tilgjengelig';
     }
 
     orderModal.classList.add('show');

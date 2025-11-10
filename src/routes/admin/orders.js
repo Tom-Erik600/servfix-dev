@@ -27,8 +27,10 @@ router.get('/', async (req, res) => {
     const pool = await db.getTenantConnection(req.session.tenantId);
     
     const result = await pool.query(
-      `SELECT * FROM orders 
-       ORDER BY scheduled_date DESC, scheduled_time DESC`
+      `SELECT o.*, t.name as technician_name
+   FROM orders o
+   LEFT JOIN technicians t ON o.technician_id = t.id
+   ORDER BY o.scheduled_date DESC, o.scheduled_time DESC`
     );
     
     // Legg til orderNumber for frontend
