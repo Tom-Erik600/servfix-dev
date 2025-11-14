@@ -1,70 +1,97 @@
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
-  annotations:
-    run.googleapis.com/build-enable-automatic-updates: 'false'
-    run.googleapis.com/build-id: dc6b0487-f00e-41a5-9e50-b99d20c6be74
-    run.googleapis.com/build-image-uri: europe-north1-docker.pkg.dev/servfix-production/cloud-run-source-deploy/servfix-app
-    run.googleapis.com/build-name: projects/471345128928/locations/europe-north1/builds/dc6b0487-f00e-41a5-9e50-b99d20c6be74
-    run.googleapis.com/build-source-location: gs://run-sources-servfix-production-europe-north1/services/servfix-app/1754307509.253204-618f48a7f18043e38a1fae795245fe11.zip#1754307507771318
-    run.googleapis.com/ingress: all
-    run.googleapis.com/ingress-status: all
-    run.googleapis.com/urls: '["https://servfix-app-471345128928.europe-north1.run.app","https://servfix-app-eufsbr5tvq-lz.a.run.app"]'
+  name: servfix-app
   labels:
     cloud.googleapis.com/location: europe-north1
-  name: servfix-app
-  namespace: '471345128928'
 spec:
   template:
     metadata:
       annotations:
-        autoscaling.knative.dev/maxScale: '10'
-        autoscaling.knative.dev/minScale: '1'
-        run.googleapis.com/client-name: gcloud
-        run.googleapis.com/client-version: 531.0.0
-        run.googleapis.com/cloudsql-instances: servfix-production:europe-north1:servfix-db
+        autoscaling.knative.dev/maxScale: '5'
+        autoscaling.knative.dev/minScale: '0'
+        run.googleapis.com/cloudsql-instances: servfix-test:europe-north1:servfix-test-db
         run.googleapis.com/startup-cpu-boost: 'true'
-      labels:
-        client.knative.dev/nonce: rcwkgsmniy
-        run.googleapis.com/startupProbeType: Default
     spec:
       containerConcurrency: 80
+      timeoutSeconds: 300
+      serviceAccountName: 561535995501-compute@developer.gserviceaccount.com
       containers:
-      - env:
-        - name: NODE_ENV
-          value: production
-        - name: CLOUD_SQL_CONNECTION_NAME
-          value: servfix-production:europe-north1:servfix-db
-        - name: DB_USER
-          value: postgres
-        - name: GCS_BUCKET_NAME
-          value: servfix-files
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              key: latest
-              name: db-password
-        - name: SESSION_SECRET
-          valueFrom:
-            secretKeyRef:
-              key: latest
-              name: session-secret
-        image: europe-north1-docker.pkg.dev/servfix-production/cloud-run-source-deploy/servfix-app@sha256:cdcfe880e59104066450ac52cfe55ef517731ed3e47202f3a6a10e6a61da9359
+      - image: europe-north1-docker.pkg.dev/servfix-test/cloud-run-source-deploy/servfix-app:latest
         ports:
-        - containerPort: 8080
-          name: http1
+        - name: http1
+          containerPort: 8080
         resources:
           limits:
             cpu: 1000m
-            memory: 2Gi
+            memory: 1Gi
         startupProbe:
-          failureThreshold: 1
+          timeoutSeconds: 240
           periodSeconds: 240
+          failureThreshold: 1
           tcpSocket:
             port: 8080
-          timeoutSeconds: 240
-      serviceAccountName: 471345128928-compute@developer.gserviceaccount.com
-      timeoutSeconds: 300
+        env:
+        # Node Environment
+        - name: NODE_ENV
+          value: staging
+        
+        # Database Configuration
+        - name: CLOUD_SQL_CONNECTION_NAME
+          value: servfix-test:europe-north1:servfix-test-db
+        - name: DB_USER
+          value: postgres
+        - name: DB_NAME
+          value: servfix_admin
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-password
+              key: latest
+        
+        # Session
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: session-secret
+              key: latest
+        
+        # Tenant & Storage
+        - name: DEFAULT_TENANT_ID
+          value: airtech
+        - name: GCS_BUCKET_NAME
+          value: servfix-files-test
+        - name: GOOGLE_CLOUD_PROJECT_ID
+          value: servfix-test
+        
+        # Tripletex API
+        - name: BASE_URL
+          value: https://api-test.tripletex.tech/v2
+        - name: CONSUMER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: tripletex-consumer-token
+              key: latest
+        - name: EMPLOYEE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: tripletex-employee-token
+              key: latest
+        
+        # SMTP Email
+        - name: SMTP_HOST
+          value: smtp.gmail.com
+        - name: SMTP_PORT
+          value: '587'
+        - name: SMTP_USER
+          value: servfixadm@gmail.com
+        - name: SMTP_FROM
+          value: servfixadm@gmail.com
+        - name: SMTP_PASS
+          valueFrom:
+            secretKeyRef:
+              name: smtp-password
+              key: latest
   traffic:
-  - latestRevision: true
-    percent: 100
+  - percent: 100
+    latestRevision: true

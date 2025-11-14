@@ -261,8 +261,14 @@
                 uploadLogoBtn?.addEventListener('click', uploadLogo);
                 removePreviewBtn?.addEventListener('click', removePreview);
                 removeCurrentLogoBtn?.addEventListener('click', removeLogo);
-            }
-            
+                
+                // KRITISK FIX: Legg til event listeners for lagre-knapper
+                document.getElementById('save-company-info')?.addEventListener('click', saveCompanyInfo);
+                document.getElementById('save-report-settings')?.addEventListener('click', saveReportSettings);
+                document.getElementById('save-all-settings')?.addEventListener('click', saveAllSettings);
+                
+                console.log('✅ Event listeners satt opp for alle lagre-knapper');
+            }            
             async function loadAllSettings() {
                 try {
                     showLoading(true, 'Laster innstillinger...');
@@ -439,6 +445,46 @@
                     showLoading(false);
                 }
             }
+
+// KRITISK FIX: Manglende saveCompanyInfo funksjon
+async function saveCompanyInfo() {
+    try {
+        showLoading(true, 'Lagrer bedriftsinformasjon...');
+        
+        const companyInfo = {
+            name: companyNameInput.value.trim(),
+            address: companyAddressInput.value.trim(),
+            phone: companyPhoneInput.value.trim(),
+            email: companyEmailInput.value.trim(),
+            cvr: companyCvrInput.value.trim()
+        };
+        
+        console.log('📤 Lagrer bedriftsinformasjon:', companyInfo);
+        
+        const response = await fetch('/api/images/save-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ companyInfo })
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            showToast('Bedriftsinformasjon lagret!', 'success');
+            currentSettings.companyInfo = companyInfo;
+            console.log('✅ Response:', result);
+        } else {
+            const error = await response.json();
+            console.error('❌ Error response:', error);
+            throw new Error(error.error || 'Kunne ikke lagre');
+        }
+    } catch (error) {
+        console.error('❌ Save error:', error);
+        showToast('Feil ved lagring: ' + error.message, 'error');
+    } finally {
+        showLoading(false);
+    }
+}
             
             async function saveReportSettings() {
                 try {
@@ -588,6 +634,7 @@
             }
             
             // Make functions global
+            window.saveCompanyInfo = saveCompanyInfo;
             window.saveReportSettings = saveReportSettings;
             window.saveQuoteSettings = saveQuoteSettings;
             window.saveAllSettings = saveAllSettings;

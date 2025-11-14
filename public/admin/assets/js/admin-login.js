@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function checkAuthStatus() {
         try {
-            const response = await fetch('/api/admin/me');
+            const response = await fetch('/api/admin/auth/me');
             if (response.ok) {
                 // Already logged in, redirect to dashboard
                 window.location.href = '/admin/dashboard.html';

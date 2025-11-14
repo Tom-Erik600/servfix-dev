@@ -12,7 +12,7 @@ class EmailService {
       projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
       keyFilename: process.env.GOOGLE_CLOUD_KEY_FILE,
     });
-    this.bucket = this.storage.bucket(process.env.GCS_BUCKET_NAME || 'servfix-files');
+    this.bucket = this.storage.bucket(process.env.GCS_BUCKET_NAME || ((process.env.NODE_ENV === 'production') ? 'servfix-files' : 'servfix-files-test'));
   }
 
   async init() {
@@ -76,7 +76,7 @@ class EmailService {
       let attachmentOptions;
       
       // Bygg GCS path og public URL (samme som admin/reports.js)
-      const bucketName = process.env.GCS_BUCKET_NAME || 'servfix-files';
+      const bucketName = process.env.GCS_BUCKET_NAME || ((process.env.NODE_ENV === 'production') ? 'servfix-files' : 'servfix-files-test');
       const gcsPath = `tenants/${tenantId}/${report.pdf_path}`;
       const publicUrl = `https://storage.googleapis.com/${bucketName}/${gcsPath}`;
       
@@ -291,7 +291,7 @@ async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, orde
       throw new Error('Ingen PDF funnet for denne ordren');
     }
     
-    const bucketName = process.env.GCS_BUCKET_NAME || 'servfix-files';
+    const bucketName = process.env.GCS_BUCKET_NAME || ((process.env.NODE_ENV === 'production') ? 'servfix-files' : 'servfix-files-test');
     const gcsPath = `tenants/${tenantId}/${firstReport.pdf_path}`;
     const publicUrl = `https://storage.googleapis.com/${bucketName}/${gcsPath}`;
     

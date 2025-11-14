@@ -10,7 +10,20 @@ const db = require('../config/database');
 class UnifiedPDFGenerator {
   constructor() {
     this.browser = null;
-    const bucketName = process.env.GCS_BUCKET_NAME || null;
+    
+    // Intelligent bucket selection
+    let bucketName = process.env.GCS_BUCKET_NAME;
+    if (!bucketName) {
+      const env = process.env.NODE_ENV || 'development';
+      if (env === 'production') {
+        bucketName = 'servfix-files';
+        console.warn('⚠️ UnifiedPDF: Using fallback prod bucket');
+      } else if (env === 'staging' || env === 'test') {
+        bucketName = 'servfix-files-test';
+        console.warn('⚠️ UnifiedPDF: Using fallback test bucket');
+      }
+      // In development, leave as undefined (GCS will be disabled)
+    }
 
     if (bucketName) {
       try {
@@ -482,8 +495,14 @@ class UnifiedPDFGenerator {
   });
   
   if (!data.avvik || !data.avvik.length) {
-    console.log('⚠️ No avvik to render');
-    return '';
+    console.log('⚠️ No avvik to render - showing "Ingen avvik" message');
+    return `
+      <section class="section avoid-break avvik-section">
+        <h2 class="section-header">Registrerte avvik</h2>
+        <p style="font-size: 13pt; font-weight: 600; color: #059669; margin: 20px 0; text-align: center;">
+          Ingen avvik funnet!
+        </p>
+      </section>`;
   }
   
   const rows = data.avvik.map(a => `
@@ -847,11 +866,11 @@ renderWorkTable(work) {
 .styled-table.equipment-overview th:nth-child(5) { width: 35%; }  /* Betjener - økt fra ~25% */
 
 /* Kolonne-bredder for avvik-tabell */
-.avvik-table th:nth-child(1) { width: 6%; }   /* Avvik ID - redusert fra ~10% */
-.avvik-table th:nth-child(2) { width: 15%; }  /* System */
-.avvik-table th:nth-child(3) { width: 20%; }  /* Komponent */
-.avvik-table th:nth-child(4) { width: 10%; }  /* Status */
-.avvik-table th:nth-child(5) { width: 49%; }  /* Kommentar - økt fra ~40% */
+.avvik-table th:nth-child(1) { width: 5%; }   /* Avvik ID */
+.avvik-table th:nth-child(2) { width: 15%; }  /* Anlegg */
+.avvik-table th:nth-child(3) { width: 12%; }  /* Systemnummer */
+.avvik-table th:nth-child(4) { width: 13%; }  /* Komponent */
+.avvik-table th:nth-child(5) { width: 55%; }  /* Kommentar - økt for bedre lesbarhet */
       .equipment-summary { margin: 20px 0; }
 
 /* Produkter tabell */

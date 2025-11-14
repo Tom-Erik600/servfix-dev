@@ -13,7 +13,26 @@ const storage = new Storage({
   keyFilename: process.env.GOOGLE_CLOUD_KEY_FILE,
 });
 
-const bucketName = process.env.GCS_BUCKET_NAME || 'servfix-files';
+// Intelligent bucket selection based on environment
+// NEVER default to prod bucket in test!
+let bucketName;
+if (process.env.GCS_BUCKET_NAME) {
+  bucketName = process.env.GCS_BUCKET_NAME;
+} else {
+  // Fallback based on NODE_ENV
+  const env = process.env.NODE_ENV || 'development';
+  if (env === 'production') {
+    bucketName = 'servfix-files';
+  } else if (env === 'staging' || env === 'test') {
+    bucketName = 'servfix-files-test';
+  } else {
+    // Development: require explicit configuration
+    throw new Error('GCS_BUCKET_NAME must be set in development environment');
+  }
+  console.warn(`⚠️ GCS_BUCKET_NAME not set, using fallback: ${bucketName} (NODE_ENV: ${env})`);
+}
+
+console.log(`🪣 Using GCS bucket: ${bucketName}`);
 const bucket = storage.bucket(bucketName);
 
 // Multer setup for memory storage
@@ -77,16 +96,30 @@ async function saveTenantSettings(tenantId, settings) {
     const settingsPath = `tenants/${tenantId}/assets/settings.json`;
     const file = bucket.file(settingsPath);
     
+    console.log(`💾 Attempting to save settings:`, {
+      bucket: bucketName,
+      tenant: tenantId,
+      path: settingsPath,
+      settingsSize: JSON.stringify(settings).length
+    });
+    
     await file.save(JSON.stringify(settings, null, 2), {
       metadata: {
         contentType: 'application/json',
       },
     });
     
-    console.log(`✅ Settings saved for tenant ${tenantId}`);
+    console.log(`✅ Settings saved successfully for tenant ${tenantId}`);
+    console.log(`   Full path: gs://${bucketName}/${settingsPath}`);
     return true;
   } catch (error) {
-    console.error('Error saving tenant settings:', error);
+    console.error(`❌ Error saving tenant settings for ${tenantId}:`, {
+      message: error.message,
+      code: error.code,
+      bucket: bucketName,
+      path: `tenants/${tenantId}/assets/settings.json`,
+      stack: error.stack
+    });
     return false;
   }
 }

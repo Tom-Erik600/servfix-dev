@@ -1,9 +1,25 @@
 // Fil: air-tech-adminweb/assets/js/main.js
 
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", async function() {
     // Finner header-elementet på siden
     const headerPlaceholder = document.querySelector("header.app-header");
     if (!headerPlaceholder) return;
+
+    // Hent bedriftsnavn fra innstillinger
+    let companyName = 'selskapsnavn ikke funnet'; // Fallback
+    
+    try {
+        const response = await fetch('/api/images/settings', { 
+            credentials: 'include' 
+        });
+        if (response.ok) {
+            const settings = await response.json();
+            companyName = settings.companyInfo?.name || 'AIR-TECH AS';
+            console.log('✅ Bedriftsnavn hentet:', companyName);
+        }
+    } catch (error) {
+        console.log('⚠️ Bruker standard bedriftsnavn:', error.message);
+    }
 
     // Henter innholdet fra den delte header-filen
     fetch('/admin/shared/header.html')
@@ -14,6 +30,9 @@ document.addEventListener("DOMContentLoaded", function() {
             return response.text();
         })
         .then(data => {
+            // KRITISK FIX: Erstatt hardkodet bedriftsnavn med dynamisk verdi
+            data = data.replace('AIR-TECH AS', companyName);
+            
             // Setter det hentede HTML-innholdet inn i header-elementet
             headerPlaceholder.innerHTML = data;
 

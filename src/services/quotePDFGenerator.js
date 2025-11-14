@@ -164,7 +164,16 @@ class QuotePDFGenerator {
             keyFilename: process.env.GOOGLE_CLOUD_KEY_FILE,
         });
         
-        const bucketName = process.env.GCS_BUCKET_NAME || 'servfix-files';
+        // Intelligent bucket selection - never default to prod in test
+        let bucketName;
+        if (process.env.GCS_BUCKET_NAME) {
+            bucketName = process.env.GCS_BUCKET_NAME;
+        } else {
+            const env = process.env.NODE_ENV || 'development';
+            bucketName = (env === 'production') ? 'servfix-files' : 'servfix-files-test';
+            console.warn(`⚠️ QuotePDF: GCS_BUCKET_NAME not set, using ${bucketName} (${env})`);
+        }
+        
         const bucket = storage.bucket(bucketName);
         
         // Last innstillinger fra JSON-fil (samme som images.js)

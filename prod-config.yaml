@@ -3,25 +3,25 @@ kind: Service
 metadata:
   annotations:
     run.googleapis.com/build-enable-automatic-updates: 'false'
-    run.googleapis.com/build-id: b53e9d63-54de-4ef8-8a14-dc10e13efe40
+    run.googleapis.com/build-id: 06e8bbce-9b47-470b-bdb5-78387964ab9f
     run.googleapis.com/build-image-uri: europe-north1-docker.pkg.dev/servfix-production/cloud-run-source-deploy/servfix-app
-    run.googleapis.com/build-name: projects/471345128928/locations/europe-north1/builds/b53e9d63-54de-4ef8-8a14-dc10e13efe40
-    run.googleapis.com/build-source-location: gs://run-sources-servfix-production-europe-north1/services/servfix-app/1757419691.770687-cfa11664ccb34c82ad022236061a6ef8.zip#1757419698423577
+    run.googleapis.com/build-name: projects/471345128928/locations/europe-north1/builds/06e8bbce-9b47-470b-bdb5-78387964ab9f
+    run.googleapis.com/build-source-location: gs://run-sources-servfix-production-europe-north1/services/servfix-app/1762973926.988292-e177a6c6e5fe4f77837fe6ec8620944f.zip#1762973866911382
     run.googleapis.com/client-name: gcloud
     run.googleapis.com/client-version: 532.0.0
     run.googleapis.com/ingress: all
     run.googleapis.com/ingress-status: all
-    run.googleapis.com/operation-id: d099ce23-a7fe-4f3c-b4f5-d19de8a83ba2
+    run.googleapis.com/operation-id: 58324534-0fd8-48e7-9a76-6a3c1d8d90c3
     run.googleapis.com/urls: '["https://servfix-app-471345128928.europe-north1.run.app","https://servfix-app-eufsbr5tvq-lz.a.run.app"]'
     serving.knative.dev/creator: servfixadm@gmail.com
     serving.knative.dev/lastModifier: servfixadm@gmail.com
   creationTimestamp: '2025-08-05T23:33:13.562859Z'
-  generation: 164
+  generation: 273
   labels:
     cloud.googleapis.com/location: europe-north1
   name: servfix-app
   namespace: '471345128928'
-  resourceVersion: AAY+XTM9TvI
+  resourceVersion: AAZDamH5BfY
   selfLink: /apis/serving.knative.dev/v1/namespaces/471345128928/services/servfix-app
   uid: aa4367e5-7594-44b8-8226-e8781b35cc86
 spec:
@@ -32,10 +32,10 @@ spec:
         autoscaling.knative.dev/minScale: '1'
         run.googleapis.com/client-name: gcloud
         run.googleapis.com/client-version: 532.0.0
-        run.googleapis.com/cloudsql-instances: servfix-production:europe-north1:servfix-db
+        run.googleapis.com/cloudsql-instances: servfix-test:europe-north1:servfix-test-db,servfix-production:europe-north1:servfix-db
         run.googleapis.com/startup-cpu-boost: 'true'
       labels:
-        client.knative.dev/nonce: kzasvqdwoq
+        client.knative.dev/nonce: gxyaaydmit
         run.googleapis.com/startupProbeType: Default
     spec:
       containerConcurrency: 80
@@ -90,7 +90,7 @@ spec:
           value: servfixadm@gmail.com
         - name: SMTP_FROM
           value: servfixadm@gmail.com
-        image: europe-north1-docker.pkg.dev/servfix-production/cloud-run-source-deploy/servfix-app@sha256:cb94f85165610b5d492de5c90055cd8b579a47272d81a0d7fb060d1cfd2eaec9
+        image: europe-north1-docker.pkg.dev/servfix-production/cloud-run-source-deploy/servfix-app@sha256:df253d8a473f7dc8ed81324f4fe8f1d112c3ad3bbe4c1b889c0bc683d68ffc06
         ports:
         - containerPort: 8080
           name: http1
@@ -113,20 +113,20 @@ status:
   address:
     url: https://servfix-app-eufsbr5tvq-lz.a.run.app
   conditions:
-  - lastTransitionTime: '2025-09-09T12:11:12.800498Z'
+  - lastTransitionTime: '2025-11-12T19:00:49.568246Z'
     status: 'True'
     type: Ready
-  - lastTransitionTime: '2025-09-09T12:11:10.427226Z'
+  - lastTransitionTime: '2025-11-12T19:00:48.314654Z'
     status: 'True'
     type: ConfigurationsReady
-  - lastTransitionTime: '2025-09-09T12:11:12.771233Z'
+  - lastTransitionTime: '2025-11-12T19:00:49.538636Z'
     status: 'True'
     type: RoutesReady
-  latestCreatedRevisionName: servfix-app-00164-qx4
-  latestReadyRevisionName: servfix-app-00164-qx4
-  observedGeneration: 164
+  latestCreatedRevisionName: servfix-app-00273-wkw
+  latestReadyRevisionName: servfix-app-00273-wkw
+  observedGeneration: 273
   traffic:
   - latestRevision: true
     percent: 100
-    revisionName: servfix-app-00164-qx4
+    revisionName: servfix-app-00273-wkw
   url: https://servfix-app-eufsbr5tvq-lz.a.run.app

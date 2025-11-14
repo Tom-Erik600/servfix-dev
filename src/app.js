@@ -24,8 +24,8 @@ module.exports = async () => {
     resave: true,
     saveUninitialized: true,
     cookie: {
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 dager
-      secure: process.env.NODE_ENV === 'production' ? true : false,
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      secure: process.env.CLOUD_SQL_CONNECTION_NAME ? true : false, // true når i cloud
       httpOnly: true,
       sameSite: 'Lax'
     }

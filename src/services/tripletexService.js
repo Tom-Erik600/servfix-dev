@@ -9,8 +9,21 @@ class TripletexService {
         this.apiClient = null;
         this.tokenCreatedAt = null;
 
+        // CRITICAL DEBUG - DETTE MÅ VÆRE MED!
+        console.log('==========================================');
+        console.log('🔐 TRIPLETEX SERVICE CONSTRUCTOR');
+        console.log('==========================================');
+        console.log('BASE_URL:', this.baseUrl);
+        console.log('CONSUMER_TOKEN exists:', !!this.consumerToken);
+        console.log('CONSUMER_TOKEN length:', this.consumerToken?.length || 0);
+        console.log('CONSUMER_TOKEN first 50:', this.consumerToken?.substring(0, 50) || 'MISSING!!!');
+        console.log('EMPLOYEE_TOKEN exists:', !!this.employeeToken);
+        console.log('EMPLOYEE_TOKEN length:', this.employeeToken?.length || 0);
+        console.log('EMPLOYEE_TOKEN first 50:', this.employeeToken?.substring(0, 50) || 'MISSING!!!');
+        console.log('==========================================');
+
         if (!this.consumerToken || !this.employeeToken) {
-            console.warn('Tripletex API tokens are not fully configured in .env. Tripletex functionality may be limited.');
+            console.error('❌❌❌ TRIPLETEX TOKENS ARE MISSING! ❌❌❌');
         }
     }
 

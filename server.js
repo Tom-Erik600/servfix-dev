@@ -5,6 +5,7 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 8080;
 
 // Logging for debugging
@@ -20,104 +21,60 @@ app.use(express.urlencoded({ extended: true }));
 
 // CORS konfigurasjon
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? true : 'http://localhost:3000',
+  origin: process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : true,
   credentials: true
 }));
 
 // Trust proxy for Cloud Run
-if (process.env.NODE_ENV === 'production') {
+if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging') {
   app.set('trust proxy', true);
 }
 
 // Session konfigurasjon - Forenklet for å unngå problemer
 async function setupSession() {
   try {
-    if (process.env.NODE_ENV === 'production') {
-      // Produksjon - Prøv PostgreSQL først, fallback til memory
-      try {
-        const pgSession = require('connect-pg-simple')(session);
-        const { Pool } = require('pg');
-        
-        const pool = new Pool({
-          user: process.env.DB_USER || 'postgres',
-          password: process.env.DB_PASSWORD,
-          database: 'servfix_admin',
-          host: `/cloudsql/${process.env.CLOUD_SQL_CONNECTION_NAME}`,
-          max: 2
-        });
+    const pgSession = require('connect-pg-simple')(session);
+    const db = require('./src/config/database');
+    
+    // Hent pool fra database.js (som allerede har riktig Cloud SQL config!)
+    const pool = await db.getPool('servfix_admin');
+    
+    // Test connection
+    await pool.query('SELECT 1');
+    console.log('✅ Database connected for sessions via database.js');
 
-        // Test connection
-        await pool.query('SELECT 1');
-        console.log('✅ Database connected for sessions');
-
-        app.use(session({
-          store: new pgSession({
-            pool: pool,
-            tableName: 'session',
-            createTableIfMissing: false
-          }),
-          secret: process.env.SESSION_SECRET || 'prod-secret-key',
-          resave: false,
-          saveUninitialized: false,
-          cookie: {
-            secure: true,
-            httpOnly: true,
-            maxAge: 30 * 24 * 60 * 60 * 1000,
-            sameSite: 'lax'
-          }
-        }));
-      } catch (dbError) {
-        console.error('⚠️ Could not setup PostgreSQL sessions, using memory store:', dbError.message);
-        // Fallback til memory store
-        app.use(session({
-          secret: process.env.SESSION_SECRET || 'prod-secret-key',
-          resave: false,
-          saveUninitialized: false,
-          cookie: {
-            secure: true,
-            httpOnly: true,
-            maxAge: 24 * 60 * 60 * 1000,
-            sameSite: 'lax'
-          }
-        }));
+    app.use(session({
+      store: new pgSession({
+        pool: pool,
+        tableName: 'session',
+        createTableIfMissing: true
+      }),
+      secret: process.env.SESSION_SECRET || 'secret-key',
+      resave: false,
+      saveUninitialized: false,
+      proxy: true,
+      cookie: {
+        secure: !!process.env.CLOUD_SQL_CONNECTION_NAME, // Secure i cloud
+        httpOnly: true,
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        sameSite: 'lax'
       }
-    } else {
-      // Development - Bruk PostgreSQL
-      const pgSession = require('connect-pg-simple')(session);
-      const { Pool } = require('pg');
-      
-      const pool = new Pool({
-        host: process.env.DB_HOST || 'localhost',
-        port: process.env.DB_PORT || 5432,
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME || 'servfix_admin'
-      });
-
-      app.use(session({
-        store: new pgSession({
-          pool: pool,
-          tableName: 'session',
-          createTableIfMissing: false,
-          pruneSessionInterval: false
-        }),
-        secret: process.env.SESSION_SECRET || 'dev-secret-key',
-        resave: false,
-        saveUninitialized: false,
-        cookie: {
-          secure: false,
-          httpOnly: true,
-          maxAge: 30 * 24 * 60 * 60 * 1000
-        }
-      }));
-    }
+    }));
+    
+    console.log('✅ Session store configured');
+    
   } catch (error) {
     console.error('❌ Session setup failed:', error);
-    // Ultimate fallback - memory store
+    // Fallback til memory store
     app.use(session({
       secret: process.env.SESSION_SECRET || 'fallback-secret',
       resave: false,
-      saveUninitialized: false
+      saveUninitialized: false,
+      cookie: {
+        secure: false,
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000
+      }
     }));
   }
 }

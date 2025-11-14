@@ -352,7 +352,7 @@ function escapeHtml(unsafe) {
             targetCustomer = { 
                 ...customer,
                 technicianId, 
-                customerId: customer.id,
+                customerId: customer.id || customer.customerId,
                 customerName: customer.name
             };
             
@@ -660,7 +660,7 @@ function showEquipmentForm(customer, equipmentType) {
         e.preventDefault();
         
         const equipmentData = {
-            customerId: customer.id,
+            customerId: customer.id || customer.customerId,
             systemtype: equipmentType,
             systemnummer: document.getElementById('systemnummer').value,
             systemnavn: document.getElementById('systemnavn').value,

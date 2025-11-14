@@ -166,7 +166,13 @@ router.get('/:reportId/pdf', async (req, res) => {
     
     if (useCloudStorage) {
       // PRODUKSJON: Redirect til Google Cloud Storage
-      const bucketName = process.env.GCS_BUCKET_NAME || 'servfix-files';
+      // Intelligent bucket selection
+      let bucketName = process.env.GCS_BUCKET_NAME;
+      if (!bucketName) {
+        const env = process.env.NODE_ENV || 'development';
+        bucketName = (env === 'production') ? 'servfix-files' : 'servfix-files-test';
+        console.warn(`⚠️ AdminReports: GCS_BUCKET_NAME not set, using ${bucketName}`);
+      }
       const publicUrl = `https://storage.googleapis.com/${bucketName}/tenants/${req.adminTenantId}/${report.pdf_path}`;
       console.log(`🌐 Redirecting to GCS: ${publicUrl}`);
       res.redirect(publicUrl);

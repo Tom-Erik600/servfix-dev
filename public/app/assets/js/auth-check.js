@@ -13,18 +13,18 @@ class AuthManager {
             } else {
                 this.currentUser = null;
                 // Sjekk om vi IKKE er på login-siden
-                const loginPaths = ['/', '/login.html'];
+                const loginPaths = ['/', '/app/', '/app/login.html'];
                 if (!loginPaths.includes(window.location.pathname)) {
-                    window.location.href = '/login.html';
+                    window.location.href = '/app/login.html';  // ✅ FIKSET
                 }
             }
         } catch (error) {
             console.error('Auth check failed', error);
             this.currentUser = null;
             // Sjekk om vi IKKE er på login-siden
-            const loginPaths = ['/', '/login.html'];
+            const loginPaths = ['/', '/app/', '/app/login.html'];
             if (!loginPaths.includes(window.location.pathname)) {
-                window.location.href = '/login.html';
+                window.location.href = '/app/login.html';  // ✅ FIKSET
             }
         } finally {
             this.initialized = true;
@@ -49,11 +49,10 @@ class AuthManager {
         try {
             await fetch('/api/auth/logout', { method: 'POST' });
             this.currentUser = null;
-            window.location.href = '/login.html';
+            window.location.href = '/app/login.html';  // ✅ FIKSET
         } catch (error) {
             console.error('Logout failed', error);
-            // Redirect uansett ved logout-feil
-            window.location.href = '/login.html';
+            window.location.href = '/app/login.html';  // ✅ FIKSET
         }
     }
 }
