@@ -15,6 +15,24 @@ console.log('Port:', PORT);
 console.log('DB_NAME:', process.env.DB_NAME);
 console.log('Cloud SQL:', process.env.CLOUD_SQL_CONNECTION_NAME);
 
+// 🔒 Security configuration check
+console.log('=== SECURITY STATUS ===');
+console.log('Environment:', process.env.NODE_ENV || 'development');
+console.log('Debug endpoints:', process.env.NODE_ENV !== 'production' ? '⚠️  ENABLED' : '✅ DISABLED');
+console.log('Session secret:', process.env.SESSION_SECRET ? '✅ SET' : '❌ MISSING');
+console.log('Trust proxy:', process.env.NODE_ENV === 'production' ? '✅ ENABLED' : '⚠️  DISABLED');
+
+// Warn if running in production without proper security
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.SESSION_SECRET) {
+    console.error('🚨 CRITICAL: SESSION_SECRET not set in production!');
+  }
+  if (!process.env.CLOUD_SQL_CONNECTION_NAME) {
+    console.warn('⚠️  WARNING: CLOUD_SQL_CONNECTION_NAME not set in production');
+  }
+}
+console.log('=====================');
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -208,21 +226,35 @@ setupSession().then(() => {
 
   // Global error handler
   app.use((err, req, res, next) => {
+    // 🔒 SECURITY: Log error server-side, but sanitize client response
     console.error('Server error:', err);
-    console.error('Stack:', err.stack);
     
-    // Ikke eksponer sensitive detaljer i produksjon
-    const message = process.env.NODE_ENV === 'production' 
-      ? 'Internal server error' 
-      : err.message;
+    // Log stack trace only in non-production
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Stack:', err.stack);
+    }
     
-    res.status(err.status || 500).json({ 
-      error: message,
-      ...(process.env.NODE_ENV !== 'production' && { 
-        details: err.message,
-        stack: err.stack 
-      })
-    });
+    // Determine what to send to client
+    const isProd = process.env.NODE_ENV === 'production';
+    const statusCode = err.status || 500;
+    
+    // Generic message in production
+    const clientMessage = isProd ? 'Internal server error' : err.message;
+    
+    // Response object
+    const response = { 
+      error: clientMessage,
+      statusCode: statusCode
+    };
+    
+    // Add details only in non-production
+    if (!isProd) {
+      response.details = err.message;
+      response.stack = err.stack;
+      response.timestamp = new Date().toISOString();
+    }
+    
+    res.status(statusCode).json(response);
   });
 
   // Start server
@@ -242,22 +274,33 @@ setupSession().then(() => {
   process.exit(1);
 });
 
-// MIDLERTIDIG TEST ENDPOINT - FJERN ETTER DEBUGGING
-app.get('/api/test-admin', async (req, res) => {
-  try {
-    const db = require('./src/config/database');
-    const pool = await db.getPool('servfix_admin');
-    const result = await pool.query('SELECT COUNT(*) as count FROM admin_users');
-    res.json({ 
-      success: true, 
-      adminUserCount: result.rows[0].count,
-      dbConnection: 'OK'
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message,
-      dbConnection: 'FAILED'
-    });
-  }
-});
+// 🔒 SECURITY: Test endpoints only available in non-production environments
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/api/test-admin', async (req, res) => {
+    try {
+      const db = require('./src/config/database');
+      const pool = await db.getPool('servfix_admin');
+      const result = await pool.query('SELECT COUNT(*) as count FROM admin_users');
+      res.json({ 
+        success: true, 
+        adminUserCount: result.rows[0].count,
+        dbConnection: 'OK',
+        environment: process.env.NODE_ENV || 'development'
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: error.message,
+        dbConnection: 'FAILED'
+      });
+    }
+  });
+  
+  console.log('⚠️  DEBUG ENDPOINTS ENABLED (non-production environment)');
+} else {
+  // In production, return 404 for test endpoints
+  app.get('/api/test-*', (req, res) => {
+    console.warn(`🚨 Attempted access to test endpoint in production: ${req.path}`);
+    res.status(404).json({ error: 'Not found' });
+  });
+}

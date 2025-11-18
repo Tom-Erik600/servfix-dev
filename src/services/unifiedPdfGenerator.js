@@ -182,7 +182,7 @@ class UnifiedPDFGenerator {
         ARRAY_AGG(
           json_build_object(
             'report_id', sr2.id, 'equipment_id', sr2.equipment_id, 'equipment_name', e2.systemnavn,
-            'equipment_type', e2.systemtype, 'equipment_location', e2.location, 'system_nummer', e2.systemnummer,
+            'equipment_type', e2.systemtype, 'equipment_location', e2.plassering, 'system_nummer', e2.systemnummer,
     'equipment_betjener', e2.betjener,
             'checklist_data', sr2.checklist_data, 'photos', sr2.photos
           )

@@ -614,11 +614,6 @@
     align-items: center; 
     width: 100%;
     margin-bottom: 8px;
-    padding: 0;
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
 }
 
 .product-item .product-name,

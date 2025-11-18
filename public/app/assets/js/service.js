@@ -1371,18 +1371,8 @@ function renderComponentDetailsForm() {
         })
         .join('');
 
-    // Kun vis Aggregat type hvis relevant
-    const aggregatTypeHTML = state.equipment?.systemtype === 'ventilasjonsaggregat' 
-        ? `<div class="form-group">
-            <label for="aggregat-type">Aggregat type</label>
-            <input type="text" id="aggregat-type" class="form-control" 
-                   value="${state.equipment?.systemtype || ''}" readonly />
-           </div>`
-        : '';
-
     container.innerHTML = `
         <div class="system-details-section">
-            ${aggregatTypeHTML}
             ${systemFieldsHTML}
         </div>
     `;

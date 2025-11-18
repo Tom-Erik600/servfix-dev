@@ -1035,7 +1035,6 @@ function showCreateQuoteDialog() {
     modal.querySelector('.modal-content').innerHTML = `
         <div class="modal-header">
             <h3>Opprett tilbud</h3>
-            <button class="close-btn" data-action="close-modal">×</button>
         </div>
         <form id="quote-form" class="quote-form">
             <div class="modal-body">
@@ -1043,7 +1042,7 @@ function showCreateQuoteDialog() {
                     <div class="form-group">
                         <label class="form-label">Beskrivelse av arbeid</label>
                         <textarea id="quote-description" class="form-input" rows="4" 
-                                placeholder="Her trenger man å lage et tilbud" required></textarea>
+                                placeholder="Beskriv arbeidet som skal utføres" required></textarea>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Estimerte timer</label>
@@ -1068,14 +1067,15 @@ function showCreateQuoteDialog() {
                 </div>
             </div>
             
-            <div class="modal-footer-custom">
-                <button type="button" class="btn-secondary-custom" data-action="close-modal">Avbryt</button>
-                <button type="submit" class="btn-primary-custom">Opprett tilbud</button>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-action="close-modal">Avbryt</button>
+                <button type="submit" class="btn-primary">Opprett tilbud</button>
             </div>
         </form>
     `;
     
     modal.style.display = 'flex';
+    modal.addEventListener('click', handleModalClicks);
     document.getElementById('quote-form').addEventListener('submit', handleSaveQuote);
 }
 
