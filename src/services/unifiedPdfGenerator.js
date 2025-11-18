@@ -353,11 +353,34 @@ class UnifiedPDFGenerator {
           const sectionName = systemRef;
           const checkpoints = [];
 
-          Object.entries(component.checklist).forEach(([transformedId, itemData]) => {
-            const templateItem = (template.checklistItems || []).find(tItem => {
-              const labelKey = ((tItem.label || tItem.name) || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/[^\w_æøå]/g, '');
-              return labelKey === transformedId;
-            });
+          Object.entries(component.checklist).forEach(([itemId, itemData]) => {
+            // ✅ CRITICAL FIX: Get label from saved data (historical accuracy)
+            let displayLabel = itemData.label || itemId;
+            let cleanItemData = itemData;
+            
+            // Remove label from itemData for processing
+            if (itemData.label) {
+              const { label, ...rest } = itemData;
+              cleanItemData = rest;
+            }
+            
+            // Try to find template item by ID (new format)
+            let templateItem = (template.checklistItems || []).find(tItem => tItem.id === itemId);
+            
+            // FALLBACK: Try to match by transformed label (old data compatibility)
+            if (!templateItem) {
+              templateItem = (template.checklistItems || []).find(tItem => {
+                const labelKey = ((tItem.label || tItem.name) || '').trim().toLowerCase()
+                  .replace(/\s+/g, '_')
+                  .replace(/[^\w_æøå]/g, '');
+                return labelKey === itemId;
+              });
+              
+              // If found via fallback, use template label
+              if (templateItem && !itemData.label) {
+                displayLabel = templateItem.label || templateItem.name || itemId;
+              }
+            }
 
             // ==================================================================
             // FIKS 2: Korrekt fallback-logikk. Vi MÅ ha en original ID.

@@ -2814,23 +2814,34 @@ function populateChecklistItems(items, checklistData) {
     });
     
     items.forEach(item => {
-        let result;
+        // ✅ CRITICAL FIX: Always use item.id directly
+        let result = checklistData[item.id];
         
-        // FIX: For tilstandsgrad og konsekvensgrad, bruk alltid itemId direkte
-        if (item.inputType === 'tilstandsgrad_dropdown' || item.inputType === 'konsekvensgrad_dropdown') {
-            result = checklistData[item.id];  // tilstand1, konsekvens1
-        } else {
-            // Generate the same key as when saving for andre typer
-            const key = (item.label || '').trim().toLowerCase()
+        // ✅ FALLBACK: Support old data with transformed labels (backward compatibility)
+        if (!result && result !== 0) {
+            const transformedLabel = (item.label || '').trim().toLowerCase()
                 .replace(/\s+/g, '_')
                 .replace(/[^\w_æøå]/g, '');
-                
-            result = checklistData[key] || checklistData[item.id];
+            result = checklistData[transformedLabel];
+            
+            if (result) {
+                console.log(`⚠️ Using fallback for old data: ${transformedLabel} → ${item.id}`);
+            }
         }
         
-        if (!result && result !== 0) {  // FIX: 0 er en gyldig verdi for TG/KG
+        if (!result && result !== 0) {
             console.log(`⚠️ No data found for item: ${item.label} (id: ${item.id})`);
             return;
+        }
+        
+        // ✅ CRITICAL FIX: Remove label property before populating UI
+        // The label is stored for historical accuracy, but UI should use template label
+        if (result && typeof result === 'object' && result.label) {
+            const { label, ...dataWithoutLabel } = result;
+            result = dataWithoutLabel;
+            console.log(`✅ Found data for ${item.label} (saved label: "${label}"):`, result);
+        } else {
+            console.log(`✅ Found data for ${item.label}:`, result);
         }
         
         console.log(`✅ Found data for ${item.label}:`, result);
@@ -3507,37 +3518,74 @@ function collectChecklistData() {
         return checklistData;
     }
 
-    const checklistItems = checklistContainer.querySelectorAll('.checklist-item, .checklist-item-fullwidth, .form-group');  // LEGG TIL .form-group
+    const checklistItems = checklistContainer.querySelectorAll('.checklist-item, .checklist-item-fullwidth, .form-group');
 
     checklistItems.forEach(item => {
         const itemId = item.dataset.itemId;
-        if (!itemId) return;
+        if (!itemId) {
+            console.warn('⚠️ Checklist item missing data-item-id:', item);
+            return;
+        }
 
         const data = getChecklistItemValue(itemId);
 
-        if (data !== null && data !== undefined && data !== '') {  // FIX: Sjekk også tom string
-            // FIX: Bruk itemId direkte for tilstandsgrad og konsekvensgrad
-            const itemType = item.dataset.itemType;
-            let key;
-            
-            if (itemType === 'tilstandsgrad_dropdown' || itemType === 'konsekvensgrad_dropdown') {
-                // Bruk itemId direkte (tilstand1, konsekvens1) for disse typene
-                key = itemId;
-            } else {
-                // Lag lesbar nøkkel fra label for andre typer
-                const label = item.querySelector('.item-label')?.textContent || itemId;
-                key = label.trim().toLowerCase()
-                    .replace(/\s+/g, '_')
-                    .replace(/[^\w_æøå]/g, '');
-            }
-            
-            checklistData[key] = data;
-            console.log(`  📝 Collected ${key} = ${typeof data === 'object' ? JSON.stringify(data) : data}`);
+        // ✅ FIX: Skip if data is empty (optimization)
+        if (isEmptyChecklistData(data)) {
+            console.log(`  ⏭️  Skipped ${itemId} (empty data)`);
+            return;
         }
+
+        // ✅ CRITICAL FIX: Use itemId as key and save label with data
+        const labelElement = item.querySelector('.item-label');
+        let label = null;
+        
+        if (labelElement) {
+            // Remove instruction icon from label text
+            const labelClone = labelElement.cloneNode(true);
+            const icon = labelClone.querySelector('.instruction-icon');
+            if (icon) icon.remove();
+            label = labelClone.textContent.trim();
+        }
+        
+        // Add label to data object
+        const dataWithLabel = {
+            label: label || itemId,
+            ...data
+        };
+
+        checklistData[itemId] = dataWithLabel;
+        console.log(`  📝 Collected ${itemId} (${label}) = ${JSON.stringify(data)}`);
     });
 
     console.log('✅ Checklist data collected:', checklistData);
+    console.log('📊 Total items collected:', Object.keys(checklistData).length);
     return checklistData;
+}
+
+function isEmptyChecklistData(data) {
+    if (data === null || data === undefined || data === '') {
+        return true;
+    }
+    
+    if (typeof data === 'object' && !Array.isArray(data)) {
+        // ✅ CRITICAL FIX: Remove label before checking if data is empty
+        // Label is always present, so we must exclude it from the empty check
+        const { label, ...dataWithoutLabel } = data;
+        const values = Object.values(dataWithoutLabel);
+        
+        // Empty object (after removing label)
+        if (values.length === 0) return true;
+        
+        // All values (except label) are null/undefined/empty
+        return values.every(val => 
+            val === null || 
+            val === undefined || 
+            val === '' ||
+            (typeof val === 'number' && isNaN(val))
+        );
+    }
+    
+    return false;
 }
 
 function getChecklistItemValue(itemId) {
@@ -3634,11 +3682,20 @@ function getChecklistItemValue(itemId) {
                 dropdownValue: select ? select.value : ''
             };
             
+            // ✅ FIX: Get general comment (always visible, separate from avvik)
+            const commentTextarea = document.getElementById(`comment-${itemId}`);
+            if (commentTextarea && commentTextarea.value.trim()) {
+                result.comment = commentTextarea.value.trim();
+            }
+            
+            // Get avvik comment if status is avvik
             if (status === 'avvik') {
                 const avvikContainer = document.getElementById(`avvik-${itemId}`);
                 if (avvikContainer && avvikContainer.classList.contains('show')) {
                     const textarea = avvikContainer.querySelector('textarea');
-                    result.avvikComment = textarea ? textarea.value : '';
+                    if (textarea && textarea.value.trim()) {
+                        result.avvikComment = textarea.value.trim();
+                    }
                 }
             }
             
