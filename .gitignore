@@ -1,4 +1,8 @@
 .vscode/claudesync.json
+.continue/
+.claude/
+.claudeignore
+
 
 # Local file storage
 servfix-files/

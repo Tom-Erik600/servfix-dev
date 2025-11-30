@@ -4,3 +4,8 @@ node_modules/
 *.log
 .DS_Store
 uploads/
+.continue/
+.vscode/claudesync.json
+
+servfix-files/
+test-output/
