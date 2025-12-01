@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planlegger - Air-Tech Admin</title>
+    <link rel="stylesheet" href="/admin/assets/css/admin.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .planner-layout {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: 24px;
+            height: calc(100vh - 64px - 48px); /* Full høyde minus header og padding */
+        }
+        .planner-column {
+            background-color: var(--card-background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            overflow-y: auto;
+        }
+        .planner-column h2 {
+            margin-top: 0;
+            font-size: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .technician-card {
+            background-color: #f9fafb;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .technician-card.dragging {
+            opacity: 0.5;
+            background-color: #dbeafe;
+        }
+        .project-card {
+            background-color: #f9fafb;
+            padding: 20px;
+            border: 2px dashed var(--border-color);
+            border-radius: 6px;
+            margin-bottom: 12px;
+            transition: all 0.2s ease;
+        }
+        .project-card.drag-over {
+            border-color: var(--primary-color);
+            background-color: #eff6ff;
+        }
+        .project-customer { font-weight: 600; }
+        .project-name { font-size: 13px; color: var(--text-light); }
+        
+        /* Modal for datovelger */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: none; align-items: center; justify-content: center; z-index: 1000;
+        }
+        .modal-content {
+            background: white; padding: 24px; border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-layout">
+        <header class="app-header">
+             <div class="header-left">
+                <div class="logo">AIR-TECH AS</div>
+                <nav class="main-nav">
+                    <a href="/admin/dashboard.html">Dashboard</a>
+                    <a href="/admin/oppdrag.html">Oppdrag</a>
+                    <a href="#">Kunder</a>
+                    <a href="#">Teknikere</a>
+                    <a href="#">Rapporter</a>
+                </nav>
+            </div>
+            <div class="header-right">
+                <div class="user-menu">
+                    <span>Administrator</span>
+                    <div class="avatar">A</div>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Visuell Planlegger</h1>
+                <p>Dra en tekniker og slipp på et prosjekt for å opprette et nytt serviceoppdrag.</p>
+            </div>
+
+            <div class="planner-layout">
+                <aside class="planner-column" id="technician-column">
+                    <h2>Teknikere</h2>
+                    <div id="technician-list">
+                        </div>
+                </aside>
+                <section class="planner-column" id="project-column">
+                    <h2>Prosjekter / Serviceavtaler</h2>
+                    <div id="project-list">
+                        </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <div class="modal-overlay" id="date-modal">
+        <div class="modal-content">
+            <h3>Planlegg oppdrag</h3>
+            <p id="modal-info-text"></p>
+            <div class="form-group">
+                <label for="modal-date">Velg dato:</label>
+                <input type="date" id="modal-date">
+            </div>
+            <div class="form-actions">
+                <button id="modal-cancel-btn">Avbryt</button>
+                <button id="modal-save-btn" class="submit-btn">Lagre Oppdrag</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/admin/assets/js/planlegger.js"></script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Air-Tech AS - Service</title>
+    <link rel="stylesheet" href="assets/css/main.css">
+    <link rel="stylesheet" href="assets/css/service.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="toast-container"></div>
+
+    <div id="loading-indicator" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner"><div class="spinner"></div><p>Laster service...</p></div>
+    </div>
+
+    <div class="app-container">
+        <header class="app-header" id="app-header"></header>
+        
+        <main class="main-content">
+            <div id="anlegg-info" class="customer-section"></div>
+            
+            <div id="component-list" class="checklist-card">
+                <h4 class="card-title">System/Sjekklister</h4>
+                <div id="component-list-container"><p class="placeholder-text">Ingen sjekklister er lagret.</p></div>
+            </div>
+
+            <div id="new-component-form" class="component-form-section">
+                <form id="component-form">
+                    <h4 class="card-title" id="form-title">Sjekkliste system</h4>
+                    <div id="component-details-form"></div>
+                    <h4 class="card-title" style="margin-top:16px; font-size: 14px;">Sjekkpunkter</h4>
+                    <div id="checklist-items-container"><p class="placeholder-text">Laster sjekkliste...</p></div>
+                    
+                    <div id="products-section-container" class="dynamic-section"></div>
+                    <div id="additional-work-section-container" class="dynamic-section"></div>
+
+                    <button type="submit" class="action-btn primary" style="width:100%; margin-top:16px;">
+                        <i data-lucide="plus-circle"></i> Lagre sjekkliste
+                    </button>
+                </form>
+            </div>
+
+            <div class="checklist-card">
+                 <h4 class="card-title smaller-title">Øvrige kommentarer til rapport</h4>
+                 <div class="form-group">
+                     <textarea id="overall-comment" class="large-textarea" placeholder="Generelle kommentarer til hele servicen..."></textarea>
+                 </div>
+            </div>
+
+            <div class="checklist-card">
+                 <h4 class="card-title smaller-title">Bilder til rapport</h4>
+                 <button type="button" class="action-btn-secondary"><i data-lucide="camera"></i>Ta bilde</button>
+            </div>
+        </main>
+        
+        <footer class="page-footer">
+             <button class="action-btn green-btn" id="finalize-report-btn" style="flex-grow: 1;">Ferdigstill Anlegg</button>
+        </footer>
+    </div>
+
+    <script src="https://unpkg.com/lucide-icons"></script>
+    <script src="assets/js/service.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if(typeof lucide !== 'undefined') {
+                lucide.createIcons();
+                const observer = new MutationObserver((mutations) => {
+                    lucide.createIcons();
+                });
+                observer.observe(document.body, { childList: true, subtree: true });
+            }
+        });
+    </script>
+</body>
+</html>

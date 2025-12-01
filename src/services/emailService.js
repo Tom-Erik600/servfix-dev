@@ -294,7 +294,7 @@ async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, orde
     const bucketName = process.env.GCS_BUCKET_NAME || ((process.env.NODE_ENV === 'production') ? 'servfix-files' : 'servfix-files-test');
     const gcsPath = `tenants/${tenantId}/${firstReport.pdf_path}`;
     const publicUrl = `https://storage.googleapis.com/${bucketName}/${gcsPath}`;
-    
+
     let pdfBuffer;
     try {
       const response = await fetch(publicUrl);

@@ -1,0 +1,44 @@
+<!-- air-tech-adminweb/shared/header.html - Oppdatert versjon med admin-info -->
+<div class="header-left">
+    <div class="logo">AIR-TECH AS</div>
+    <nav class="main-nav">
+        <a href="/admin/dashboard.html">Dashboard</a>
+        <a href="/admin/planlegger.html">Planlegg</a>
+        <a href="/admin/kunder.html">Kundeinfo</a>
+        <a href="/admin/rapporter.html">Rapporter</a>
+        <a href="/admin/tilbud.html">Tilbud</a>
+    </nav>
+</div>
+<div class="header-right">
+    <div class="user-menu" onclick="toggleAdminDropdown()">
+        <span>Admin</span>
+        <div class="avatar">
+            A
+            <div class="hamburger-indicator">
+                <div class="hamburger-icon">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="dropdown-menu" id="adminDropdownMenu">
+        <div class="dropdown-item" onclick="navigateTo('/admin/innstillinger.html')">
+            <span class="dropdown-icon">⚙️</span>
+            <span>Innstillinger</span>
+        </div>
+        <div class="dropdown-item" onclick="navigateTo('/admin/teknikere.html')">
+            <span class="dropdown-icon">👥</span>
+            <span>Teknikere</span>
+        </div>
+        <div class="dropdown-item" onclick="navigateTo('/admin/serviceoppsett.html')">
+            <span class="dropdown-icon">🔧</span>
+            <span>Serviceoppsett</span>
+        </div>
+        <div class="dropdown-item" onclick="logout()">
+            <span class="dropdown-icon">🚪</span>
+            <span>Logg ut</span>
+        </div>
+    </div>
+</div>

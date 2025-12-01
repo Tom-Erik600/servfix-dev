@@ -37,9 +37,29 @@ console.log('=====================');
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// CORS konfigurasjon
+// CORS konfigurasjon - multitenant
 app.use(cors({
-  origin: process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : true,
+  origin: (origin, callback) => {
+    // Tillat requests uten origin (same-origin, Postman, curl, etc)
+    if (!origin) return callback(null, true);
+    // Tillat localhost for utvikling
+    if (origin.startsWith('http://localhost')) return callback(null, true);
+    // Tillat alle *.servfix.no subdomener (alle tenants)
+    if (origin.endsWith('.servfix.no') || origin === 'https://servfix.no') {
+      return callback(null, true);
+    }
+    // Tillat Cloud Run URLs
+    if (origin.endsWith('.run.app')) {
+      return callback(null, true);
+    }
+    // Tillat custom domener fra ALLOWED_ORIGINS env (kommaseparert liste)
+    const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    console.warn(`⚠️ CORS blocked origin: ${origin}`);
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 

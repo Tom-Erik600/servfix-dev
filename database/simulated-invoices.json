@@ -1,0 +1,20 @@
+[
+  {
+    "customerId": "C-101",
+    "orderNumber": "SO-2025-062401",
+    "invoiceDate": "2025-07-05",
+    "amount": 7500
+  },
+  {
+    "customerId": "C-102",
+    "orderNumber": "SO-2025-062402",
+    "invoiceDate": "2025-07-06",
+    "amount": 12200
+  },
+  {
+    "customerId": "C-101",
+    "orderNumber": "SO-2025-062404",
+    "invoiceDate": "2025-06-28",
+    "amount": 4800
+  }
+]

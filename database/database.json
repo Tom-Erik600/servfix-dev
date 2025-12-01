@@ -1,0 +1,83 @@
+{
+  "technicians": [
+    {
+      "id": "T-01",
+      "name": "Rune Bakken",
+      "initials": "RB",
+      "specialization": "Vent/Kjøl"
+    },
+    {
+      "id": "T-02",
+      "name": "Erik Sørensen",
+      "initials": "ES",
+      "specialization": "Vifter/Bolig"
+    },
+    {
+      "name": "Tom-Erik Korsviken",
+      "initials": "TK",
+      "id": "TECH-1751930754348"
+    }
+  ],
+  "customers": [
+    {
+      "id": "C-101",
+      "name": "Oslo Kontorsenter AS",
+      "address": "Storgata 15, 0184 Oslo",
+      "contactPerson": "Lars Hansen",
+      "phone": "22334455"
+    },
+    {
+      "id": "C-102",
+      "name": "Bergen Sykehus",
+      "address": "Haukelandsveien 22, 5021 Bergen",
+      "contactPerson": "Mona Andersen",
+      "phone": "55975000"
+    },
+    {
+      "id": "C-103",
+      "name": "Akershus Næringspark",
+      "address": "Industriveien 5, 2020 Skedsmokorset",
+      "contactPerson": "Per Olsen",
+      "phone": "63870000"
+    }
+  ],
+  "orders": [
+    {
+      "id": "PROJ-2025-101",
+      "orderNumber": "PROJ-2025-101",
+      "customerId": "C-101",
+      "description": "Serviceavtale 2025",
+      "serviceType": "Ventilasjon",
+      "status": "scheduled",
+      "technicianId": "T-01",
+      "scheduledDate": "2025-07-08",
+      "scheduledTime": null
+    },
+    {
+      "id": "PROJ-2025-102",
+      "orderNumber": "PROJ-2025-102",
+      "customerId": "C-102",
+      "description": "Hovedservice Vifter",
+      "serviceType": "Vifter",
+      "status": "scheduled",
+      "technicianId": "T-01",
+      "scheduledDate": "2025-07-27",
+      "scheduledTime": null
+    },
+    {
+      "id": "PROJ-2025-103",
+      "orderNumber": "PROJ-2025-103",
+      "customerId": "C-103",
+      "description": "Kontroll av boligventilasjon",
+      "serviceType": "Boligventilasjon",
+      "status": "scheduled",
+      "technicianId": "T-02",
+      "scheduledDate": "2025-07-17",
+      "scheduledTime": null
+    }
+  ],
+  "equipment": [],
+  "checklistTemplates": [],
+  "serviceReports": [],
+  "settings": {}
+}

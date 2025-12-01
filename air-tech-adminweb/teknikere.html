@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administrer Teknikere - Air-Tech Admin</title>
+    <link rel="stylesheet" href="/admin/assets/css/admin.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-layout">
+        <header class="app-header">
+            <div class="header-left">
+                <div class="logo">AIR-TECH AS</div>
+                <nav class="main-nav">
+                    <a href="/admin/dashboard.html">Dashboard</a>
+                    <a href="/admin/planlegger.html">Oppdrag</a>
+                    <a href="#">Kunder</a>
+                    <a href="/admin/teknikere.html" class="active">Teknikere</a>
+                    <a href="/admin/rapporter.html">Rapporter</a>
+                </nav>
+            </div>
+            <div class="header-right">
+                <div class="user-menu">
+                    <span>Administrator</span>
+                    <div class="avatar">A</div>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Administrer Teknikere</h1>
+                <p>Legg til nye teknikere og se en oversikt over alle i systemet.</p>
+            </div>
+
+            <div class="main-grid">
+                <div class="card main-card">
+                    <h2>Alle Teknikere</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Navn</th>
+                                <th>Initialer</th>
+                            </tr>
+                        </thead>
+                        <tbody id="technicians-table-body">
+                            <!-- Teknikere lastes inn her -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <aside class="sidebar">
+                    <div class="card">
+                        <h2>Legg til Ny Tekniker</h2>
+                        <form id="add-technician-form">
+                            <div class="form-group">
+                                <label for="technician-name">Navn</label>
+                                <input type="text" id="technician-name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="technician-initials">Initialer</label>
+                                <input type="text" id="technician-initials" required>
+                            </div>
+                            <button type="submit" class="submit-btn">Legg til</button>
+                        </form>
+                    </div>
+                </aside>
+            </div>
+        </main>
+    </div>
+    <script src="/admin/assets/js/teknikere.js"></script>
+</body>
+</html>

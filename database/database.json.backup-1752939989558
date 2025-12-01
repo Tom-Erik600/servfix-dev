@@ -1,0 +1,834 @@
+{
+  "technicians": [
+    {
+      "id": "T-01",
+      "name": "Rune Bakken",
+      "initials": "RB"
+    },
+    {
+      "id": "T-02",
+      "name": "Erik Sørensen",
+      "initials": "ES"
+    },
+    {
+      "name": "Tom-Erik Korsviken",
+      "initials": "TK",
+      "id": "TECH-1751992625814"
+    }
+  ],
+  "orders": [
+    {
+      "id": "PROJ-2025-1752766407648",
+      "orderNumber": "PROJ-2025-1752766407648",
+      "customerId": "TX-80393091",
+      "description": "Serviceoppdrag for Abbott Diagnostics Technologies AS",
+      "serviceType": "Generell service",
+      "status": "completed",
+      "technicianId": "T-01",
+      "scheduledDate": "2025-07-17",
+      "scheduledTime": null,
+      "priority": "normal",
+      "createdAt": "2025-07-17T15:33:27.648Z",
+      "updatedAt": "2025-07-17T17:06:06.421Z",
+      "completedAt": "2025-07-17T17:06:06.420Z"
+    },
+    {
+      "id": "PROJ-2025-1752766415595",
+      "orderNumber": "PROJ-2025-1752766415595",
+      "customerId": "TX-80393092",
+      "description": "Serviceoppdrag for As Frisør",
+      "serviceType": "Generell service",
+      "status": "scheduled",
+      "technicianId": "T-01",
+      "scheduledDate": "2025-07-18",
+      "scheduledTime": null,
+      "priority": "normal",
+      "createdAt": "2025-07-17T15:33:35.595Z",
+      "updatedAt": "2025-07-17T15:33:35.595Z"
+    },
+    {
+      "id": "PROJ-2025-1752766423984",
+      "orderNumber": "PROJ-2025-1752766423984",
+      "customerId": "TX-80393094",
+      "description": "Serviceoppdrag for As Høyres Hus",
+      "serviceType": "Generell service",
+      "status": "scheduled",
+      "technicianId": "T-01",
+      "scheduledDate": "2025-07-21",
+      "scheduledTime": null,
+      "priority": "normal",
+      "createdAt": "2025-07-17T15:33:43.984Z",
+      "updatedAt": "2025-07-17T15:33:43.984Z"
+    },
+    {
+      "id": "PROJ-2025-1752919842292",
+      "orderNumber": "PROJ-2025-1752919842292",
+      "customerId": "TX-80393091",
+      "description": "Serviceoppdrag for Abbott Diagnostics Technologies AS",
+      "serviceType": "Generell service",
+      "status": "scheduled",
+      "technicianId": "T-01",
+      "scheduledDate": "2025-07-21",
+      "scheduledTime": null,
+      "priority": "normal",
+      "createdAt": "2025-07-19T10:10:42.304Z",
+      "updatedAt": "2025-07-19T10:10:42.304Z"
+    },
+    {
+      "id": "PROJ-2025-1752919849676",
+      "orderNumber": "PROJ-2025-1752919849676",
+      "customerId": "TX-80393379",
+      "description": "Serviceoppdrag for Gupex AS",
+      "serviceType": "Generell service",
+      "status": "scheduled",
+      "technicianId": "T-01",
+      "scheduledDate": "2025-07-22",
+      "scheduledTime": null,
+      "priority": "normal",
+      "createdAt": "2025-07-19T10:10:49.676Z",
+      "updatedAt": "2025-07-19T10:10:49.676Z"
+    }
+  ],
+  "equipment": [
+    {
+      "customerId": "TX-80393091",
+      "type": "vifter",
+      "name": "På taket",
+      "systemNumber": "A809",
+      "systemType": "Type A",
+      "operator": "Øverste etasje",
+      "status": "active",
+      "serviceStatus": "completed",
+      "id": "EQ-1752767360305"
+    },
+    {
+      "customerId": "TX-80393092",
+      "type": "custom",
+      "name": "Toppen",
+      "systemNumber": "N/A",
+      "systemType": "N/A",
+      "operator": "",
+      "status": "active",
+      "serviceStatus": "completed",
+      "id": "EQ-1752772024168"
+    },
+    {
+      "customerId": "TX-80393092",
+      "type": "ventilasjon",
+      "name": "På taket",
+      "systemNumber": "A809",
+      "systemType": "Vanlig vifte",
+      "operator": "Første etasje",
+      "status": "active",
+      "serviceStatus": "not_started",
+      "id": "EQ-1752772129390"
+    }
+  ],
+  "serviceReports": [
+    {
+      "orderId": "PROJ-2025-1752766407648",
+      "equipmentId": "EQ-1752767360305",
+      "status": "draft",
+      "reportData": {
+        "components": [
+          {
+            "details": {
+              "systemnummer": "12",
+              "plassering": "ved inngangen",
+              "betjener": "Toppen",
+              "viftetype": "Rund",
+              "filter_tilluft": "Ja",
+              "filter_avtrekk": "Ja"
+            },
+            "checklist": {
+              "funksjonskontroll": {
+                "status": "ok"
+              },
+              "frekvensomformer": {
+                "status": "avvik",
+                "comment": "noe galt her"
+              },
+              "motor": {
+                "status": "ok"
+              },
+              "regulering_styring": {
+                "status": "ok"
+              },
+              "viftehjul": {
+                "status": "ok"
+              },
+              "varme": {
+                "status": "ok"
+              },
+              "filter_reimer": {
+                "status": "byttet"
+              }
+            },
+            "products": [
+              {
+                "name": "Filter A",
+                "price": 0
+              }
+            ],
+            "additionalWork": []
+          }
+        ],
+        "overallComment": "Alt ok og sjekket"
+      },
+      "reportId": "SR-1752771901227",
+      "createdAt": "2025-07-17T17:05:01.227Z",
+      "updatedAt": "2025-07-17T17:06:02.732Z"
+    },
+    {
+      "orderId": "PROJ-2025-1752766415595",
+      "equipmentId": "EQ-1752772024168",
+      "status": "draft",
+      "reportData": {
+        "components": [
+          {
+            "details": {
+              "beskrivelse": "Sjekket hele systemet, det var en feil i temperatur filen."
+            },
+            "checklist": {},
+            "products": [
+              {
+                "name": "filter",
+                "price": 2999
+              }
+            ],
+            "additionalWork": []
+          }
+        ],
+        "overallComment": ""
+      },
+      "reportId": "SR-1752772025922",
+      "createdAt": "2025-07-17T17:07:05.922Z",
+      "updatedAt": "2025-07-19T09:57:55.400Z"
+    },
+    {
+      "orderId": "PROJ-2025-1752766415595",
+      "equipmentId": "EQ-1752772129390",
+      "status": "draft",
+      "reportData": {
+        "components": [],
+        "overallComment": ""
+      },
+      "reportId": "SR-1752772133443",
+      "createdAt": "2025-07-17T17:08:53.443Z"
+    }
+  ],
+  "checklistTemplates": [
+    {
+      "id": "checklist_boligventilasjon",
+      "name": "Sjekkliste Boligventilasjon",
+      "equipmentType": "boligventilasjon",
+      "items": [
+        {
+          "id": "funksjonskontroll",
+          "label": "Funksjonskontroll",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik"
+          ]
+        },
+        {
+          "id": "vifter",
+          "label": "Vifter",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik"
+          ]
+        },
+        {
+          "id": "varmegjenvinner",
+          "label": "Varmegjenvinner",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik"
+          ]
+        },
+        {
+          "id": "varme",
+          "label": "Varme",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik"
+          ]
+        },
+        {
+          "id": "filter",
+          "label": "Filter",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik",
+            "Byttet"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "checklist_vifter",
+      "name": "Sjekkliste Ventilasjonsvifter",
+      "equipmentType": "vifter",
+      "items": [
+        {
+          "id": "funksjonskontroll",
+          "label": "Funksjonskontroll",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik"
+          ]
+        },
+        {
+          "id": "frekvensomformer",
+          "label": "Frekvensomformer",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik"
+          ]
+        },
+        {
+          "id": "motor",
+          "label": "Motor",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik"
+          ]
+        },
+        {
+          "id": "regulering_styring",
+          "label": "Reg./styring",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik"
+          ]
+        },
+        {
+          "id": "viftehjul",
+          "label": "Viftehjul",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik"
+          ]
+        },
+        {
+          "id": "varme",
+          "label": "Varme",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik"
+          ]
+        },
+        {
+          "id": "filter_reimer",
+          "label": "Filter/reimer",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik",
+            "Byttet"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "checklist_ventilasjon",
+      "name": "Sjekkliste Ventilasjonsaggregat",
+      "equipmentType": "ventilasjonsaggregat",
+      "items": [
+        {
+          "id": "pkt1",
+          "label": "Luftinntak / Rister",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt2",
+          "label": "Spjeld",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt3",
+          "label": "Roterende varmegjenvinner",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt4",
+          "label": "Varmebatteri vann",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt5",
+          "label": "Kjølebatteri isvann",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt6",
+          "label": "Tilluftsvifte kilerem",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt7",
+          "label": "Avtrekksvifte kilerem",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt8",
+          "label": "Termostat – Brann",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt9",
+          "label": "Vannlås / Avløp",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt10",
+          "label": "Pumper",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt11",
+          "label": "Motorventiler",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt12",
+          "label": "Spjeldmotorer",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt13",
+          "label": "Følere",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt14",
+          "label": "Tavleskap",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt15",
+          "label": "Trinnkobler",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt16",
+          "label": "Frostsikring",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt17",
+          "label": "Trykkstyring",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt18",
+          "label": "Regulator / undersentr.",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt19",
+          "label": "Start / stopp funksjon",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt20",
+          "label": "Alarmsignal",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt21",
+          "label": "Stabilitet",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt22",
+          "label": "Innstilling brytere",
+          "type": "select",
+          "options": [
+            "AUTO",
+            "Sommer",
+            "Vinter",
+            "AV",
+            "PÅ"
+          ]
+        },
+        {
+          "id": "pkt23",
+          "label": "Tilluft starttrykkfall",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt24",
+          "label": "Avtrekk starttrykkfall",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt25",
+          "label": "Rengjøring aggregat",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "pkt26",
+          "label": "Rengjøring teknisk rom",
+          "type": "select",
+          "options": [
+            "Normal",
+            "Slitasje",
+            "Reparasjon",
+            "Justert",
+            "Byttet",
+            "Smurt",
+            "Defekt"
+          ]
+        },
+        {
+          "id": "temp_ute",
+          "label": "T1 - Temp Ute (°C)",
+          "type": "number"
+        },
+        {
+          "id": "temp_for_gjenvinner",
+          "label": "T2 - Temp før gjenvinner (°C)",
+          "type": "number"
+        },
+        {
+          "id": "temp_etter_gjenvinner",
+          "label": "T3 - Temp etter gjenvinner (°C)",
+          "type": "number"
+        },
+        {
+          "id": "temp_etter_varmebatteri",
+          "label": "T4 - Temp etter varmebatteri (°C)",
+          "type": "number"
+        },
+        {
+          "id": "temp_etter_kjolebatteri",
+          "label": "T5 - Temp etter kjølebatteri (°C)",
+          "type": "number"
+        },
+        {
+          "id": "temp_tilluft",
+          "label": "T6 - Temp Tilluft (°C)",
+          "type": "number"
+        },
+        {
+          "id": "temp_avtrekk_rom",
+          "label": "T7 - Temp Avtrekk / Rom (°C)",
+          "type": "number"
+        },
+        {
+          "id": "temp_avkast",
+          "label": "T8 - Temp Avkast (°C)",
+          "type": "number"
+        },
+        {
+          "id": "temp_tur_retur_hetvann",
+          "label": "T9 - Temp tur/retur hetvann (°C)",
+          "type": "number"
+        },
+        {
+          "id": "temp_tur_retur_isvann",
+          "label": "T10 - Temp tur/retur isvann (°C)",
+          "type": "number"
+        },
+        {
+          "id": "virkningsgrad_gjenvinner",
+          "label": "V1 - Virkningsgrad gjenvinner (%)",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "id": "checklist_ventilasjon",
+      "name": "Sjekkliste Ventilasjon (Generell)",
+      "equipmentType": "ventilasjon",
+      "items": [
+        {
+          "id": "funksjonskontroll",
+          "label": "Funksjonskontroll",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik"
+          ]
+        },
+        {
+          "id": "vifter",
+          "label": "Vifter",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik"
+          ]
+        },
+        {
+          "id": "filter",
+          "label": "Filter",
+          "type": "select",
+          "options": [
+            "OK",
+            "Byttet",
+            "Avvik"
+          ]
+        },
+        {
+          "id": "styring",
+          "label": "Styring",
+          "type": "select",
+          "options": [
+            "OK",
+            "Avvik"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "checklist_custom",
+      "name": "Fritekst Rapport",
+      "equipmentType": "custom",
+      "items": [
+        {
+          "id": "rapport_kommentar",
+          "label": "Rapport og kommentarer",
+          "type": "textarea"
+        },
+        {
+          "id": "bildeopplasting",
+          "label": "Bilder",
+          "type": "image"
+        }
+      ]
+    }
+  ],
+  "quotes": [],
+  "invoices": [],
+  "settings": {}
+}

@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serviceoppsett - Air-Tech Admin</title>
+    <link rel="stylesheet" href="/admin/assets/css/admin.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Specific styles for serviceoppsett.html */
+        .checklist-section {
+            margin-bottom: 24px;
+        }
+        .checklist-section h2 {
+            margin-bottom: 16px;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        .form-grid .form-group {
+            margin-bottom: 0;
+        }
+        .system-fields-display .form-group input {
+            background-color: #e9ecef;
+            cursor: not-allowed;
+        }
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            background-color: #f9fafb;
+        }
+        .checklist-item.dragging {
+            opacity: 0.5;
+            border: 1px dashed var(--primary-color);
+        }
+        .checklist-item input[type="text"] {
+            flex-grow: 1;
+            padding: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+        }
+        .checklist-item select {
+            padding: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+        }
+        .checklist-item-actions button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            color: #6b7280;
+            padding: 4px;
+        }
+        .checklist-item-actions button:hover {
+            color: #374151;
+        }
+        .add-item-btn {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .add-item-btn:hover {
+            background-color: #2563eb;
+        }
+        .section-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .section-toggle input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+        .save-button-container {
+            margin-top: 30px;
+            text-align: right;
+        }
+        .save-button {
+            background-color: #28a745;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        .save-button:hover {
+            background-color: #218838;
+        }
+        .edit-system-fields-btn {
+            background-color: #6c757d;
+            color: white;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+        .edit-system-fields-btn:hover {
+            background-color: #5a6268;
+        }
+
+        /* Modal styles for system fields */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            transform: translateY(-20px);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.show .modal-content {
+            transform: translateY(0);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        .modal-header h3 {
+            margin: 0;
+        }
+        .modal-close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        .modal-body {
+            max-height: 70vh; /* Set max height for scrolling */
+            overflow-y: auto; /* Enable vertical scrolling */
+            padding-right: 15px; /* Add some padding for scrollbar */
+        }
+        .modal-body .form-group {
+            margin-bottom: 15px;
+        }
+        .modal-footer {
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+            margin-top: 20px;
+            text-align: right;
+        }
+        .modal-footer button {
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .modal-footer .cancel-btn {
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            margin-right: 10px;
+        }
+        .modal-footer .save-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+        }
+
+        /* New Facility Type Modal */
+        #new-facility-modal .modal-content {
+            max-width: 700px;
+        }
+        #new-facility-modal .form-grid-modal {
+            display: grid;
+            grid-template-columns: 1fr 1fr 0.1fr; /* Name, Label, Delete button */
+            gap: 10px;
+            align-items: center;
+        }
+        #new-facility-modal .form-grid-modal input[type="text"] {
+            width: 100%;
+        }
+        #new-facility-modal .form-grid-modal .form-group {
+            margin-bottom: 0;
+        }
+        #new-facility-modal .add-field-btn {
+            background-color: #28a745;
+            color: white;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        #new-facility-modal .add-field-btn:hover {
+            background-color: #218838;
+        }
+        #new-facility-modal .remove-field-btn {
+            background: none;
+            border: none;
+            color: #dc3545;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        #new-facility-modal .remove-field-btn:hover {
+            color: #c82333;
+        }
+
+        /* Styles for draggable system fields in modal */
+        .modal-system-field-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            background-color: #f9fafb;
+        }
+        .modal-system-field-item.dragging {
+            opacity: 0.5;
+            border: 1px dashed var(--primary-color);
+        }
+        .modal-system-field-item .drag-handle {
+            cursor: grab;
+            font-size: 18px;
+            color: #6b7280;
+        }
+        .modal-system-field-item input[type="text"] {
+            flex-grow: 1;
+            padding: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+        }
+        .modal-system-field-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+        .modal-system-field-item .remove-field-btn {
+            background: none;
+            border: none;
+            color: #dc3545;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 4px;
+        }
+        .modal-system-field-item .remove-field-btn:hover {
+            color: #c82333;
+        }
+
+        /* Adjust form-grid-modal for better alignment */
+        #system-fields-modal-body .form-grid-modal {
+            grid-template-columns: 30px 1fr 1fr 80px 30px; /* Drag handle, Name, Label, Required, Delete */
+            align-items: center;
+            gap: 10px;
+        }
+        #system-fields-modal-body .form-grid-modal .form-group {
+            margin-bottom: 0;
+        }
+        #system-fields-modal-body .form-grid-modal .form-group label {
+            display: none; /* Hide labels as they are part of the overall grid */
+        }
+        #system-fields-modal-body .form-grid-modal input[type="checkbox"] {
+            margin-top: 0; /* Adjust checkbox alignment */
+        }
+
+        /* Styles for drift schedule */
+        .drift-schedule-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .drift-schedule-table th, .drift-schedule-table td {
+            border: 1px solid #e5e7eb;
+            padding: 8px;
+            text-align: left;
+        }
+        .drift-schedule-table th {
+            background-color: #f3f4f6;
+            font-weight: 600;
+        }
+        .drift-schedule-table input[type="time"] {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+        }
+
+        /* Styles for nested checklist items */
+        .checklist-item.nested-1 {
+            padding-left: 30px;
+            background-color: #f0f4f8;
+        }
+        .checklist-item.nested-2 {
+            padding-left: 60px;
+            background-color: #e6edf2;
+        }
+        .checklist-item .subpoint-toggle {
+            margin-right: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* New Checklist Item Modal */
+        #checklist-item-modal .modal-content {
+            max-width: 700px;
+        }
+        #checklist-item-modal .subpoints-container {
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+            background-color: #f8fafc;
+        }
+        #checklist-item-modal .subpoint-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            background-color: white;
+        }
+        #checklist-item-modal .subpoint-item input[type="text"], #checklist-item-modal .subpoint-item select {
+            flex-grow: 1;
+            padding: 6px;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+        }
+        #checklist-item-modal .subpoint-item .remove-subpoint-btn {
+            background: none;
+            border: none;
+            color: #dc3545;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #checklist-item-modal .subpoint-item .drag-handle {
+            cursor: grab;
+            font-size: 16px;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-layout">
+        <header class="app-header">
+            <!-- Lastes av main.js -->
+        </header>
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Serviceoppsett</h1>
+                <p>Konfigurer servicemaler og sjekklister</p>
+            </div>
+
+            <div class="card">
+                <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                    <label for="equipment-type-select" style="margin-bottom: 0;">Velg anleggstype</label>
+                    <select id="equipment-type-select" class="form-control" style="flex-grow: 1;">
+                        <!-- Options will be dynamically loaded here -->
+                    </select>
+                    <button id="add-new-facility-btn" class="add-item-btn">+ Ny type</button>
+                </div>
+            </div>
+
+            <div id="checklist-config" style="display: none;">
+                <!-- System Fields Section -->
+                <div class="card checklist-section">
+                    <div class="card-header">
+                        <h2>Sjekkliste Systemfelter</h2>
+                        <button class="edit-system-fields-btn" id="edit-system-fields-btn">Rediger systemfelter</button>
+                    </div>
+                    <div class="system-fields-display form-grid" id="system-fields-display">
+                        <!-- System fields will be rendered here -->
+                    </div>
+                </div>
+
+                <!-- Checklist Items Section -->
+                <div class="card checklist-section">
+                    <h2>Sjekkpunkter</h2>
+                    <div id="checklist-items-container">
+                        <!-- Checklist items will be rendered here -->
+                    </div>
+                    <button class="add-item-btn" id="add-checklist-item-btn">+ Legg til sjekkpunkt</button>
+                </div>
+
+                <!-- Drift Schedule Section -->
+                <div class="card checklist-section">
+                    <h2>Driftstider</h2>
+                    <div class="section-toggle">
+                        <input type="checkbox" id="has-drift-schedule">
+                        <label for="has-drift-schedule">Aktiver driftstider</label>
+                    </div>
+                    <div id="drift-schedule-config" style="display: none;">
+                        <table class="drift-schedule-table">
+                            <thead>
+                                <tr id="drift-schedule-header">
+                                    <th>Dag</th>
+                                    <!-- Fields will be dynamically loaded here -->
+                                </tr>
+                            </thead>
+                            <tbody id="drift-schedule-body">
+                                <!-- Days and time inputs will be dynamically loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Additional Sections -->
+                <div class="card checklist-section">
+                    <h2>Tilleggsseksjoner</h2>
+                    <div class="section-toggle">
+                        <input type="checkbox" id="allow-products">
+                        <label for="allow-products">Aktiver Produkter/Deler</label>
+                    </div>
+                    <div class="section-toggle">
+                        <input type="checkbox" id="allow-additional-work">
+                        <label for="allow-additional-work">Aktiver Tilleggsarbeid</label>
+                    </div>
+                    <div class="section-toggle">
+                        <input type="checkbox" id="allow-comments">
+                        <label for="allow-comments">Aktiver Øvrige kommentarer til rapport</label>
+                    </div>
+                </div>
+
+                <div class="save-button-container">
+                    <button class="save-button" id="save-checklist-btn">Lagre sjekkliste</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- System Fields Edit Modal -->
+    <div class="modal-overlay" id="system-fields-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Rediger Systemfelter</h3>
+                <button class="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body" id="system-fields-modal-body">
+                <!-- Editable system fields will be rendered here -->
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn">Avbryt</button>
+                <button class="save-btn" id="save-system-fields-btn">Lagre</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Facility Type Modal -->
+    <div class="modal-overlay" id="new-facility-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Opprett ny servicetype</h3>
+                <button class="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="new-facility-name">Navn på servicetype</label>
+                    <input type="text" id="new-facility-name" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="copy-from-select">Kopier systemfelter fra eksisterende type (valgfritt)</label>
+                    <select id="copy-from-select" class="form-control">
+                        <option value="">-- Ingen --</option>
+                    </select>
+                </div>
+                <h4>Systemfelter for ny type</h4>
+                <div id="new-facility-system-fields-container">
+                    <!-- Dynamic system fields for new type -->
+                </div>
+                <button class="add-field-btn" id="add-new-system-field-btn">+ Legg til felt</button>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn">Avbryt</button>
+                <button class="save-btn" id="save-new-facility-btn">Lagre ny type</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Checklist Item Modal -->
+    <div class="modal-overlay" id="checklist-item-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Legg til/Rediger Sjekkpunkt</h3>
+                <button class="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="checklist-item-label">Sjekkpunkt navn</label>
+                    <input type="text" id="checklist-item-label" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="checklist-item-input-type">Input Type</label>
+                    <select id="checklist-item-input-type" class="form-control">
+                        <option value="checkbox">Checkbox</option>
+                        <option value="ok_avvik">OK / Avvik</option>
+                        <option value="ok_byttet_avvik">OK / Byttet / Avvik</option>
+                        <option value="numeric">Numerisk</option>
+                        <option value="text">Tekst</option>
+                        <option value="comment">Kommentar</option>
+                        <option value="group_selection">Gruppevalg</option>
+                    </select>
+                </div>
+
+                <div class="section-toggle">
+                    <input type="checkbox" id="has-subpoints-checkbox">
+                    <label for="has-subpoints-checkbox">Dette punktet har underpunkter</label>
+                </div>
+
+                <div id="subpoints-section" class="subpoints-container" style="display: none;">
+                    <h4>Underpunkter</h4>
+                    <div id="subpoints-container">
+                        <!-- Subpoints will be rendered here -->
+                    </div>
+                    <button class="add-item-btn" id="add-subpoint-btn">+ Legg til underpunkt</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn">Avbryt</button>
+                <button class="save-btn" id="save-checklist-item-btn">Lagre Sjekkpunkt</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/admin/assets/js/main.js"></script>
+    <script src="/admin/assets/js/serviceoppsett.js"></script>
+</body>
+</html>

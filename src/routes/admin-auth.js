@@ -51,21 +51,20 @@ router.post('/login', async (req, res) => {
     } else {
       console.warn('⚠️ NO tenant_id in database for admin:', admin.email);
     }
-    
+
     // KRITISK: Lagre session eksplisitt før response
     req.session.save((err) => {
       if (err) {
         console.error('❌ Session save error:', err);
         return res.status(500).json({ error: 'Session save failed' });
       }
-      
+
       console.log('✅ Admin session saved successfully:', {
-        email: admin.email,
         tenant_id: admin.tenant_id,
         selectedTenantId: req.session.selectedTenantId,
         sessionTenantId: req.session.tenantId
       });
-      
+
       res.json({
         success: true,
         admin: {
@@ -76,7 +75,7 @@ router.post('/login', async (req, res) => {
         }
       });
     });
-    
+
   } catch (error) {
     console.error('❌ Admin login error:', error);
     res.status(500).json({ error: 'Server error' });

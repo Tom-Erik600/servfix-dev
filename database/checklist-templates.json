@@ -1,0 +1,393 @@
+{
+  "facilityTypes": [
+    {
+      "id": "ventilation",
+      "name": "Ventilasjon",
+      "systemFields": [
+        {
+          "name": "system_number",
+          "label": "System nummer",
+          "required": true,
+          "order": 1
+        },
+        {
+          "name": "placement",
+          "label": "Plassering",
+          "required": true,
+          "order": 2
+        },
+        {
+          "name": "operator",
+          "label": "Betjener",
+          "required": false,
+          "order": 3
+        },
+        {
+          "name": "fan_type",
+          "label": "Viftetype",
+          "required": false,
+          "order": 4
+        },
+        {
+          "name": "filter_supply",
+          "label": "Filter tilluft",
+          "required": false,
+          "order": 5
+        },
+        {
+          "name": "filter_exhaust",
+          "label": "Filter avtrekk",
+          "required": false,
+          "order": 6
+        }
+      ],
+      "checklistItems": [
+        {
+          "id": "cp_1",
+          "label": "Luftinntak/Rister",
+          "inputType": "ok_avvik",
+          "order": 1
+        },
+        {
+          "id": "cp_2",
+          "label": "Spjeld",
+          "inputType": "ok_avvik",
+          "order": 2
+        },
+        {
+          "id": "cp_3",
+          "label": "Roterende varmegjenvinner",
+          "inputType": "checkbox",
+          "order": 3,
+          "hasSubpoints": true,
+          "subpoints": [
+            {
+              "id": "cp_3_1",
+              "label": "Frekvens omf. gjenvinner",
+              "inputType": "ok_avvik",
+              "order": 1,
+              "showWhen": {
+                "parentId": "cp_3",
+                "parentValue": true
+              }
+            },
+            {
+              "id": "cp_3_2",
+              "label": "Motstrøm / Kryssveksler",
+              "inputType": "ok_avvik",
+              "order": 2,
+              "showWhen": {
+                "parentId": "cp_3",
+                "parentValue": true
+              }
+            },
+            {
+              "id": "cp_3_3",
+              "label": "Gjenvinnerbatteri Tilluft",
+              "inputType": "ok_avvik",
+              "order": 3,
+              "showWhen": {
+                "parentId": "cp_3",
+                "parentValue": true
+              }
+            },
+            {
+              "id": "cp_3_4",
+              "label": "Gjenvinnerbatteri Avtrekk",
+              "inputType": "ok_avvik",
+              "order": 4,
+              "showWhen": {
+                "parentId": "cp_3",
+                "parentValue": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "cp_4",
+          "label": "Varmebatteri",
+          "inputType": "group_selection",
+          "order": 4,
+          "subpoints": [
+            {
+              "id": "cp_4_1",
+              "label": "Varmebatteri vann",
+              "inputType": "ok_avvik",
+              "order": 1,
+              "exclusiveGroup": "varmebatteri_type"
+            },
+            {
+              "id": "cp_4_2",
+              "label": "Varmebatteri elektrisk",
+              "inputType": "ok_avvik",
+              "order": 2,
+              "exclusiveGroup": "varmebatteri_type"
+            }
+          ]
+        },
+        {
+          "id": "cp_5",
+          "label": "Kjølebatteri",
+          "inputType": "group_selection",
+          "order": 5,
+          "subpoints": [
+            {
+              "id": "cp_5_1",
+              "label": "Kjølebatteri vann",
+              "inputType": "ok_avvik",
+              "order": 1,
+              "exclusiveGroup": "kjølebatteri_type"
+            },
+            {
+              "id": "cp_5_2",
+              "label": "Kjølebatteri direkte",
+              "inputType": "ok_avvik",
+              "order": 2,
+              "exclusiveGroup": "kjølebatteri_type"
+            }
+          ]
+        },
+        {
+          "id": "cp_6",
+          "label": "Tilluftsvifte",
+          "inputType": "group_selection",
+          "order": 6,
+          "subpoints": [
+            {
+              "id": "cp_6_1",
+              "label": "Kilerem",
+              "inputType": "ok_avvik",
+              "order": 1,
+              "exclusiveGroup": "tilluftsvifte_type"
+            },
+            {
+              "id": "cp_6_2",
+              "label": "Direktedrift",
+              "inputType": "ok_avvik",
+              "order": 2,
+              "exclusiveGroup": "tilluftsvifte_type"
+            },
+            {
+              "id": "cp_6_3",
+              "label": "Frekvensomformer",
+              "inputType": "ok_avvik",
+              "order": 3,
+              "exclusiveGroup": "tilluftsvifte_type"
+            }
+          ]
+        },
+        {
+          "id": "cp_7",
+          "label": "Avtrekksvifte",
+          "inputType": "group_selection",
+          "order": 7,
+          "subpoints": [
+            {
+              "id": "cp_7_1",
+              "label": "Kilerem",
+              "inputType": "ok_avvik",
+              "order": 1,
+              "exclusiveGroup": "avtrekksvifte_type"
+            },
+            {
+              "id": "cp_7_2",
+              "label": "Direktedrift",
+              "inputType": "ok_avvik",
+              "order": 2,
+              "exclusiveGroup": "avtrekksvifte_type"
+            },
+            {
+              "id": "cp_7_3",
+              "label": "Frekvensomformer",
+              "inputType": "ok_avvik",
+              "order": 3,
+              "exclusiveGroup": "avtrekksvifte_type"
+            }
+          ]
+        }
+      ],
+      "allowProducts": true,
+      "allowAdditionalWork": true,
+      "hasGeneralComment": true,
+      "hasDriftSchedule": true,
+      "driftScheduleConfig": {
+        "title": "Driftstider",
+        "days": [
+          "Mandag",
+          "Tirsdag",
+          "Onsdag",
+          "Torsdag",
+          "Fredag",
+          "Lørdag",
+          "Søndag"
+        ],
+        "fields": [
+          "Start",
+          "Stopp"
+        ]
+      }
+    },
+    {
+      "id": "fans",
+      "name": "Vifter",
+      "systemFields": [
+        {
+          "name": "system_number",
+          "label": "System nummer",
+          "required": true,
+          "order": 1
+        },
+        {
+          "name": "fan_type",
+          "label": "Viftetype",
+          "required": true,
+          "order": 2
+        },
+        {
+          "name": "operator",
+          "label": "Betjener",
+          "required": false,
+          "order": 3
+        },
+        {
+          "name": "placement",
+          "label": "Plassering",
+          "required": true,
+          "order": 4
+        },
+        {
+          "name": "filter_supply",
+          "label": "Filter tilluft",
+          "required": false,
+          "order": 5
+        },
+        {
+          "name": "filter_exhaust",
+          "label": "Filter avtrekk",
+          "required": false,
+          "order": 6
+        }
+      ],
+      "checklistItems": [
+        {
+          "id": "check_balance",
+          "label": "Viftebalanse",
+          "inputType": "ok_avvik",
+          "order": 1
+        },
+        {
+          "id": "check_motor",
+          "label": "Motorstatus",
+          "inputType": "ok_avvik",
+          "order": 2
+        }
+      ],
+      "allowProducts": true,
+      "allowAdditionalWork": true,
+      "hasGeneralComment": true,
+      "hasDriftSchedule": false
+    },
+    {
+      "id": "residential_ventilation",
+      "name": "Boligventilasjon",
+      "systemFields": [
+        {
+          "name": "floor",
+          "label": "Etasje",
+          "required": false,
+          "order": 1
+        },
+        {
+          "name": "apartment_number",
+          "label": "Leil. Nr.",
+          "required": false,
+          "order": 2
+        },
+        {
+          "name": "unit_type",
+          "label": "Agg. type",
+          "required": false,
+          "order": 3
+        },
+        {
+          "name": "system_number",
+          "label": "System nr.",
+          "required": true,
+          "order": 4
+        },
+        {
+          "name": "filter_supply",
+          "label": "Filter tilluft",
+          "required": false,
+          "order": 5
+        },
+        {
+          "name": "filter_exhaust",
+          "label": "Filter avtrekk",
+          "required": false,
+          "order": 6
+        }
+      ],
+      "checklistItems": [
+        {
+          "id": "check_filter_change",
+          "label": "Filterbytte",
+          "inputType": "ok_byttet_avvik",
+          "order": 1
+        },
+        {
+          "id": "check_airflow",
+          "label": "Luftmengde",
+          "inputType": "numeric",
+          "order": 2
+        }
+      ],
+      "allowProducts": false,
+      "allowAdditionalWork": false,
+      "hasGeneralComment": true,
+      "hasDriftSchedule": false
+    },
+    {
+      "id": "custom",
+      "name": "Custom",
+      "systemFields": [
+        {
+          "name": "description",
+          "label": "Beskrivelse",
+          "required": true,
+          "order": 1
+        }
+      ],
+      "checklistItems": [],
+      "allowProducts": true,
+      "allowAdditionalWork": true,
+      "hasGeneralComment": true,
+      "hasDriftSchedule": false
+    },
+    {
+      "id": "elektriker",
+      "name": "Elektriker",
+      "systemFields": [
+        {
+          "name": "Systemnummer",
+          "label": "Systemnummer",
+          "required": true,
+          "order": 1
+        }
+      ],
+      "checklistItems": [
+        {
+          "id": "item_1753353409157",
+          "label": "Elektropass",
+          "inputType": "ok_avvik",
+          "order": 1,
+          "hasSubpoints": false
+        }
+      ],
+      "allowProducts": false,
+      "allowAdditionalWork": false,
+      "allowComments": false,
+      "hasDriftSchedule": false
+    }
+  ]
+}

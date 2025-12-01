@@ -1,0 +1,4 @@
+# Tripletex testmiljø - API-verdier
+TRIPLETEX_BASE_URL=https://api-test.tripletex.tech/v2
+TRIPLETEX_CONSUMER_TOKEN=446ffd2a-f3b4-4647-bcf1-b0af7212a992
+TRIPLETEX_EMPLOYEE_TOKEN=eyJ0b2tlblkiOiJ0ZXN0LXgyMTVmYzdiLTEwNTUtNDM4Zi05YTYzLThkMzM5YTIyMmUyZiJ9

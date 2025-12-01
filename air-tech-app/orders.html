@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Air-Tech AS - Ordre Side</title>
+    <link rel="stylesheet" href="assets/css/main.css">
+    <link rel="stylesheet" href="assets/css/orders.css">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="toast-container"></div>
+
+    <div id="loading-indicator" class="loading-overlay" style="display:none;">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>Laster ordre...</p>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <header class="app-header" id="app-header"></header>
+        
+        <main class="main-content">
+            <section class="customer-section" id="customer-info"></section>
+            <section class="systems-section" id="equipment-list"></section>
+        </main>
+        
+        <footer class="action-buttons"></footer>
+    </div>
+    
+    <div class="modal-overlay" id="add-equipment-modal" style="display: none;">
+        <div class="modal-content">
+            </div>
+    </div>
+
+    <script src="assets/js/orders.js"></script>
+</body>
+</html>

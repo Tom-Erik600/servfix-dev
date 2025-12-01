@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air-Tech Admin Dashboard</title>
+    <link rel="stylesheet" href="/admin/assets/css/admin.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-layout">
+        <header class="app-header">
+            <div class="header-left">
+                <div class="logo">AIR-TECH AS</div>
+                <nav class="main-nav">
+                    <a href="/admin/dashboard.html" class="active">Dashboard</a>
+                    <a href="/admin/planlegger.html">Oppdrag</a>
+                    <a href="#">Kunder</a>
+                    <a href="/admin/teknikere.html">Teknikere</a>
+                    <a href="/admin/rapporter.html">Rapporter</a>
+                </nav>
+            </div>
+            <div class="header-right">
+                <div class="user-menu">
+                    <span>Administrator</span>
+                    <div class="avatar">A</div>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Dashboard</h1>
+                <p>Oversikt over dagens aktiviteter og serviceoppdrag</p>
+            </div>
+
+            <div class="kpi-grid">
+                <div class="card kpi-card"><span class="kpi-value" id="kpi-oppdrag-idag">0</span><span class="kpi-label">Oppdrag i dag</span></div>
+                <div class="card kpi-card"><span class="kpi-value" id="kpi-aktive-teknikere">0</span><span class="kpi-label">Aktive teknikere</span></div>
+                <div class="card kpi-card"><span class="kpi-value" id="kpi-fullfort-uke">0</span><span class="kpi-label">Fullførte denne uken</span></div>
+                <div class="card kpi-card"><span class="kpi-value" id="kpi-tilbud-handling">0</span><span class="kpi-label">Tilbud venter på handling</span></div>
+                <div class="card kpi-card"><span class="kpi-value" id="kpi-venter-fakturering">0</span><span class="kpi-label">Venter på fakturering</span></div>
+            </div>
+
+            <div class="main-grid">
+                <div class="card main-card" id="dagens-oppdrag">
+                    <h2>Dagens serviceoppdrag</h2>
+                    <p>Oversikt over alle planlagte oppdrag</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Ordrenr</th>
+                                <th>Tekniker</th>
+                                <th>Kunde</th>
+                                <th>Type</th>
+                                <th>Tid</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dagens-oppdrag-liste">
+                            <tr><td colspan="6">Laster data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <aside class="sidebar">
+                    <div class="card" id="hurtigvalg">
+                        <h2>Hurtigvalg</h2>
+                        <p>Vanlige oppgaver og handlinger</p>
+                        <div class="quick-links">
+                            <a href="#">Administrer oppdrag</a>
+                            <a href="#">Kunder</a>
+                            <a href="#">Kontrakter</a>
+                            <a href="#">Rapporter</a>
+                        </div>
+                    </div>
+                    <div class="card" id="nylig-aktivitet">
+                        <h2>Nylig aktivitet</h2>
+                        <ul id="nylig-aktivitet-liste">
+                           <li>Laster data...</li>
+                        </ul>
+                    </div>
+                </aside>
+            </div>
+        </main>
+    </div>
+    <script src="/admin/assets/js/dashboard.js"></script>
+</body>
+</html>

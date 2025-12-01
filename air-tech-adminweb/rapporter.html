@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapporter - Air-Tech Admin</title>
+    <link rel="stylesheet" href="/admin/assets/css/admin.css">
+</head>
+<body>
+    <div class="app-layout">
+        <header class="app-header">
+            <div class="header-left">
+                <div class="logo">AIR-TECH AS</div>
+                <nav class="main-nav">
+                    <a href="/admin/dashboard.html">Dashboard</a>
+                    <a href="/admin/planlegger.html">Oppdrag</a>
+                    <a href="#">Kunder</a>
+                    <a href="/admin/teknikere.html">Teknikere</a>
+                    <a href="/admin/rapporter.html" class="active">Rapporter</a>
+                </nav>
+            </div>
+            <div class="header-right"><div class="user-menu"><span>Administrator</span><div class="avatar">A</div></div></div>
+        </header>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Årsrapport per Kunde</h1>
+                <p>Oversikt over prosjekter og simulerte fakturerte beløp for inneværende år.</p>
+            </div>
+
+            <div class="card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Kunde ID</th>
+                            <th>Kundenavn</th>
+                            <th>Antall Prosjekter (Ordre)</th>
+                            <th>Totalt Fakturert (Simulert)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="report-table-body">
+                        <tr><td colspan="4" style="text-align: center; padding: 20px;">Laster rapport...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const tableBody = document.getElementById('report-table-body');
+            try {
+                const summaryData = await fetch('/api/reports/annual_summary').then(res => res.json());
+                
+                if (summaryData.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">Ingen data å vise.</td></tr>';
+                    return;
+                }
+
+                tableBody.innerHTML = summaryData.map(customer => `
+                    <tr>
+                        <td>${customer.customerId}</td>
+                        <td><strong>${customer.name}</strong></td>
+                        <td>${customer.projectCount}</td>
+                        <td>${new Intl.NumberFormat('no-NO', { style: 'currency', currency: 'NOK' }).format(customer.totalInvoiced)}</td>
+                    </tr>
+                `).join('');
+
+            } catch (error) {
+                console.error("Failed to load report data:", error);
+                tableBody.innerHTML = '<tr><td colspan="4" style="color: red; text-align: center; padding: 20px;">Kunne ikke laste rapporten.</td></tr>';
+            }
+        });
+    </script>
+</body>
+</html>

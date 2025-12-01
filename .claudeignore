@@ -1,0 +1,20 @@
+# Claude Code should ignore these paths when scanning or proposing changes
+node_modules/
+dist/
+coverage/
+.servfix-cache/
+uploads/
+servfix-files/
+test-output/
+
+# Credentials & env
+.env
+config/gcp/*.json
+dev/
+test-env.txt
+prod-env.txt
+
+# Generated PDFs & images
+**/*.pdf
+**/*.png
+**/*.jpg
