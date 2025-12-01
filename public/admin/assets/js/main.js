@@ -5,20 +5,19 @@ document.addEventListener("DOMContentLoaded", async function() {
     const headerPlaceholder = document.querySelector("header.app-header");
     if (!headerPlaceholder) return;
 
-    // Hent bedriftsnavn fra innstillinger
-    let companyName = 'selskapsnavn ikke funnet'; // Fallback
-    
+    // Hent bedriftsnavn fra API først
+    let companyName = 'NN'; // Fallback
+
     try {
-        const response = await fetch('/api/images/settings', { 
-            credentials: 'include' 
+        const response = await fetch('/api/images/settings', {
+            credentials: 'include'
         });
         if (response.ok) {
             const settings = await response.json();
-            companyName = settings.companyInfo?.name || 'AIR-TECH AS';
-            console.log('✅ Bedriftsnavn hentet:', companyName);
+            companyName = settings.companyInfo?.name || 'NN';
         }
     } catch (error) {
-        console.log('⚠️ Bruker standard bedriftsnavn:', error.message);
+        console.warn('Could not fetch company name for header:', error.message);
     }
 
     // Henter innholdet fra den delte header-filen
@@ -30,8 +29,8 @@ document.addEventListener("DOMContentLoaded", async function() {
             return response.text();
         })
         .then(data => {
-            // KRITISK FIX: Erstatt hardkodet bedriftsnavn med dynamisk verdi
-            data = data.replace('AIR-TECH AS', companyName);
+            // Erstatt "NN" med faktisk bedriftsnavn
+            data = data.replace('>NN<', `>${companyName}<`);
             
             // Setter det hentede HTML-innholdet inn i header-elementet
             headerPlaceholder.innerHTML = data;
@@ -79,6 +78,28 @@ function toggleAdminDropdown() {
 // Function to navigate to a given URL
 function navigateTo(url) {
     window.location.href = url;
+}
+
+// Function to logout admin user
+async function logout() {
+    try {
+        const response = await fetch('/api/admin/auth/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            window.location.href = '/admin/login.html';
+        } else {
+            console.error('Logout failed:', response.status);
+            // Redirect uansett
+            window.location.href = '/admin/login.html';
+        }
+    } catch (error) {
+        console.error('Logout error:', error);
+        // Redirect uansett ved feil
+        window.location.href = '/admin/login.html';
+    }
 }
 
 // Close the dropdown if the user clicks outside of it
