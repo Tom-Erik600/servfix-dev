@@ -1111,3 +1111,432 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
     await fetchData();
     loadAllCustomersForSearch(); // Kjør parallelt med eksisterende loading
 });
+
+// ===== SERVICE-OVERSIKT MODAL =====
+
+// State for oversikt-modal
+const overviewState = {
+    currentStartMonth: new Date(),
+    orders: [],
+    technicians: [],
+    currentView: 'calendar' // 'calendar' eller 'technician'
+};
+
+// Norske månedsnavn
+const monthNames = [
+    'Januar', 'Februar', 'Mars', 'April', 'Mai', 'Juni',
+    'Juli', 'August', 'September', 'Oktober', 'November', 'Desember'
+];
+
+// Initialiser oversikt-modal
+function initOverviewModal() {
+    const openBtn = document.getElementById('open-overview-btn');
+    const closeBtn = document.getElementById('close-overview-btn');
+    const modal = document.getElementById('overview-modal');
+    const prevBtn = document.getElementById('prev-period-btn');
+    const nextBtn = document.getElementById('next-period-btn');
+    const calendarViewBtn = document.getElementById('btn-calendar-view');
+    const technicianViewBtn = document.getElementById('btn-technician-view');
+
+    if (!openBtn || !modal) {
+        console.warn('Overview modal elements not found');
+        return;
+    }
+
+    // Åpne modal
+    openBtn.addEventListener('click', () => {
+        openOverviewModal();
+    });
+
+    // Lukk modal
+    closeBtn.addEventListener('click', () => {
+        closeOverviewModal();
+    });
+
+    // Lukk ved klikk utenfor
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeOverviewModal();
+        }
+    });
+
+    // Periode-navigasjon
+    prevBtn.addEventListener('click', () => {
+        overviewState.currentStartMonth.setMonth(overviewState.currentStartMonth.getMonth() - 6);
+        loadOverviewData();
+    });
+
+    nextBtn.addEventListener('click', () => {
+        overviewState.currentStartMonth.setMonth(overviewState.currentStartMonth.getMonth() + 6);
+        loadOverviewData();
+    });
+
+    // Visningsbytte
+    calendarViewBtn.addEventListener('click', () => {
+        switchOverviewView('calendar');
+    });
+
+    technicianViewBtn.addEventListener('click', () => {
+        switchOverviewView('technician');
+    });
+
+    // ESC for å lukke
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('show')) {
+            closeOverviewModal();
+        }
+    });
+
+    console.log('✅ Service-oversikt modal initialisert');
+}
+
+// Åpne modal
+function openOverviewModal() {
+    const modal = document.getElementById('overview-modal');
+
+    // Reset til nåværende måned
+    overviewState.currentStartMonth = new Date();
+    overviewState.currentStartMonth.setDate(1);
+    overviewState.currentView = 'calendar';
+
+    // Reset view buttons
+    document.getElementById('btn-calendar-view').classList.add('active');
+    document.getElementById('btn-technician-view').classList.remove('active');
+    document.getElementById('calendar-grid-view').style.display = 'grid';
+    document.getElementById('technician-list-view').style.display = 'none';
+    document.getElementById('technician-legend').style.display = 'flex';
+
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+
+    loadOverviewData();
+}
+
+// Lukk modal
+function closeOverviewModal() {
+    const modal = document.getElementById('overview-modal');
+    modal.classList.remove('show');
+    document.body.style.overflow = '';
+}
+
+// Last data for oversikten
+async function loadOverviewData() {
+    try {
+        // Beregn datoområde (6 måneder)
+        const startDate = new Date(overviewState.currentStartMonth);
+        const endDate = new Date(startDate);
+        endDate.setMonth(endDate.getMonth() + 6);
+        endDate.setDate(0); // Siste dag i måneden
+
+        const dateFrom = startDate.toISOString().split('T')[0];
+        const dateTo = endDate.toISOString().split('T')[0];
+
+        // Hent data parallelt
+        const [ordersResponse, techniciansResponse] = await Promise.all([
+            fetch(`/api/admin/orders?dateFrom=${dateFrom}&dateTo=${dateTo}`, {
+                credentials: 'include'
+            }),
+            fetch('/api/admin/technicians', {
+                credentials: 'include'
+            })
+        ]);
+
+        if (!ordersResponse.ok || !techniciansResponse.ok) {
+            throw new Error('Kunne ikke hente data');
+        }
+
+        overviewState.orders = await ordersResponse.json();
+        overviewState.technicians = await techniciansResponse.json();
+
+        // Oppdater UI
+        updatePeriodIndicator();
+        updateOverviewStatistics();
+        renderCurrentView();
+        renderTechnicianLegend();
+
+    } catch (error) {
+        console.error('Feil ved lasting av oversiktsdata:', error);
+        showToast('Kunne ikke laste data', 'error');
+    }
+}
+
+// Oppdater periode-indikator
+function updatePeriodIndicator() {
+    const titleEl = document.getElementById('period-title');
+    const startMonth = overviewState.currentStartMonth;
+    const endMonth = new Date(startMonth);
+    endMonth.setMonth(endMonth.getMonth() + 5);
+
+    const startText = `${monthNames[startMonth.getMonth()]} ${startMonth.getFullYear()}`;
+    const endText = `${monthNames[endMonth.getMonth()]} ${endMonth.getFullYear()}`;
+
+    titleEl.textContent = `${startText} - ${endText}`;
+
+    // Deaktiver "Forrige" hvis vi er på nåværende måned eller før
+    const prevBtn = document.getElementById('prev-period-btn');
+    const now = new Date();
+    now.setDate(1);
+    now.setHours(0,0,0,0);
+
+    const compareDate = new Date(startMonth);
+    compareDate.setHours(0,0,0,0);
+
+    prevBtn.disabled = compareDate <= now;
+}
+
+// Oppdater statistikk
+function updateOverviewStatistics() {
+    const orders = overviewState.orders;
+
+    // Tell unike kunder
+    const uniqueCustomers = new Set(orders.map(o => o.customer_id)).size;
+
+    // Tell unike teknikere med oppdrag
+    const uniqueTechnicians = new Set(orders.filter(o => o.technician_id).map(o => o.technician_id)).size;
+
+    document.getElementById('stat-total-orders').textContent = orders.length;
+    document.getElementById('stat-total-customers').textContent = uniqueCustomers;
+    document.getElementById('stat-total-technicians').textContent = uniqueTechnicians;
+}
+
+// Bytt visning
+function switchOverviewView(view) {
+    overviewState.currentView = view;
+
+    const calendarBtn = document.getElementById('btn-calendar-view');
+    const technicianBtn = document.getElementById('btn-technician-view');
+    const calendarView = document.getElementById('calendar-grid-view');
+    const technicianView = document.getElementById('technician-list-view');
+    const legend = document.getElementById('technician-legend');
+
+    if (view === 'calendar') {
+        calendarBtn.classList.add('active');
+        technicianBtn.classList.remove('active');
+        calendarView.style.display = 'grid';
+        technicianView.style.display = 'none';
+        legend.style.display = 'flex';
+    } else {
+        calendarBtn.classList.remove('active');
+        technicianBtn.classList.add('active');
+        calendarView.style.display = 'none';
+        technicianView.style.display = 'flex';
+        legend.style.display = 'none';
+    }
+
+    renderCurrentView();
+}
+
+// Render gjeldende visning
+function renderCurrentView() {
+    if (overviewState.currentView === 'calendar') {
+        renderCalendarView();
+    } else {
+        renderTechnicianView();
+    }
+}
+
+// Render kalender-visning
+function renderCalendarView() {
+    const container = document.getElementById('calendar-grid-view');
+    const startMonth = new Date(overviewState.currentStartMonth);
+
+    let html = '';
+
+    for (let i = 0; i < 6; i++) {
+        const currentMonth = new Date(startMonth);
+        currentMonth.setMonth(currentMonth.getMonth() + i);
+
+        const monthOrders = getOrdersForMonth(currentMonth);
+
+        html += `
+            <div class="month-card">
+                <div class="month-card-header">
+                    <span class="month-name">${monthNames[currentMonth.getMonth()]} ${currentMonth.getFullYear()}</span>
+                    <span class="month-count">${monthOrders.length} oppdrag</span>
+                </div>
+                <div class="month-card-content">
+                    ${monthOrders.length > 0 ? renderMonthOrders(monthOrders) : '<div class="empty-month-message">Ingen planlagte oppdrag</div>'}
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+}
+
+// Hent ordrer for en måned
+function getOrdersForMonth(month) {
+    return overviewState.orders.filter(order => {
+        const orderDate = new Date(order.scheduled_date);
+        return orderDate.getMonth() === month.getMonth() &&
+               orderDate.getFullYear() === month.getFullYear();
+    }).sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
+}
+
+// Render ordrer for en måned
+function renderMonthOrders(orders) {
+    return orders.map(order => {
+        const date = new Date(order.scheduled_date);
+        const day = date.getDate();
+        const techIndex = getTechnicianColorIndex(order.technician_id);
+        const techInitials = getTechnicianInitials(order.technician_id);
+
+        return `
+            <div class="overview-service-item" data-order-id="${order.id}">
+                <span class="service-date-badge">${day < 10 ? '0' + day : day}</span>
+                <div class="service-info-block">
+                    <div class="service-customer-name">${escapeHtmlOverview(order.customer_name || 'Ukjent kunde')}</div>
+                    <div class="service-address-text">📍 ${escapeHtmlOverview(order.delivery_address || 'Ingen adresse')}</div>
+                </div>
+                <div class="tech-badge tech-color-${techIndex}" title="${getTechnicianName(order.technician_id)}">
+                    ${techInitials}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Render tekniker-visning
+function renderTechnicianView() {
+    const container = document.getElementById('technician-list-view');
+
+    // Grupper ordrer per tekniker
+    const ordersByTechnician = {};
+
+    overviewState.orders.forEach(order => {
+        const techId = order.technician_id || 'unassigned';
+        if (!ordersByTechnician[techId]) {
+            ordersByTechnician[techId] = [];
+        }
+        ordersByTechnician[techId].push(order);
+    });
+
+    let html = '';
+
+    // Sorter teknikere etter antall oppdrag (mest først)
+    const sortedTechIds = Object.keys(ordersByTechnician).sort((a, b) => {
+        return ordersByTechnician[b].length - ordersByTechnician[a].length;
+    });
+
+    sortedTechIds.forEach(techId => {
+        const orders = ordersByTechnician[techId].sort((a, b) =>
+            new Date(a.scheduled_date) - new Date(b.scheduled_date)
+        );
+
+        const techIndex = getTechnicianColorIndex(techId);
+        const techName = techId === 'unassigned' ? 'Ikke tildelt' : getTechnicianName(techId);
+        const techInitials = techId === 'unassigned' ? '?' : getTechnicianInitials(techId);
+
+        html += `
+            <div class="tech-section">
+                <div class="tech-section-header">
+                    <div class="tech-avatar tech-color-${techIndex}">${techInitials}</div>
+                    <div class="tech-info">
+                        <h4>${escapeHtmlOverview(techName)}</h4>
+                        <span>Servicetekniker</span>
+                    </div>
+                    <span class="tech-order-count">${orders.length} oppdrag</span>
+                </div>
+                <div class="tech-orders-container">
+                    ${orders.map(order => renderTechnicianOrderRow(order)).join('')}
+                </div>
+            </div>
+        `;
+    });
+
+    if (html === '') {
+        html = '<div class="empty-month-message">Ingen planlagte oppdrag i denne perioden</div>';
+    }
+
+    container.innerHTML = html;
+}
+
+// Render enkelt ordre-rad i tekniker-visning
+function renderTechnicianOrderRow(order) {
+    const date = new Date(order.scheduled_date);
+    const day = date.getDate();
+    const monthShort = monthNames[date.getMonth()].substring(0, 3);
+    const year = date.getFullYear().toString().substring(2);
+
+    const statusClass = order.status === 'in_progress' ? 'in-progress' : 'scheduled';
+    const statusText = order.status === 'in_progress' ? 'I arbeid' : 'Planlagt';
+
+    return `
+        <div class="tech-order-row" data-order-id="${order.id}">
+            <div class="order-date-box">
+                <div class="day">${day < 10 ? '0' + day : day}</div>
+                <div class="month-year">${monthShort} ${year}</div>
+            </div>
+            <div class="order-details">
+                <div class="order-customer">${escapeHtmlOverview(order.customer_name || 'Ukjent kunde')}</div>
+                <div class="order-address">📍 ${escapeHtmlOverview(order.delivery_address || 'Ingen adresse')}</div>
+            </div>
+            <span class="order-status-badge ${statusClass}">${statusText}</span>
+        </div>
+    `;
+}
+
+// Render tekniker-legend
+function renderTechnicianLegend() {
+    const container = document.getElementById('technician-legend');
+
+    // Finn unike teknikere fra ordrer
+    const techIds = [...new Set(overviewState.orders.filter(o => o.technician_id).map(o => o.technician_id))];
+
+    const html = techIds.map(techId => {
+        const techIndex = getTechnicianColorIndex(techId);
+        const techName = getTechnicianName(techId);
+        const techInitials = getTechnicianInitials(techId);
+
+        return `
+            <div class="legend-item">
+                <div class="legend-badge tech-color-${techIndex}">${techInitials}</div>
+                <span>${escapeHtmlOverview(techName)}</span>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = html || '<span style="color: var(--text-light);">Ingen teknikere tildelt</span>';
+}
+
+// Hjelpefunksjoner for teknikere
+function getTechnicianColorIndex(techId) {
+    if (!techId) return 0;
+    const index = overviewState.technicians.findIndex(t => t.id == techId);
+    return index >= 0 ? index % 8 : 0;
+}
+
+function getTechnicianName(techId) {
+    const tech = overviewState.technicians.find(t => t.id == techId);
+    return tech ? tech.name : 'Ukjent';
+}
+
+function getTechnicianInitials(techId) {
+    const tech = overviewState.technicians.find(t => t.id == techId);
+    if (tech && tech.initials) return tech.initials;
+
+    const name = getTechnicianName(techId);
+    if (name === 'Ukjent') return '?';
+
+    const parts = name.split(' ');
+    if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+}
+
+// Escape HTML for sikkerhet (egen funksjon for å unngå navnekonflikt)
+function escapeHtmlOverview(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Initialiser oversikt-modal når DOM er klar
+document.addEventListener('DOMContentLoaded', () => {
+    // Vent litt for å sikre at andre elementer er lastet
+    setTimeout(() => {
+        initOverviewModal();
+    }, 100);
+});

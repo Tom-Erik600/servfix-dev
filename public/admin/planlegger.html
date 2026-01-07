@@ -18,7 +18,12 @@
 
         <main class="main-content">
             <div class="page-header">
-                <h1>Visuell Planlegger</h1>
+                <div class="page-header-top">
+                    <h1>Visuell Planlegger</h1>
+                    <button id="open-overview-btn" class="btn-overview" title="Åpne service-oversikt">
+                        📊 Service-oversikt
+                    </button>
+                </div>
                 <p>Dra en tekniker og slipp på en kunde for å opprette serviceoppdrag. Maks 1 aktiv oppdrag per kunde.</p>
             </div>
 
@@ -85,7 +90,85 @@
             </div>
         </div>
     </div>
-    
+
+    <!-- Service-oversikt Modal -->
+    <div class="modal-overlay" id="overview-modal">
+        <div class="overview-modal-content">
+            <!-- Header -->
+            <div class="overview-header">
+                <h2>📊 Service-oversikt</h2>
+                <div class="overview-controls">
+                    <div class="view-toggle">
+                        <button class="view-btn active" data-view="calendar" id="btn-calendar-view">
+                            📅 Kunde
+                        </button>
+                        <button class="view-btn" data-view="technician" id="btn-technician-view">
+                            👷 Tekniker
+                        </button>
+                    </div>
+                    <button class="overview-close-btn" id="close-overview-btn" title="Lukk">×</button>
+                </div>
+            </div>
+
+            <!-- Periode-navigasjon -->
+            <div class="period-navigation">
+                <button class="period-nav-btn" id="prev-period-btn">
+                    ← Forrige
+                </button>
+                <div class="period-indicator">
+                    <h3 id="period-title">Laster...</h3>
+                    <span id="period-subtitle">Viser 6 måneder</span>
+                </div>
+                <button class="period-nav-btn" id="next-period-btn">
+                    Neste →
+                </button>
+            </div>
+
+            <!-- Statistikk-bar -->
+            <div class="overview-stats">
+                <div class="stat-item">
+                    <span class="stat-icon">📋</span>
+                    <div class="stat-content">
+                        <span class="stat-value" id="stat-total-orders">0</span>
+                        <span class="stat-label">Oppdrag</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-icon">🏢</span>
+                    <div class="stat-content">
+                        <span class="stat-value" id="stat-total-customers">0</span>
+                        <span class="stat-label">Kunder</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-icon">👷</span>
+                    <div class="stat-content">
+                        <span class="stat-value" id="stat-total-technicians">0</span>
+                        <span class="stat-label">Teknikere</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="overview-body">
+                <!-- Kalender-visning (Kunde) -->
+                <div class="calendar-grid-view" id="calendar-grid-view">
+                    <!-- Fylles dynamisk med JavaScript -->
+                </div>
+
+                <!-- Tekniker-visning -->
+                <div class="technician-list-view" id="technician-list-view" style="display: none;">
+                    <!-- Fylles dynamisk med JavaScript -->
+                </div>
+            </div>
+
+            <!-- Tekniker-legend (kun synlig i kalendervisning) -->
+            <div class="technician-legend" id="technician-legend">
+                <!-- Fylles dynamisk med JavaScript -->
+            </div>
+        </div>
+    </div>
+
     <script src="/admin/assets/js/main.js"></script>
     <script src="/admin/assets/js/planlegger.js"></script>
 </body>

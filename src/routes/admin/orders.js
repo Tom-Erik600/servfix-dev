@@ -21,16 +21,52 @@ router.use((req, res, next) => {
 });
 
 // GET all orders for the selected tenant
-// GET all orders
+// GET all orders - støtter dateFrom, dateTo og status filtrering
 router.get('/', async (req, res) => {
   try {
     const pool = await db.getTenantConnection(req.session.tenantId);
-    
+
+    // Hent query parametre for filtrering
+    const { dateFrom, dateTo, status } = req.query;
+
+    // Bygg WHERE-klausul dynamisk
+    let whereConditions = [];
+    let queryParams = [];
+    let paramIndex = 1;
+
+    if (dateFrom) {
+      whereConditions.push(`o.scheduled_date >= $${paramIndex}::date`);
+      queryParams.push(dateFrom);
+      paramIndex++;
+    }
+
+    if (dateTo) {
+      whereConditions.push(`o.scheduled_date <= $${paramIndex}::date`);
+      queryParams.push(dateTo);
+      paramIndex++;
+    }
+
+    if (status) {
+      // Støtt kommaseparerte statuser
+      const statuses = status.split(',').map(s => s.trim());
+      const statusPlaceholders = statuses.map((_, i) => `$${paramIndex + i}`).join(', ');
+      whereConditions.push(`o.status IN (${statusPlaceholders})`);
+      queryParams.push(...statuses);
+      paramIndex += statuses.length;
+    }
+
+    const whereClause = whereConditions.length > 0
+      ? `WHERE ${whereConditions.join(' AND ')}`
+      : '';
+
     const result = await pool.query(
-      `SELECT o.*, t.name as technician_name
-   FROM orders o
-   LEFT JOIN technicians t ON o.technician_id = t.id
-   ORDER BY o.scheduled_date DESC, o.scheduled_time DESC`
+      `SELECT o.*, t.name as technician_name,
+              o.customer_data->>'physicalAddress' as delivery_address
+       FROM orders o
+       LEFT JOIN technicians t ON o.technician_id = t.id
+       ${whereClause}
+       ORDER BY o.scheduled_date DESC, o.scheduled_time DESC`,
+      queryParams
     );
     
     // Legg til orderNumber for frontend

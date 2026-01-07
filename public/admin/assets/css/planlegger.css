@@ -1105,3 +1105,586 @@ body {
     }
 }
 
+/* ===== SERVICE-OVERSIKT MODAL ===== */
+
+/* Knapp i header */
+.page-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.btn-overview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+.btn-overview:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+/* Modal container */
+#overview-modal {
+    z-index: 1100;
+}
+
+#overview-modal .overview-modal-content {
+    background: var(--bg-white);
+    border-radius: 16px;
+    width: 95%;
+    max-width: 1400px;
+    height: 90vh;
+    max-height: 900px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+}
+
+/* Header */
+.overview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.overview-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-color);
+    margin: 0;
+}
+
+.overview-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+/* View toggle */
+.view-toggle {
+    display: flex;
+    background: #f1f5f9;
+    border-radius: 8px;
+    padding: 4px;
+    border: 1px solid var(--border-color);
+}
+
+.view-btn {
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-light);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.view-btn.active {
+    background: var(--bg-white);
+    color: var(--primary-color);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.view-btn:hover:not(.active) {
+    color: var(--text-color);
+}
+
+/* Close button */
+.overview-close-btn {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: #f1f5f9;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 24px;
+    color: var(--text-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    line-height: 1;
+}
+
+.overview-close-btn:hover {
+    background: #ef4444;
+    color: white;
+}
+
+/* Periode-navigasjon */
+.period-navigation {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-white);
+}
+
+.period-nav-btn {
+    padding: 10px 20px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-white);
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-color);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.period-nav-btn:hover:not(:disabled) {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: #eff6ff;
+}
+
+.period-nav-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.period-indicator {
+    text-align: center;
+}
+
+.period-indicator h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-color);
+    margin: 0 0 4px 0;
+}
+
+.period-indicator span {
+    font-size: 13px;
+    color: var(--text-light);
+}
+
+/* Statistikk-bar */
+.overview-stats {
+    display: flex;
+    gap: 32px;
+    padding: 14px 24px;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border-bottom: 1px solid #bfdbfe;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.stat-icon {
+    font-size: 20px;
+}
+
+.stat-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-value {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-color);
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 11px;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Modal body */
+.overview-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    background: var(--bg-light);
+}
+
+/* Kalender grid */
+.calendar-grid-view {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+@media (max-width: 1200px) {
+    .calendar-grid-view {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .calendar-grid-view {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Månedskort */
+.month-card {
+    background: var(--bg-white);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.month-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.month-card-header .month-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.month-card-header .month-count {
+    background: var(--primary-color);
+    color: white;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.month-card-content {
+    padding: 12px;
+    min-height: 120px;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+/* Service-item i kalender */
+.overview-service-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-light);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border-left: 3px solid var(--primary-color);
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.overview-service-item:last-child {
+    margin-bottom: 0;
+}
+
+.overview-service-item:hover {
+    background: #eff6ff;
+    transform: translateX(4px);
+}
+
+.service-date-badge {
+    background: var(--primary-color);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 36px;
+    text-align: center;
+}
+
+.service-info-block {
+    flex: 1;
+    min-width: 0;
+}
+
+.service-customer-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.service-address-text {
+    font-size: 11px;
+    color: var(--text-light);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Tekniker-badge */
+.tech-badge {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    flex-shrink: 0;
+}
+
+/* Tom måned */
+.empty-month-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 100px;
+    color: var(--text-lighter);
+    font-size: 13px;
+}
+
+.empty-month-message::before {
+    content: '📅';
+    font-size: 28px;
+    margin-bottom: 8px;
+    opacity: 0.5;
+}
+
+/* Tekniker-visning */
+.technician-list-view {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.tech-section {
+    background: var(--bg-white);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.tech-section-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tech-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: white;
+}
+
+.tech-info {
+    flex: 1;
+}
+
+.tech-info h4 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-color);
+    margin: 0 0 2px 0;
+}
+
+.tech-info span {
+    font-size: 13px;
+    color: var(--text-light);
+}
+
+.tech-order-count {
+    background: var(--primary-color);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.tech-orders-container {
+    padding: 16px 20px;
+}
+
+.tech-order-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 16px;
+    background: var(--bg-light);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    transition: all 0.2s;
+}
+
+.tech-order-row:last-child {
+    margin-bottom: 0;
+}
+
+.tech-order-row:hover {
+    background: #eff6ff;
+    transform: translateX(4px);
+}
+
+.order-date-box {
+    text-align: center;
+    background: var(--primary-color);
+    color: white;
+    padding: 10px 14px;
+    border-radius: 8px;
+    min-width: 60px;
+}
+
+.order-date-box .day {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.order-date-box .month-year {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+}
+
+.order-details {
+    flex: 1;
+}
+
+.order-customer {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: 4px;
+}
+
+.order-address {
+    font-size: 12px;
+    color: var(--text-light);
+}
+
+.order-status-badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.order-status-badge.scheduled {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.order-status-badge.in-progress {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+/* Tekniker legend */
+.technician-legend {
+    display: flex;
+    gap: 20px;
+    padding: 14px 24px;
+    background: var(--bg-white);
+    border-top: 1px solid var(--border-color);
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-light);
+}
+
+.legend-badge {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: white;
+}
+
+/* Tekniker-farger */
+.tech-color-0 { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); }
+.tech-color-1 { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+.tech-color-2 { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+.tech-color-3 { background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); }
+.tech-color-4 { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+.tech-color-5 { background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); }
+.tech-color-6 { background: linear-gradient(135deg, #ec4899 0%, #db2777 100%); }
+.tech-color-7 { background: linear-gradient(135deg, #84cc16 0%, #65a30d 100%); }
+
+/* Responsive for oversikt-modal */
+@media (max-width: 768px) {
+    #overview-modal .overview-modal-content {
+        width: 100%;
+        height: 100vh;
+        max-height: none;
+        border-radius: 0;
+    }
+
+    .overview-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+    }
+
+    .overview-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .period-navigation {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .overview-stats {
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .technician-legend {
+        gap: 12px;
+    }
+}
+
