@@ -678,3 +678,510 @@
     border-bottom: 2px solid #e5e7eb;
     margin-bottom: 8px;
 }
+
+/* ==========================================================================
+   EDIT MODAL STYLES
+   ========================================================================== */
+
+.modal-content.large {
+    max-width: 800px;
+    max-height: 85vh;
+}
+
+.edit-form {
+    max-height: 600px;
+    overflow-y: auto;
+    padding: 0;
+}
+
+.edit-section {
+    margin-bottom: 24px;
+    padding: 20px;
+    background: #f9fafb;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.edit-section:last-child {
+    margin-bottom: 0;
+}
+
+.edit-section h4 {
+    margin: 0 0 16px 0;
+    color: #0B5FAE;
+    font-size: 15px;
+    font-weight: 600;
+    border-bottom: 2px solid #0B5FAE;
+    padding-bottom: 8px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.placeholder-text {
+    color: var(--text-light);
+    font-style: italic;
+    padding: 12px;
+    text-align: center;
+}
+
+.section-description {
+    color: var(--text-light);
+    font-size: 12px;
+    margin-bottom: 16px;
+    font-style: italic;
+}
+
+/* Edit header with customer info */
+.edit-header {
+    margin-bottom: 20px;
+    padding: 20px;
+    background: linear-gradient(135deg, #0B5FAE 0%, #1e88e5 100%);
+    border-radius: 8px;
+    color: white;
+}
+
+.edit-header h3 {
+    margin: 0 0 8px 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.edit-header .order-info {
+    margin: 4px 0 12px 0;
+    font-size: 12px;
+    opacity: 0.85;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.edit-header p {
+    margin: 4px 0;
+    font-size: 13px;
+    opacity: 0.9;
+}
+
+/* Checklist item cards - full view like technician */
+.checklist-item-card {
+    margin-bottom: 16px;
+    padding: 16px;
+    background: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    transition: border-color 0.2s ease;
+}
+
+.checklist-item-card:hover {
+    border-color: #d1d5db;
+}
+
+.checklist-item-card:last-child {
+    margin-bottom: 0;
+}
+
+.checklist-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.item-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: #374151;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.status-ok { background: #d1fae5; color: #065f46; }
+.status-badge.status-avvik { background: #fee2e2; color: #991b1b; }
+.status-badge.status-byttet { background: #dbeafe; color: #1e40af; }
+.status-badge.status-n\/a,
+.status-badge.status-na { background: #f3f4f6; color: #6b7280; }
+
+.item-content {
+    margin-top: 12px;
+}
+
+.item-content label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #6b7280;
+    font-size: 12px;
+}
+
+.item-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.checklist-image {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 2px solid #e5e7eb;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.checklist-image:hover {
+    border-color: var(--primary-blue);
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Legacy checklist comment items (fallback) */
+.checklist-comment-item {
+    margin-bottom: 16px;
+    padding: 14px;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+}
+
+.checklist-comment-item:last-child {
+    margin-bottom: 0;
+}
+
+.checklist-comment-item .item-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.checklist-comment-item .item-status {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.checklist-comment-item .item-status.ok { background: #10B981; }
+.checklist-comment-item .item-status.avvik { background: #EF4444; }
+.checklist-comment-item .item-status.ikke-aktuelt { background: #9CA3AF; }
+
+.checklist-comment-item label {
+    font-weight: 500;
+    color: #374151;
+    font-size: 13px;
+    flex: 1;
+}
+
+/* Checklist comment textarea - shared by both */
+.checklist-comment-input,
+.checklist-comment-item textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    min-height: 60px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.checklist-comment-input:focus,
+.checklist-comment-item textarea:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+    box-shadow: 0 0 0 2px rgba(30, 144, 255, 0.1);
+}
+
+/* Product and work rows */
+.product-row,
+.work-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    align-items: flex-start;
+}
+
+.product-row:last-child,
+.work-row:last-child {
+    margin-bottom: 16px;
+}
+
+.product-row input,
+.work-row input,
+.product-row textarea,
+.work-row textarea {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.product-row input:focus,
+.work-row input:focus,
+.product-row textarea:focus,
+.work-row textarea:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+    box-shadow: 0 0 0 2px rgba(30, 144, 255, 0.1);
+}
+
+.product-row .quantity-input {
+    max-width: 80px;
+    text-align: center;
+}
+
+.btn-remove-row {
+    padding: 8px 12px;
+    background: #dc2626;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+}
+
+.btn-remove-row:hover {
+    background: #b91c1c;
+}
+
+/* Add buttons */
+.btn-outline {
+    background: white;
+    border: 1px dashed #d1d5db;
+    color: var(--text-secondary);
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    width: 100%;
+    text-align: center;
+}
+
+.btn-outline:hover {
+    border-color: var(--primary-blue);
+    color: var(--primary-blue);
+    background: #f0f9ff;
+}
+
+.btn-sm {
+    padding: 8px 14px;
+    font-size: 12px;
+}
+
+/* Empty state for containers */
+#products-container:empty::before,
+#work-container:empty::before {
+    content: 'Ingen elementer lagt til';
+    display: block;
+    padding: 16px;
+    text-align: center;
+    color: var(--text-light);
+    font-style: italic;
+    background: white;
+    border-radius: 4px;
+    border: 1px dashed #e5e7eb;
+    margin-bottom: 12px;
+}
+
+/* Action buttons in table */
+.action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch;
+}
+
+.action-btn {
+    width: 100%;
+    min-width: 130px;
+    font-size: 11px;
+    padding: 8px 12px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.no-pdf-text {
+    color: var(--text-light);
+    font-size: 11px;
+    text-align: center;
+    padding: 8px;
+}
+
+.no-email-warning {
+    color: #dc2626;
+    font-size: 11px;
+    text-align: center;
+}
+
+/* Edit button in table */
+.btn-edit {
+    background: #F59E0B;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn-edit:hover {
+    background: #D97706;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
+}
+
+/* Success button */
+.btn-success {
+    background: #10B981;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn-success:hover {
+    background: #059669;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+}
+
+/* Metadata table - layout som PDF */
+.metadata-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+}
+
+.metadata-table td {
+    padding: 0;
+    border: 1px solid #e5e7eb;
+    vertical-align: top;
+}
+
+.metadata-cell {
+    padding: 12px;
+}
+
+.metadata-cell label {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.metadata-table .editable-field {
+    width: 100%;
+    padding: 8px 10px;
+    border: 2px solid #10b981;
+    border-radius: 4px;
+    background: white;
+    font-size: 13px;
+    font-weight: 500;
+    color: #111827;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+}
+
+.metadata-table .editable-field:focus {
+    outline: none;
+    border-color: #059669;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+.metadata-table .editable-field::placeholder {
+    color: #9ca3af;
+    font-weight: 400;
+}
+
+.metadata-table .readonly-field {
+    padding: 8px 10px;
+    background: #f9fafb;
+    border: 2px solid #e5e7eb;
+    border-radius: 4px;
+    color: #6b7280;
+    font-size: 13px;
+    font-weight: 500;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+}
+
+/* Overall comment textarea - oppsummering */
+#overall-comment {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    min-height: 100px;
+    resize: vertical;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#overall-comment:focus {
+    outline: none;
+    border-color: #0B5FAE;
+    box-shadow: 0 0 0 3px rgba(11, 95, 174, 0.1);
+}
+
+#overall-comment::placeholder {
+    color: #9ca3af;
+    font-style: italic;
+}
+
+/* Responsive adjustments for edit modal */
+@media (max-width: 768px) {
+    .modal-content.large {
+        max-width: 95%;
+        max-height: 90vh;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .product-row,
+    .work-row {
+        flex-direction: column;
+    }
+
+    .product-row .quantity-input {
+        max-width: 100%;
+    }
+
+    .btn-remove-row {
+        width: 100%;
+    }
+}

@@ -67,6 +67,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         stats: {},
         isLoading: false,
         currentEditReport: null,
+        currentEditReportId: null,
         filters: {
             status: 'all',
             search: ''
@@ -126,11 +127,45 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         });
 
-        // Click outside modal to close
+        // ✅ FIX: Click outside modal to close - track mousedown to prevent closing during text selection
         if (elements.editModal) {
+            let mouseDownTarget = null;
+
+            elements.editModal.addEventListener('mousedown', (e) => {
+                mouseDownTarget = e.target;
+            });
+
             elements.editModal.addEventListener('click', (e) => {
-                if (e.target === elements.editModal) {
+                // Only close if BOTH mousedown AND click happened on the overlay
+                if (e.target.classList.contains('modal-overlay') &&
+                    mouseDownTarget && mouseDownTarget.classList.contains('modal-overlay')) {
                     closeEditModal();
+                }
+                mouseDownTarget = null;
+            });
+        }
+
+        // ✅ FIX: Same for invoice modal
+        const invoiceModal = document.getElementById('invoice-modal');
+        if (invoiceModal) {
+            let invoiceMouseDownTarget = null;
+
+            invoiceModal.addEventListener('mousedown', (e) => {
+                invoiceMouseDownTarget = e.target;
+            });
+
+            invoiceModal.addEventListener('click', (e) => {
+                if (e.target.classList.contains('modal-overlay') &&
+                    invoiceMouseDownTarget && invoiceMouseDownTarget.classList.contains('modal-overlay')) {
+                    closeInvoiceModal();
+                }
+                invoiceMouseDownTarget = null;
+            });
+
+            // ESC key to close invoice modal
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && invoiceModal.classList.contains('show')) {
+                    closeInvoiceModal();
                 }
             });
         }
@@ -307,23 +342,30 @@ function createOrderReportRow(order) {
                 </div>
             </td>
             <td>
-                <div class="action-buttons" style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start;">
+                <div class="action-buttons">
                     ${hasPDF ?
-                        `<button class="btn btn-sm btn-outline" onclick="viewOrderPDFs('${order.order_id}', ${JSON.stringify(order.report_ids).replace(/"/g, '&quot;')})" title="Vis PDFer" style="font-size: 12px; padding: 6px 10px;">
-                            📄 Vis PDF
+                        `<button class="btn btn-sm btn-outline action-btn" onclick="viewOrderPDFs('${order.order_id}', ${JSON.stringify(order.report_ids).replace(/"/g, '&quot;')})" title="Vis rapport">
+                            📄 Vis rapport
                         </button>` :
-                        `<span style="color: var(--text-light); font-size: 11px;">PDFer ikke generert</span>`
+                        `<span class="no-pdf-text">PDF ikke generert</span>`
                     }
-                    
-                    ${!isSent && hasPDF && order.customer_email ?
-                        `<button class="btn btn-sm btn-primary" onclick="sendOrderToCustomer('${order.order_id}')" style="font-size: 12px; padding: 6px 10px;">
-                            ✉️ Send til kunde
+
+                    ${hasPDF ?
+                        `<button class="btn btn-sm btn-edit action-btn" onclick="editReport('${order.order_id}', ${JSON.stringify(order.report_ids).replace(/"/g, '&quot;')})" title="Rediger rapport">
+                            ✏️ Rediger
                         </button>` :
                         ''
                     }
-                    
+
+                    ${!isSent && hasPDF && order.customer_email ?
+                        `<button class="btn btn-sm btn-success action-btn" onclick="sendOrderToCustomer('${order.order_id}')" title="Send til kunde">
+                            📧 Send til kunde
+                        </button>` :
+                        ''
+                    }
+
                     ${!isSent && hasPDF && !order.customer_email ?
-                        `<span style="color: #dc2626; font-size: 11px;">⚠️ Mangler e-post</span>` :
+                        `<span class="no-email-warning">⚠️ Mangler e-post</span>` :
                         ''
                     }
                 </div>
@@ -450,22 +492,25 @@ window.sendOrderToCustomer = async function(orderId) {
 
     /**
      * Edit report function - opens modal
+     * @param {string} orderId - Order ID
+     * @param {Array} reportIds - Array of report IDs (uses first one due to 1-1 relationship)
      */
-    window.editReport = async function(reportId) {
+    window.editReport = async function(orderId, reportIds) {
         try {
             showToast('📝 Laster rapport for redigering...', 'info');
-            
-            // Find the report in our data
-            const report = state.reports.find(r => r.id === reportId);
-            if (!report) {
-                throw new Error('Rapport ikke funnet');
+
+            // Use first reportId (1-1 relationship between order and report)
+            const reportId = Array.isArray(reportIds) ? reportIds[0] : reportIds;
+
+            if (!reportId) {
+                throw new Error('Ingen rapport-ID funnet');
             }
-            
-            state.currentEditReport = report;
-            
-            // Load report details (you might need to fetch more details from API)
+
+            console.log(`📝 Opening edit modal for report: ${reportId} (order: ${orderId})`);
+
+            // Load report details from API
             await loadReportForEditing(reportId);
-            
+
         } catch (error) {
             console.error('Error loading report for editing:', error);
             showToast('Kunne ikke laste rapport: ' + error.message, 'error');
@@ -473,92 +518,368 @@ window.sendOrderToCustomer = async function(orderId) {
     };
 
     /**
-     * Load report details for editing
+     * Load report details for editing from API
      */
     async function loadReportForEditing(reportId) {
         try {
-            // For now, show a basic edit form. In the future, you could fetch detailed report data
-            const report = state.currentEditReport;
-            
-            elements.editModalBody.innerHTML = `
-                <div class="edit-form">
-                    <div class="form-section">
-                        <h4>📋 Grunnleggende informasjon</h4>
-                        <div class="form-group">
-                            <label>Ordrenummer</label>
-                            <input type="text" id="edit-order-id" value="${report.order_id}" readonly style="background: #F3F4F6;">
-                        </div>
-                        <div class="form-group">
-                            <label>Kunde</label>
-                            <input type="text" id="edit-customer" value="${report.customer_name}" readonly style="background: #F3F4F6;">
-                        </div>
-                        <div class="form-group">
-                            <label>Tekniker</label>
-                            <input type="text" id="edit-technician" value="${report.technician_name || ''}" readonly style="background: #F3F4F6;">
-                        </div>
-                    </div>
-                    
-                    <div class="form-section">
-                        <h4>⚙️ Anleggsinformasjon</h4>
-                        <div class="form-group">
-                            <label>Anleggsnavn</label>
-                            <input type="text" id="edit-equipment-name" value="${report.equipment_name || ''}">
-                        </div>
-                        <div class="form-group">
-                            <label>Anleggstype</label>
-                            <input type="text" id="edit-equipment-type" value="${report.equipment_type || ''}">
-                        </div>
-                    </div>
-                    
-                    <div class="form-section">
-                        <h4>📝 Rapportinnhold</h4>
-                        <div class="form-group">
-                            <label>Overordnet kommentar</label>
-                            <textarea id="edit-overall-comment" placeholder="Skriv en overordnet kommentar for rapporten..."></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label>Utført arbeid</label>
-                            <textarea id="edit-work-performed" placeholder="Beskriv det utførte arbeidet..."></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label>Anbefalinger</label>
-                            <textarea id="edit-recommendations" placeholder="Eventuelle anbefalinger til kunden..."></textarea>
-                        </div>
-                    </div>
-                    
-                    <div class="form-section">
-                        <h4>📊 Status</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                            <div class="form-group">
-                                <label>Rapport status</label>
-                                <select id="edit-report-status">
-                                    <option value="draft" ${!report.sent_til_fakturering ? 'selected' : ''}>Kladd</option>
-                                    <option value="ready" ${report.pdf_generated && !report.sent_til_fakturering ? 'selected' : ''}>Klar for sending</option>
-                                    <option value="sent" ${report.sent_til_fakturering ? 'selected' : ''}>Sendt til kunde</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Fakturering</label>
-                                <select id="edit-invoice-status">
-                                    <option value="not_invoiced" ${!report.is_invoiced ? 'selected' : ''}>Ikke fakturert</option>
-                                    <option value="invoiced" ${report.is_invoiced ? 'selected' : ''}>Fakturert</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
+            // Fetch report data from API
+            const response = await fetch(`/api/admin/reports/${reportId}/edit-data`, {
+                method: 'GET',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log('📊 Edit data received:', data);
+
+            // Store current report data
+            state.currentEditReport = data;
+            state.currentEditReportId = reportId;
+
+            // Populate modal with full report view
+            populateEditModal(data);
+
+            // Setup add buttons
+            setupAddButtons();
+
             // Setup modal save handlers
             setupModalSaveHandlers();
-            
+
             // Show modal
             elements.editModal.classList.add('show');
-            
+
+            console.log('✅ Edit modal populated and shown');
+
         } catch (error) {
-            console.error('Error creating edit form:', error);
-            showToast('Kunne ikke opprette redigeringsform', 'error');
+            console.error('Error loading report for editing:', error);
+            showToast('Kunne ikke laste rapport: ' + error.message, 'error');
         }
+    }
+
+    /**
+     * Populate edit modal with full report view (like technician view)
+     */
+    function populateEditModal(data) {
+        const modalBody = document.getElementById('edit-modal-body');
+        if (!modalBody) return;
+
+        // Extract customer data
+        const customerData = data.customer_data || {};
+        const checklistItems = data.checklist_items || [];
+
+        // Hent metadata og forbered visningsdata
+        const reportDate = data.completedAt || data.createdAt;
+        const reportYear = reportDate ? new Date(reportDate).getFullYear() : new Date().getFullYear();
+        const formattedReportDate = reportDate ? new Date(reportDate).toLocaleDateString('nb-NO') : 'N/A';
+
+        let html = `
+            <div class="edit-form">
+                <!-- Header med kunde og anlegg info -->
+                <div class="edit-header">
+                    <h3>Servicerapport: ${escapeHtml(data.customerName || 'Ukjent kunde')}</h3>
+                    <p class="order-info">Ordre ${escapeHtml(data.orderId || 'N/A')} • ${formattedReportDate}</p>
+                    <p><strong>Anlegg:</strong> ${escapeHtml(data.equipmentName || 'N/A')} (${escapeHtml(data.equipmentType || 'N/A')})</p>
+                </div>
+
+                <!-- METADATA SECTION - TABELL LAYOUT SOM PDF -->
+                <div class="edit-section">
+                    <h4>📋 Rapportinformasjon</h4>
+                    <p class="section-description">Grønne felt kan redigeres, grå felt er låst</p>
+
+                    <table class="metadata-table">
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>AVTALENUMMER</label>
+                                        <input type="text"
+                                               id="edit-agreement-number"
+                                               class="editable-field"
+                                               value="${escapeHtml(customerData.agreement_number || '')}"
+                                               placeholder="N/A">
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>BESØK NR</label>
+                                        <input type="text"
+                                               id="edit-visit-number"
+                                               class="editable-field"
+                                               value="${escapeHtml(customerData.visit_number || '')}"
+                                               placeholder="N/A">
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>ÅRSTALL</label>
+                                        <div class="readonly-field">${reportYear}</div>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>KUNDENUMMER</label>
+                                        <div class="readonly-field">${escapeHtml(customerData.id || 'N/A')}</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>KUNDENAVN</label>
+                                        <div class="readonly-field">${escapeHtml(data.customerName || 'N/A')}</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>MOTTAKER AV RAPPORT</label>
+                                        <div class="readonly-field">${escapeHtml(customerData.recipient || 'N/A')}</div>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>BYGGNAVN</label>
+                                        <div class="readonly-field">${escapeHtml(data.equipmentLocation || 'Ikke spesifisert')}</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>ADRESSE</label>
+                                        <div class="readonly-field">${escapeHtml(customerData.address || 'Ikke spesifisert')}</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>POST NR. / POSTSTED</label>
+                                        <div class="readonly-field">${escapeHtml(customerData.postalCode || 'Ikke spesifisert')}</div>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>RAPPORT DATO</label>
+                                        <div class="readonly-field">${formattedReportDate}</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>UTFØRT AV</label>
+                                        <div class="readonly-field">${escapeHtml(data.technicianName || 'N/A')}</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>VÅR KONTAKTPERSON</label>
+                                        <input type="text"
+                                               id="edit-contact-person"
+                                               class="editable-field"
+                                               value="${escapeHtml(customerData.contact_person || '')}"
+                                               placeholder="${escapeHtml(data.technicianName || 'N/A')}">
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- SJEKKPUNKTER SECTION -->
+                <div class="edit-section">
+                    <h4>✅ Sjekkpunkter - ${escapeHtml(data.equipmentType || 'Ukjent type')}</h4>
+                    <p class="section-description">Viser kun kontrollerte sjekkpunkter. Status er låst, kun kommentarer kan redigeres.</p>
+                    <div id="checklist-comments-container">
+        `;
+
+        // Render checklist items
+        if (checklistItems.length > 0) {
+            checklistItems.forEach(item => {
+                const statusIcon = item.status === 'OK' || item.status === 'ok' ? '🟢' :
+                                  item.status === 'Avvik' || item.status === 'avvik' ? '🔴' :
+                                  item.status === 'Byttet' || item.status === 'byttet' ? '🔵' : '⚪';
+                const statusClass = (item.status || '').toLowerCase().replace(/\s+/g, '-');
+
+                html += `
+                    <div class="checklist-item-card">
+                        <div class="checklist-item-header">
+                            <span class="item-name">${statusIcon} ${escapeHtml(item.displayName)}</span>
+                            <span class="status-badge status-${statusClass}">${escapeHtml(item.status)}</span>
+                        </div>
+
+                        ${item.hasCommentField ? `
+                            <div class="item-content">
+                                <label>Kommentar (kan redigeres)</label>
+                                <textarea
+                                    class="checklist-comment-input"
+                                    data-item-id="${escapeHtml(item.id)}"
+                                    rows="2"
+                                    placeholder="Legg til kommentar...">${escapeHtml(item.comment || '')}</textarea>
+
+                                ${item.images && item.images.length > 0 ? `
+                                    <div class="item-images">
+                                        ${item.images.map(img => `
+                                            <img src="${escapeHtml(img)}" alt="Bilde" class="checklist-image" onclick="window.open('${escapeHtml(img)}', '_blank')">
+                                        `).join('')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        ` : `
+                            ${item.images && item.images.length > 0 ? `
+                                <div class="item-content">
+                                    <div class="item-images">
+                                        ${item.images.map(img => `
+                                            <img src="${escapeHtml(img)}" alt="Bilde" class="checklist-image" onclick="window.open('${escapeHtml(img)}', '_blank')">
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        `}
+                    </div>
+                `;
+            });
+        } else {
+            html += '<p class="placeholder-text">Ingen sjekkpunkter registrert</p>';
+        }
+
+        html += `
+                    </div>
+                </div>
+
+                <!-- PRODUKTER BRUKT SECTION -->
+                <div class="edit-section">
+                    <h4>📦 Produkter brukt</h4>
+                    <div id="products-container">
+        `;
+
+        // Render products
+        const products = data.products_used || [];
+        if (products.length > 0) {
+            products.forEach((product, index) => {
+                html += createProductRowHtml(product, index);
+            });
+        }
+
+        html += `
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline" id="add-product-btn">+ Legg til produkt</button>
+                </div>
+
+                <!-- TILLEGGSARBEID SECTION -->
+                <div class="edit-section">
+                    <h4>🔧 Tilleggsarbeid</h4>
+                    <div id="work-container">
+        `;
+
+        // Render additional work
+        const work = data.additional_work || [];
+        if (work.length > 0) {
+            work.forEach((item, index) => {
+                html += createWorkRowHtml(item, index);
+            });
+        }
+
+        html += `
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline" id="add-work-btn">+ Legg til arbeid</button>
+                </div>
+
+                <!-- OPPSUMMERING SECTION -->
+                <div class="edit-section">
+                    <h4>📝 Oppsummering og utførte arbeider</h4>
+                    <textarea
+                        id="overall-comment"
+                        rows="4"
+                        placeholder="F.eks: Alt fungerer som det skal">${escapeHtml(data.overall_comment || '')}</textarea>
+                </div>
+            </div>
+        `;
+
+        modalBody.innerHTML = html;
+    }
+
+    /**
+     * Create product row HTML
+     */
+    function createProductRowHtml(product, index) {
+        return `
+            <div class="product-row" data-index="${index}">
+                <input type="text" class="product-name" placeholder="Produktnavn" value="${escapeHtml(product.name || product.product || '')}">
+                <input type="number" class="quantity-input product-quantity" placeholder="Antall" value="${product.quantity || 1}" min="1">
+                <button type="button" class="btn-remove-row" onclick="this.parentElement.remove()">✕</button>
+            </div>
+        `;
+    }
+
+    /**
+     * Create work row HTML
+     */
+    function createWorkRowHtml(work, index) {
+        return `
+            <div class="work-row" data-index="${index}">
+                <input type="text" class="work-description" placeholder="Beskrivelse av arbeid" value="${escapeHtml(work.description || work.work || '')}">
+                <input type="text" class="work-hours" placeholder="Timer" value="${escapeHtml(work.hours || '')}" style="max-width: 80px;">
+                <button type="button" class="btn-remove-row" onclick="this.parentElement.remove()">✕</button>
+            </div>
+        `;
+    }
+
+    /**
+     * Add a product row to the container
+     */
+    function addProductRow(name = '', quantity = 1) {
+        const container = document.getElementById('products-container');
+        if (!container) return;
+
+        const index = container.querySelectorAll('.product-row').length;
+        const product = { name, quantity };
+        container.insertAdjacentHTML('beforeend', createProductRowHtml(product, index));
+    }
+
+    /**
+     * Add a work row to the container
+     */
+    function addWorkRow(description = '', hours = '') {
+        const container = document.getElementById('work-container');
+        if (!container) return;
+
+        const index = container.querySelectorAll('.work-row').length;
+        const work = { description, hours };
+        container.insertAdjacentHTML('beforeend', createWorkRowHtml(work, index));
+    }
+
+    /**
+     * Setup add buttons for products and work
+     */
+    function setupAddButtons() {
+        const addProductBtn = document.getElementById('add-product-btn');
+        const addWorkBtn = document.getElementById('add-work-btn');
+
+        if (addProductBtn) {
+            addProductBtn.onclick = () => addProductRow();
+        }
+
+        if (addWorkBtn) {
+            addWorkBtn.onclick = () => addWorkRow();
+        }
+    }
+
+    /**
+     * Escape HTML to prevent XSS
+     */
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
     /**
@@ -566,51 +887,121 @@ window.sendOrderToCustomer = async function(orderId) {
      */
     function setupModalSaveHandlers() {
         const saveBtn = document.getElementById('save-report-btn');
-        const saveAndSendBtn = document.getElementById('save-and-send-btn');
-        
+
         if (saveBtn) {
-            saveBtn.onclick = () => saveReportChanges(false);
-        }
-        
-        if (saveAndSendBtn) {
-            saveAndSendBtn.onclick = () => saveReportChanges(true);
+            saveBtn.onclick = () => saveReportChanges();
         }
     }
 
     /**
-     * Save report changes
+     * Collect form data from modal
      */
-    async function saveReportChanges(sendAfterSave = false) {
-        try {
-            showToast('💾 Lagrer endringer...', 'info');
-            
-            const reportData = {
-                equipmentName: document.getElementById('edit-equipment-name')?.value,
-                equipmentType: document.getElementById('edit-equipment-type')?.value,
-                overallComment: document.getElementById('edit-overall-comment')?.value,
-                workPerformed: document.getElementById('edit-work-performed')?.value,
-                recommendations: document.getElementById('edit-recommendations')?.value,
-                reportStatus: document.getElementById('edit-report-status')?.value,
-                invoiceStatus: document.getElementById('edit-invoice-status')?.value
-            };
-            
-            console.log('Saving report data:', reportData);
-            
-            // For now, simulate save - in real system, you'd call API
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            showToast('✅ Endringer lagret!', 'success');
-            closeEditModal();
-            
-            if (sendAfterSave) {
-                await sendToCustomer(state.currentEditReport.id);
+    function collectFormData() {
+        // Collect metadata
+        const metadata = {
+            agreement_number: document.getElementById('edit-agreement-number')?.value?.trim() || '',
+            visit_number: document.getElementById('edit-visit-number')?.value?.trim() || '',
+            contact_person: document.getElementById('edit-contact-person')?.value?.trim() || ''
+        };
+
+        // Collect checklist comments
+        const checklistComments = {};
+        document.querySelectorAll('.checklist-comment-input').forEach(textarea => {
+            const itemId = textarea.dataset.itemId;
+            if (itemId) {
+                checklistComments[itemId] = textarea.value?.trim() || '';
             }
-            
+        });
+
+        // Collect products
+        const products_used = [];
+        document.querySelectorAll('.product-row').forEach(row => {
+            const name = row.querySelector('.product-name')?.value?.trim();
+            const quantity = parseInt(row.querySelector('.product-quantity')?.value) || 1;
+            if (name) {
+                products_used.push({ name, quantity });
+            }
+        });
+
+        // Collect additional work
+        const additional_work = [];
+        document.querySelectorAll('.work-row').forEach(row => {
+            const description = row.querySelector('.work-description')?.value?.trim();
+            const hours = row.querySelector('.work-hours')?.value?.trim();
+            if (description) {
+                additional_work.push({ description, hours });
+            }
+        });
+
+        // ✅ Collect overall comment / oppsummering
+        const overall_comment = document.getElementById('overall-comment')?.value?.trim() || '';
+
+        return { metadata, checklistComments, products_used, additional_work, overall_comment };
+    }
+
+    /**
+     * Save report changes and regenerate PDF
+     * Always regenerates PDF to ensure consistency between database and PDF
+     */
+    async function saveReportChanges() {
+        try {
+            if (!state.currentEditReportId) {
+                throw new Error('Ingen rapport valgt for redigering');
+            }
+
+            // ✅ Disable save button and show loading state
+            const saveBtn = document.getElementById('save-report-btn');
+            const originalBtnText = saveBtn ? saveBtn.innerHTML : '';
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '⏳ Genererer rapport...';
+                saveBtn.style.opacity = '0.7';
+                saveBtn.style.cursor = 'not-allowed';
+            }
+
+            showToast('💾 Lagrer endringer...', 'info');
+
+            const formData = collectFormData();
+            console.log('📤 Sending update data:', formData);
+
+            const response = await fetch(`/api/admin/reports/${state.currentEditReportId}/update-content`, {
+                method: 'PUT',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Kunne ikke lagre endringer');
+            }
+
+            console.log('✅ Save result:', result);
+
+            if (result.pdfRegenerated) {
+                showToast('✅ Rapport lagret og PDF oppdatert!', 'success');
+            } else {
+                showToast('⚠️ Rapport lagret, men PDF-generering feilet', 'warning');
+            }
+
+            closeEditModal();
             await loadReports(); // Reload data
-            
+
         } catch (error) {
             console.error('Error saving report:', error);
-            showToast('❌ Kunne ikke lagre endringer: ' + error.message, 'error');
+            showToast('❌ Kunne ikke lagre: ' + error.message, 'error');
+
+            // ✅ Re-enable button on error
+            const saveBtn = document.getElementById('save-report-btn');
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '💾 Lagre og regenerer PDF';
+                saveBtn.style.opacity = '1';
+                saveBtn.style.cursor = 'pointer';
+            }
         }
     }
 

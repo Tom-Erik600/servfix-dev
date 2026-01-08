@@ -109,16 +109,59 @@
             </div>
             
             <div class="modal-body" id="edit-modal-body">
-                <!-- Dynamic content will be loaded here -->
+                <div class="edit-form">
+                    <!-- Metadata Section -->
+                    <div class="edit-section">
+                        <h4>📋 Metadata</h4>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Avtalenummer</label>
+                                <input type="text" id="edit-agreement-number" placeholder="F.eks: AVTALE-2025-001">
+                            </div>
+                            <div class="form-group">
+                                <label>Besøk nr</label>
+                                <input type="text" id="edit-visit-number" placeholder="F.eks: 2">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Vår kontaktperson</label>
+                            <input type="text" id="edit-contact-person" placeholder="Navn på kontaktperson">
+                        </div>
+                    </div>
+
+                    <!-- Checklist Comments Section -->
+                    <div class="edit-section">
+                        <h4>💬 Kommentarer i sjekkliste</h4>
+                        <div id="checklist-comments-container">
+                            <!-- Fylles dynamisk av JS -->
+                            <p class="placeholder-text">Laster sjekkliste...</p>
+                        </div>
+                    </div>
+
+                    <!-- Products Section -->
+                    <div class="edit-section">
+                        <h4>📦 Produkter brukt</h4>
+                        <div id="products-container">
+                            <!-- Fylles dynamisk av JS -->
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline" id="add-product-btn">+ Legg til produkt</button>
+                    </div>
+
+                    <!-- Additional Work Section -->
+                    <div class="edit-section">
+                        <h4>🔧 Tilleggsarbeid</h4>
+                        <div id="work-container">
+                            <!-- Fylles dynamisk av JS -->
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline" id="add-work-btn">+ Legg til arbeid</button>
+                    </div>
+                </div>
             </div>
             
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Avbryt</button>
-                <button type="button" class="btn btn-primary" id="save-report-btn">
-                    💾 Lagre endringer
-                </button>
-                <button type="button" class="btn btn-success" id="save-and-send-btn">
-                    ✉️ Lagre og send
+                <button type="button" class="btn btn-success" id="save-report-btn">
+                    💾 Lagre og regenerer PDF
                 </button>
             </div>
         </div>

@@ -360,4 +360,396 @@ router.put('/order/:orderId/invoice', async (req, res) => {
   }
 });
 
+// ========================================
+// GET /:reportId/edit-data - Hent rapport-data for redigering
+// ========================================
+router.get('/:reportId/edit-data', async (req, res) => {
+  const { reportId } = req.params;
+
+  console.log(`📝 Fetching edit data for report: ${reportId}`);
+
+  try {
+    const pool = await db.getTenantConnection(req.adminTenantId);
+
+    // Hent rapport med alle nødvendige data
+    const query = `
+      SELECT
+        sr.id,
+        sr.order_id,
+        sr.equipment_id,
+        sr.checklist_data,
+        sr.products_used,
+        sr.additional_work,
+        sr.status,
+        sr.created_at,
+        sr.completed_at,
+        o.customer_name,
+        o.customer_data,
+        o.scheduled_date,
+        o.service_type,
+        e.systemnavn as equipment_name,
+        e.systemtype as equipment_type,
+        e.location as equipment_location,
+        t.name as technician_name
+      FROM service_reports sr
+      LEFT JOIN orders o ON sr.order_id = o.id
+      LEFT JOIN equipment e ON sr.equipment_id::varchar = e.id::varchar
+      LEFT JOIN technicians t ON o.technician_id = t.id
+      WHERE sr.id = $1
+    `;
+
+    const result = await pool.query(query, [reportId]);
+
+    if (result.rows.length === 0) {
+      console.log(`❌ Report not found: ${reportId}`);
+      return res.status(404).json({ error: 'Rapport ikke funnet' });
+    }
+
+    const report = result.rows[0];
+
+    // Parse JSON-felter safely
+    const safeJsonParse = (input, fallback) => {
+      try {
+        if (!input) return fallback;
+        if (typeof input === 'object') return input;
+        return JSON.parse(input);
+      } catch { return fallback; }
+    };
+
+    // Parse checklist_data
+    const checklistData = safeJsonParse(report.checklist_data, {});
+
+    // Hent checklist template for å få display names
+    let templateItems = {};
+    try {
+      const templateQuery = `
+        SELECT template_data
+        FROM checklist_templates
+        WHERE equipment_type = $1
+        LIMIT 1
+      `;
+      const templateResult = await pool.query(templateQuery, [report.equipment_type]);
+
+      if (templateResult.rows.length > 0) {
+        const templateData = safeJsonParse(templateResult.rows[0].template_data, {});
+        // Bygg lookup map fra template items
+        if (templateData.checklistItems && Array.isArray(templateData.checklistItems)) {
+          templateData.checklistItems.forEach(item => {
+            if (item.id) {
+              templateItems[item.id] = item.name || item.label || item.id;
+            }
+          });
+        }
+        // Også sjekk for sections struktur
+        if (templateData.sections && Array.isArray(templateData.sections)) {
+          templateData.sections.forEach(section => {
+            if (section.items && Array.isArray(section.items)) {
+              section.items.forEach(item => {
+                if (item.id) {
+                  templateItems[item.id] = item.name || item.label || item.id;
+                }
+              });
+            }
+          });
+        }
+        console.log(`   - Template items loaded: ${Object.keys(templateItems).length}`);
+      }
+    } catch (templateError) {
+      console.warn('⚠️ Could not load template:', templateError.message);
+    }
+
+    // ✅ VIKTIG: Filtrer kun items som tekniker faktisk krysset av (har status OK/Avvik/Byttet)
+    // Ikke vis items med N/A eller manglende status
+    const actualChecklistData = checklistData.checklist || checklistData;
+    const validStatuses = ['ok', 'avvik', 'byttet'];
+
+    const filteredChecklistEntries = Object.entries(actualChecklistData).filter(([itemId, itemData]) => {
+      const status = (itemData.status || '').toLowerCase();
+      return validStatuses.includes(status);
+    });
+
+    console.log(`   - Total items in checklist_data: ${Object.keys(actualChecklistData).length}`);
+    console.log(`   - Filtered items (only checked): ${filteredChecklistEntries.length}`);
+
+    // Berik checklist_data med display names (label) - kun filtrerte items
+    const enrichedChecklistData = {};
+    for (const [itemId, itemData] of filteredChecklistEntries) {
+      enrichedChecklistData[itemId] = {
+        ...itemData,
+        label: templateItems[itemId] || itemData.label || itemId.replace(/_/g, ' ')
+      };
+    }
+
+    // Bygg checklist_items array for enklere frontend rendering - kun filtrerte items
+    const checklistItems = filteredChecklistEntries.map(([itemId, itemData]) => {
+      // ✅ FIX: Hent kommentar fra riktig sted basert på status
+      // Tekniker-appen lagrer som avvikComment/byttetComment (flate felt)
+      let comment = '';
+      const statusLower = (itemData.status || '').toLowerCase();
+
+      if (statusLower === 'avvik') {
+        // Prøv flere mulige plasseringer for avvik-kommentar
+        comment = itemData.avvikComment ||      // ← HOVEDKILDE (flatt felt fra tekniker-app)
+                 itemData.avvik?.comment ||     // Nestet objekt (fallback)
+                 itemData.comment || '';
+      } else if (statusLower === 'byttet') {
+        // Prøv flere mulige plasseringer for byttet-kommentar
+        comment = itemData.byttetComment ||     // ← HOVEDKILDE (flatt felt fra tekniker-app)
+                 itemData.byttet?.comment ||    // Nestet objekt (fallback)
+                 itemData.comment || '';
+      } else {
+        comment = itemData.comment || '';
+      }
+
+      // ✅ FIX: hasCommentField - vis kun hvis item faktisk har kommentar ELLER er avvik/byttet
+      const hasCommentField = Boolean(
+        comment ||                    // Har faktisk kommentar
+        itemData.avvik ||            // Har avvik-objekt
+        itemData.byttet ||           // Har byttet-objekt
+        itemData.avvikComment ||     // ← NYTT: Har avvikComment felt
+        itemData.byttetComment ||    // ← NYTT: Har byttetComment felt
+        statusLower === 'avvik' ||   // Status er avvik (selv uten comment)
+        statusLower === 'byttet'     // Status er byttet (selv uten comment)
+      );
+
+      return {
+        id: itemId,
+        displayName: templateItems[itemId] || itemData.label || itemId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        status: itemData.status || 'N/A',
+        comment: comment,  // ✅ Bruker kommentar fra riktig sted
+        images: itemData.images || [],
+        hasCommentField: hasCommentField  // ✅ Kun vis textarea hvis nødvendig
+      };
+    });
+
+    const customerData = safeJsonParse(report.customer_data, {});
+
+    // ✅ Hent overall_comment fra checklistData (kan være i root eller i checklist objekt)
+    const parsedChecklistData = safeJsonParse(report.checklist_data, {});
+    const overallComment = parsedChecklistData.overallComment ||
+                          parsedChecklistData.checklist?.overallComment ||
+                          '';
+
+    const responseData = {
+      reportId: report.id,
+      orderId: report.order_id,
+      equipmentId: report.equipment_id,
+      equipmentName: report.equipment_name,
+      equipmentType: report.equipment_type,
+      equipmentLocation: report.equipment_location,
+      customerName: report.customer_name,
+      technicianName: report.technician_name,
+      scheduledDate: report.scheduled_date,
+      serviceType: report.service_type,
+      status: report.status,
+      createdAt: report.created_at,
+      completedAt: report.completed_at,
+      checklist_data: enrichedChecklistData,
+      checklist_items: checklistItems,  // Array for enklere frontend rendering (kun kryssede av)
+      products_used: safeJsonParse(report.products_used, []),
+      additional_work: safeJsonParse(report.additional_work, []),
+      overall_comment: overallComment,  // ✅ NYTT: Overall comment/oppsummering
+      customer_data: {
+        agreement_number: customerData.agreement_number || '',
+        visit_number: customerData.visit_number || '',
+        contact_person: customerData.contact_person || report.technician_name || '',
+        ...customerData
+      }
+    };
+
+    console.log(`✅ Edit data fetched for report: ${reportId}`);
+    console.log(`   - Checklist items: ${Object.keys(responseData.checklist_data).length}`);
+    console.log(`   - Products: ${responseData.products_used.length}`);
+    console.log(`   - Additional work: ${responseData.additional_work.length}`);
+
+    res.json(responseData);
+
+  } catch (error) {
+    console.error('❌ Error fetching edit data:', error);
+    res.status(500).json({
+      error: 'Kunne ikke hente rapport-data',
+      details: error.message
+    });
+  }
+});
+
+// ========================================
+// PUT /:reportId/update-content - Oppdater rapport med redigert innhold
+// ========================================
+router.put('/:reportId/update-content', async (req, res) => {
+  const { reportId } = req.params;
+  const { checklistComments, products_used, additional_work, metadata, overall_comment } = req.body;
+
+  console.log(`📝 Updating content for report: ${reportId}`);
+  console.log(`   - checklistComments: ${checklistComments ? Object.keys(checklistComments).length : 0} items`);
+  console.log(`   - products_used: ${products_used?.length || 0} items`);
+  console.log(`   - additional_work: ${additional_work?.length || 0} items`);
+  console.log(`   - metadata: ${metadata ? 'provided' : 'not provided'}`);
+  console.log(`   - overall_comment: ${overall_comment ? 'provided' : 'not provided'}`);
+
+  try {
+    const pool = await db.getTenantConnection(req.adminTenantId);
+
+    // Valider at rapporten eksisterer
+    const existingReport = await pool.query(
+      'SELECT id, order_id, checklist_data FROM service_reports WHERE id = $1',
+      [reportId]
+    );
+
+    if (existingReport.rows.length === 0) {
+      console.log(`❌ Report not found: ${reportId}`);
+      return res.status(404).json({ error: 'Rapport ikke funnet' });
+    }
+
+    const report = existingReport.rows[0];
+    const orderId = report.order_id;
+
+    // Parse eksisterende checklist_data
+    let existingChecklistData = {};
+    try {
+      if (report.checklist_data) {
+        existingChecklistData = typeof report.checklist_data === 'object'
+          ? report.checklist_data
+          : JSON.parse(report.checklist_data);
+      }
+    } catch (e) {
+      console.warn('⚠️ Could not parse existing checklist_data:', e.message);
+      existingChecklistData = {};
+    }
+
+    // ✅ FIX: Handle nested structure {checklist: {...}} or flat {...}
+    const actualChecklist = existingChecklistData.checklist || existingChecklistData;
+    const isNested = Boolean(existingChecklistData.checklist);
+
+    // ✅ FIX: Oppdater kun COMMENTS i checklist_data (behold status/images)
+    // Lagre i riktig felt basert på status (avvikComment/byttetComment/comment)
+    if (checklistComments && typeof checklistComments === 'object') {
+      for (const [itemId, comment] of Object.entries(checklistComments)) {
+        if (actualChecklist[itemId]) {
+          const statusLower = (actualChecklist[itemId].status || '').toLowerCase();
+
+          console.log(`   - Processing item ${itemId} with status: ${statusLower}`);
+
+          if (statusLower === 'avvik') {
+            // ✅ Lagre i avvikComment (flatt felt som tekniker-app bruker)
+            actualChecklist[itemId].avvikComment = comment;
+            console.log(`   - Updated avvikComment for item ${itemId}: ${comment.substring(0, 50)}...`);
+          } else if (statusLower === 'byttet') {
+            // ✅ Lagre i byttetComment (flatt felt som tekniker-app bruker)
+            actualChecklist[itemId].byttetComment = comment;
+            console.log(`   - Updated byttetComment for item ${itemId}: ${comment.substring(0, 50)}...`);
+          } else {
+            // ✅ For OK-status, lagre i vanlig comment felt
+            actualChecklist[itemId].comment = comment;
+            console.log(`   - Updated comment for item ${itemId}: ${comment.substring(0, 50)}...`);
+          }
+        } else {
+          console.warn(`   - ⚠️ Item ${itemId} not found in existing checklist`);
+        }
+      }
+    }
+
+    // ✅ Oppdater overall_comment i checklist_data (root level)
+    if (overall_comment !== undefined) {
+      if (isNested) {
+        existingChecklistData.overallComment = overall_comment;
+      } else {
+        actualChecklist.overallComment = overall_comment;
+      }
+      console.log(`   - Updated overall_comment`);
+    }
+
+    // ✅ Reassemble the structure if it was nested
+    const finalChecklistData = isNested
+      ? { ...existingChecklistData, checklist: actualChecklist }
+      : actualChecklist;
+
+    // Oppdater service_reports tabellen
+    const updateReportQuery = `
+      UPDATE service_reports
+      SET
+        checklist_data = $1,
+        products_used = $2,
+        additional_work = $3,
+        updated_at = NOW()
+      WHERE id = $4
+      RETURNING id
+    `;
+
+    await pool.query(updateReportQuery, [
+      JSON.stringify(finalChecklistData),
+      JSON.stringify(products_used || []),
+      JSON.stringify(additional_work || []),
+      reportId
+    ]);
+
+    console.log(`✅ Report ${reportId} updated in database`);
+
+    // Oppdater customer_data i orders-tabellen med metadata
+    if (metadata && orderId) {
+      // Hent eksisterende customer_data
+      const orderResult = await pool.query(
+        'SELECT customer_data FROM orders WHERE id = $1',
+        [orderId]
+      );
+
+      if (orderResult.rows.length > 0) {
+        let customerData = {};
+        try {
+          if (orderResult.rows[0].customer_data) {
+            customerData = typeof orderResult.rows[0].customer_data === 'object'
+              ? orderResult.rows[0].customer_data
+              : JSON.parse(orderResult.rows[0].customer_data);
+          }
+        } catch (e) {
+          console.warn('⚠️ Could not parse existing customer_data:', e.message);
+          customerData = {};
+        }
+
+        // Merge metadata inn i customer_data
+        const updatedCustomerData = { ...customerData, ...metadata };
+
+        await pool.query(
+          'UPDATE orders SET customer_data = $1 WHERE id = $2',
+          [JSON.stringify(updatedCustomerData), orderId]
+        );
+
+        console.log(`✅ Order ${orderId} customer_data updated with metadata`);
+      }
+    }
+
+    // Regenerer PDF
+    let pdfRegenerated = false;
+    try {
+      const UnifiedPDFGenerator = require('../../services/unifiedPdfGenerator');
+      const pdfGenerator = new UnifiedPDFGenerator();
+
+      console.log(`🔄 Regenerating PDF for report: ${reportId}`);
+      const pdfPath = await pdfGenerator.generateReport(reportId, req.adminTenantId);
+      pdfRegenerated = true;
+      console.log(`✅ PDF regenerated: ${pdfPath}`);
+
+    } catch (pdfError) {
+      console.error('❌ PDF regeneration failed:', pdfError.message);
+      // Fortsett selv om PDF-generering feiler
+    }
+
+    res.json({
+      success: true,
+      reportId: reportId,
+      pdfRegenerated: pdfRegenerated,
+      message: pdfRegenerated
+        ? 'Rapport oppdatert og PDF regenerert'
+        : 'Rapport oppdatert, men PDF-generering feilet'
+    });
+
+  } catch (error) {
+    console.error('❌ Error updating report content:', error);
+    res.status(500).json({
+      error: 'Kunne ikke oppdatere rapport',
+      details: error.message
+    });
+  }
+});
+
 module.exports = router;

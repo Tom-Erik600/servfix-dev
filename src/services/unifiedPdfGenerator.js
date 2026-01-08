@@ -1057,8 +1057,8 @@ renderWorkTable(work) {
         <table class="main-info-table">
           <tbody>
             <tr>
-              <td><div class="info-cell"><div class="label">Avtalenummer</div><div class="data">${this.escapeHtml(data.customer_data?.agreementId || 'N/A')}</div></div></td>
-              <td><div class="info-cell"><div class="label">Besøk nr</div><div class="data">N/A</div></div></td>
+              <td><div class="info-cell"><div class="label">Avtalenummer</div><div class="data">${this.escapeHtml(data.customer_data?.agreement_number || data.customer_data?.agreementId || 'N/A')}</div></div></td>
+              <td><div class="info-cell"><div class="label">Besøk nr</div><div class="data">${this.escapeHtml(data.customer_data?.visit_number || 'N/A')}</div></div></td>
               <td><div class="info-cell"><div class="label">Årstall</div><div class="data">${new Date(data.created_at).getFullYear()}</div></div></td>
             </tr>
             <tr>
@@ -1074,7 +1074,7 @@ renderWorkTable(work) {
             <tr class="meta-row">
               <td><div class="info-cell"><div class="label">Rapport dato</div><div class="data">${new Date(data.completed_at || data.created_at).toLocaleDateString('nb-NO')}</div></div></td>
               <td><div class="info-cell"><div class="label">Utført av</div><div class="data">${this.escapeHtml(technician)}</div></div></td>
-              <td><div class="info-cell"><div class="label">Vår kontaktperson</div><div class="data">${this.escapeHtml(technician)}</div></div></td>
+              <td><div class="info-cell"><div class="label">Vår kontaktperson</div><div class="data">${this.escapeHtml(data.customer_data?.contact_person || technician)}</div></div></td>
             </tr>
           </tbody>
         </table>
