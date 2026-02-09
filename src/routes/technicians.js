@@ -6,9 +6,13 @@ const router = express.Router();
 // GET all technicians for the current tenant
 router.get('/', async (req, res) => {
   try {
-    // Use req.tenantId to get the correct tenant database connection
-    // If req.tenantId is not set (e.g., for the login page), default to 'airtech'
-    const pool = await db.getTenantConnection(req.tenantId || 'airtech');
+    // Use req.tenantId from middleware (set in app.js)
+    const tenantId = req.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId from middleware');
+      return res.status(500).json({ error: 'Server configuration error' });
+    }
+    const pool = await db.getTenantConnection(tenantId);
     const result = await pool.query('SELECT id, name, initials, stilling FROM technicians WHERE is_active = true');
     res.json(result.rows);
   } catch (error) {

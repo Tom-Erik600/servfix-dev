@@ -406,10 +406,22 @@
     border-color: #dc3545; 
 }
 
-.status-btn.active.byttet, .status-btn.active.rengjort { 
-    background: #ffc107; 
-    color: #212529; 
-    border-color: #ffc107; 
+.status-btn.active.byttet {
+    background: #ffc107;
+    color: #212529;
+    border-color: #ffc107;
+}
+
+.status-btn.active.rengjort {
+    background: #28a745;
+    color: white;
+    border-color: #28a745;
+}
+
+.status-btn.active.ikke-rengjort {
+    background: #dc3545;
+    color: white;
+    border-color: #dc3545;
 }
 
 /* Avvik containers */

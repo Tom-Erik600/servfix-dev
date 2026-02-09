@@ -161,7 +161,11 @@ router.use((req, res, next) => {
 // GET /api/images/settings - Hent alle innstillinger fra JSON-fil
 router.get('/settings', async (req, res) => {
   try {
-    const tenantId = req.session.tenantId || 'airtech';
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId in session:', req.path);
+      return res.status(401).json({ error: 'Not authenticated - missing tenant' });
+    }
     console.log(`📋 Loading settings for tenant: ${tenantId}`);
     
     const settings = await loadTenantSettings(tenantId);
@@ -186,7 +190,11 @@ router.get('/settings', async (req, res) => {
 // POST /api/images/save-settings - Lagre innstillinger til JSON-fil
 router.post('/save-settings', async (req, res) => {
   try {
-    const tenantId = req.session.tenantId || 'airtech';
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId in session:', req.path);
+      return res.status(401).json({ error: 'Not authenticated - missing tenant' });
+    }
     const settingsUpdate = req.body;
     
     console.log(`💾 Saving settings for tenant: ${tenantId}`, settingsUpdate);
@@ -260,8 +268,12 @@ router.post('/upload-logo', upload.single('logo'), async (req, res) => {
       size: Math.round(req.file.size / 1024) + 'KB',
       mimetype: req.file.mimetype
     });
-    
-    const tenantId = req.session.tenantId || 'airtech';
+
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId in session:', req.path);
+      return res.status(401).json({ error: 'Not authenticated - missing tenant' });
+    }
     const fileExtension = path.extname(req.file.originalname).slice(1) || 'png';
     const timestamp = Date.now();
     
@@ -315,7 +327,11 @@ router.post('/upload-logo', upload.single('logo'), async (req, res) => {
 // GET /api/images/logo - Hent logo-info (manglende endepunkt)
 router.get('/logo', async (req, res) => {
   try {
-    const tenantId = req.session.tenantId || 'airtech';
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId in session:', req.path);
+      return res.status(401).json({ error: 'Not authenticated - missing tenant' });
+    }
     console.log(`🖼️ Loading logo for tenant: ${tenantId}`);
     
     const settings = await loadTenantSettings(tenantId);
@@ -347,8 +363,12 @@ router.get('/logo', async (req, res) => {
 // DELETE /api/images/logo - Fjern logo
 router.delete('/logo', async (req, res) => {
   try {
-    const tenantId = req.session.tenantId || 'airtech';
-    
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId in session:', req.path);
+      return res.status(401).json({ error: 'Not authenticated - missing tenant' });
+    }
+
     console.log(`🗑️ Removing logo for tenant: ${tenantId}`);
     
     // Load current settings
@@ -390,8 +410,12 @@ router.delete('/logo', async (req, res) => {
 router.delete('/avvik/:imageId', async (req, res) => {
   try {
     const { imageId } = req.params;
-    const tenantId = req.session.tenantId || 'airtech';
-    
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId in session:', req.path);
+      return res.status(401).json({ error: 'Not authenticated - missing tenant' });
+    }
+
     console.log(`🗑️ Sletter avvik-bilde ID: ${imageId}`);
     
     const pool = await db.getTenantConnection(tenantId);
@@ -441,7 +465,11 @@ router.delete('/avvik/:imageId', async (req, res) => {
 // GET /api/images/logo - Hent bare logo-info
 router.get('/logo', async (req, res) => {
   try {
-    const tenantId = req.session.tenantId || 'airtech';
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId in session:', req.path);
+      return res.status(401).json({ error: 'Not authenticated - missing tenant' });
+    }
     console.log(`🖼️ Loading logo for tenant: ${tenantId}`);
     
     const settings = await loadTenantSettings(tenantId);
@@ -481,10 +509,14 @@ router.post('/upload', upload.array('images', 10), async (req, res) => {
     }
 
     console.log(`📸 Laster opp ${req.files.length} servicebilder...`);
-    
+
     const { serviceReportId, imageType, avvikNumber } = req.body;
-    const tenantId = req.session.tenantId || 'airtech';
-    
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId in session:', req.path);
+      return res.status(401).json({ error: 'Not authenticated - missing tenant' });
+    }
+
     if (!serviceReportId) {
       return res.status(400).json({ error: 'serviceReportId er påkrevd' });
     }
@@ -564,10 +596,14 @@ router.post('/general', upload.single('image'), async (req, res) => {
     }
 
     console.log('📸 Laster opp rapport-bilde:', req.file.originalname);
-    
+
     const { orderId, equipmentId, reportId } = req.body;
-    const tenantId = req.session.tenantId || 'airtech';
-    
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId in session:', req.path);
+      return res.status(401).json({ error: 'Not authenticated - missing tenant' });
+    }
+
     if (!reportId || !orderId || !equipmentId) {
       return res.status(400).json({ error: 'reportId, orderId og equipmentId er påkrevd' });
     }
@@ -697,10 +733,14 @@ router.post('/avvik', upload.single('image'), async (req, res) => {
     }
 
     console.log('📸 Laster opp avvik-bilde:', req.file.originalname);
-    
+
     const { orderId, equipmentId, reportId, avvikId } = req.body;
-    const tenantId = req.session.tenantId || 'airtech';
-    
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId in session:', req.path);
+      return res.status(401).json({ error: 'Not authenticated - missing tenant' });
+    }
+
     if (!reportId || !orderId || !equipmentId) {
       return res.status(400).json({ error: 'reportId, orderId og equipmentId er påkrevd' });
     }
@@ -861,7 +901,11 @@ router.get('/general/:reportId', async (req, res) => {
 router.post('/cleanup', async (req, res) => {
   try {
     const { imageUrls } = req.body;
-    const tenantId = req.session.tenantId || 'airtech';
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId in session:', req.path);
+      return res.status(401).json({ error: 'Not authenticated - missing tenant' });
+    }
 
     if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
       return res.status(400).json({ error: 'Mangler liste med bilde-URLer' });

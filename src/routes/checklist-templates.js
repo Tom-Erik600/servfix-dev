@@ -6,7 +6,12 @@ const router = express.Router();
 // GET all checklist templates
 router.get('/', async (req, res) => {
   try {
-    const pool = await db.getTenantConnection(req.tenantId || 'airtech');
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId:', req.path);
+      return res.status(401).json({ error: 'Ikke autentisert' });
+    }
+    const pool = await db.getTenantConnection(tenantId);
     const result = await pool.query('SELECT * FROM checklist_templates');
     
     // Transform database format to match frontend expectations
@@ -28,7 +33,12 @@ router.post('/', async (req, res) => {
   let pool;
   try {
     const { facilityTypes } = req.body;
-    pool = await db.getTenantConnection(req.tenantId || 'airtech');
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId:', req.path);
+      return res.status(401).json({ error: 'Ikke autentisert' });
+    }
+    pool = await db.getTenantConnection(tenantId);
 
     // Start a transaction
     await pool.query('BEGIN');

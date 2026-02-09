@@ -6,22 +6,10 @@
     align-items: flex-start;
 }
 
-/* Juster søkeikon posisjon */
-.search-icon {
-    position: absolute;
-    left: 12px; /* Reduser fra 15px til 12px */
-    top: 50%;
-    transform: translateY(-50%);
-    color: #9ca3af;
-    font-size: 14px; /* Reduser fra 16px til 14px */
-    pointer-events: none;
-    z-index: 2;
-}
-
 /* Juster padding for søkefelt */
 .search-input {
     width: 100%;
-    padding: 12px 16px 12px 35px; /* Reduser venstre padding fra 45px til 35px */
+    padding: 12px 16px;
     border: 1px solid var(--border-color);
     border-radius: 8px;
     font-size: 14px;

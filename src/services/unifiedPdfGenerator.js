@@ -255,8 +255,61 @@ class UnifiedPDFGenerator {
   }
 
   itemHasData(checkpoint) {
+    if (checkpoint.comment) return true;
     const s = (checkpoint.status || '').toLowerCase();
     return s && s !== 'na' && s !== 'ikke relevant';
+  }
+
+  /**
+   * Bygger merknad-tekst for PDF basert på alle verdityper i sjekkpunktet.
+   * Håndterer: temperature, virkningsgrad, TG/KG, dropdown, text/numeric, avvik, byttet.
+   */
+  buildCheckpointComment(itemData, templateItem) {
+    const parts = [];
+    const inputType = templateItem?.inputType || '';
+
+    // Temperatur
+    if (itemData.temperature !== null && itemData.temperature !== undefined && !isNaN(itemData.temperature)) {
+      parts.push(`${itemData.temperature}°C`);
+    }
+
+    // Virkningsgrad
+    if (itemData.virkningsgrad !== null && itemData.virkningsgrad !== undefined) {
+      let vStr = `${itemData.virkningsgrad}%`;
+      const temps = [];
+      if (itemData.t2 != null) temps.push(`T2:${itemData.t2}`);
+      if (itemData.t3 != null) temps.push(`T3:${itemData.t3}`);
+      if (itemData.t7 != null) temps.push(`T7:${itemData.t7}`);
+      if (temps.length) vStr += ` (${temps.join(', ')})`;
+      parts.push(vStr);
+    }
+
+    // Tilstandsgrad / Konsekvensgrad (etter Fix 1: lagret som { value: "1" })
+    if (inputType === 'tilstandsgrad_dropdown') {
+      const val = itemData.value ?? itemData['0'];
+      if (val !== null && val !== undefined && val !== '') parts.push(`TG: ${val}`);
+    } else if (inputType === 'konsekvensgrad_dropdown') {
+      const val = itemData.value ?? itemData['0'];
+      if (val !== null && val !== undefined && val !== '') parts.push(`KG: ${val}`);
+    }
+
+    // Dropdown-verdi (dropdown_ok_avvik, dropdown_ok_avvik_comment)
+    if (itemData.dropdownValue) {
+      parts.push(itemData.dropdownValue);
+    }
+
+    // Ren tekst/numerisk verdi (etter Fix 1: lagret som { value: "2,3" })
+    if (inputType === 'text' || inputType === 'numeric' || inputType === 'dropdown' || inputType === 'switch_select') {
+      const val = itemData.value;
+      if (val !== null && val !== undefined && val !== '') parts.push(String(val));
+    }
+
+    // Fritekst-kommentarer
+    if (itemData.byttetComment) parts.push(itemData.byttetComment);
+    if (itemData.avvikComment) parts.push(itemData.avvikComment);
+    if (itemData.comment && !parts.includes(itemData.comment)) parts.push(itemData.comment);
+
+    return parts.join(' | ');
   }
 
   buildEquipmentOverview(data) {
@@ -394,11 +447,24 @@ class UnifiedPDFGenerator {
             
             const actualName = templateItem.label || templateItem.name;
 
+            // Handle status - can be string or object { status: 'value' }
+            let statusValue = itemData.status || 'ok';
+            if (typeof statusValue === 'object' && statusValue.status) {
+              statusValue = statusValue.status;
+            }
+
+            // Map status values for display
+            const statusMap = {
+              'rengjort': 'RENGJORT',
+              'ikke_rengjort': 'IKKE RENGJORT',
+            };
+            const displayStatus = statusMap[statusValue] || statusValue.toUpperCase();
+
             const cp = {
               item_id: originalItemId,
               name: actualName,
-              status: (itemData.status || 'ok').toUpperCase(),
-              comment: itemData.avvikComment || itemData.byttetComment || itemData.comment || '',
+              status: displayStatus,
+              comment: this.buildCheckpointComment(itemData, templateItem),
               images: imagesForThisItem.map(img => ({ url: img.image_url, description: img.metadata?.description || '' })),
             };
             checkpoints.push(cp);
@@ -446,6 +512,13 @@ class UnifiedPDFGenerator {
     data.products_used = data.products_used || [];
     data.additional_work = data.additional_work || [];
 
+    // FIX 5: Hent template for systemFields-definisjoner (til renderEquipmentOverviewTable)
+    const firstReport = (data.all_reports || [])[0];
+    if (firstReport) {
+      const tmpl = await this.fetchChecklistTemplate(data.tenant_id, firstReport.equipment_type);
+      data._templateSystemFields = tmpl.systemFields || [];
+    }
+
     console.log('🔍 processAirTechData - Final data check:', {
       hasProducts: data.products_used.length > 0,
       hasWork: data.additional_work.length > 0,
@@ -472,11 +545,10 @@ class UnifiedPDFGenerator {
     const systems = data.all_equipment || [];
     if (!systems.length) return '';
     
-    // NYTT: Hent systemfelter fra første system (alle har samme mal)
+    // FIX 5: Hent systemfelter fra template (pre-loaded i processAirTechData)
     const firstReport = (data.all_reports || [])[0];
-    const systemData = firstReport?.checklist_data?.systemData || {};
-    const template = firstReport?.checklist_data?.metadata?.template || {};
-    const systemFields = template.systemFields || [];
+    const systemData = firstReport?.checklist_data?.systemData || firstReport?.checklist_data?.systemFields || {};
+    const systemFields = data._templateSystemFields || [];
     
     // NYTT: Bygg dynamisk systemfelter-visning
     const systemFieldsHTML = systemFields
@@ -569,7 +641,7 @@ class UnifiedPDFGenerator {
             </div>
           </div>` : '';
 
-        const statusBadge = cp.status ? `<span class="status-badge status-${cp.status.toLowerCase()}">${this.escapeHtml(cp.status)}</span>` : '';
+        const statusBadge = cp.status ? `<span class="status-badge status-${cp.status.toLowerCase().replace(/\s+/g, '-')}">${this.escapeHtml(cp.status)}</span>` : '';
         const merknad = cp.comment ? `<span class="merknad-text">${this.escapeHtml(cp.comment)}</span>` : '';
 
         return `
@@ -812,6 +884,8 @@ renderWorkTable(work) {
       .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-weight: 600; min-width: 60px; text-align: center; }
       .status-badge.status-byttet { background-color: #e0f2fe; color: #0369a1; }
       .status-badge.status-avvik { background-color: #fee2e2; color: #b91c1c; }
+      .status-badge.status-rengjort { background-color: #d4edda; color: #28a745; }
+      .status-badge.status-ikke-rengjort { background-color: #f8d7da; color: #dc3545; }
       .avvik-section .section-header { color: #dc2626; border-bottom-color: #dc2626; }
       .avvik-table thead { background:#fee2e2; }
       .avvik-table tbody tr { background: #fff7f7; }
@@ -1067,8 +1141,7 @@ renderWorkTable(work) {
               <td><div class="info-cell"><div class="label">Mottaker av rapport</div><div class="data">${this.escapeHtml(recipient)}</div></div></td>
             </tr>
             <tr>
-              <td><div class="info-cell"><div class="label">Byggnavn</div><div class="data">${this.escapeHtml(where.buildingName || 'Ikke spesifisert')}</div></div></td>
-              <td><div class="info-cell"><div class="label">Adresse</div><div class="data">${this.escapeHtml(where.address || 'Ikke spesifisert')}</div></div></td>
+              <td colspan="2"><div class="info-cell"><div class="label">Adresse</div><div class="data">${this.escapeHtml(where.address || 'Ikke spesifisert')}</div></div></td>
               <td><div class="info-cell"><div class="label">Post nr. / Poststed</div><div class="data">${this.escapeHtml(where.postalCode || 'Ikke spesifisert')}</div></div></td>
             </tr>
             <tr class="meta-row">

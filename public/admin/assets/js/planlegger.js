@@ -536,11 +536,8 @@ async function showAddEquipmentModal(customer) {
             document.body.removeChild(equipmentModal);
         });
         
-        equipmentModal.addEventListener('click', (e) => {
-            if (e.target === equipmentModal) {
-                document.body.removeChild(equipmentModal);
-            }
-        });
+        // FIX: Fjernet klikk-utenfor-lukking — modal lukkes kun via knapper
+        // for å unngå utilsiktet lukking midt i arbeidsflyten
         
         // Type selection - hover og klikk
         equipmentModal.querySelectorAll('.type-btn').forEach(btn => {
@@ -649,11 +646,8 @@ function showEquipmentForm(customer, equipmentType) {
         document.body.removeChild(formModal);
     });
     
-    formModal.addEventListener('click', (e) => {
-        if (e.target === formModal) {
-            document.body.removeChild(formModal);
-        }
-    });
+    // FIX: Fjernet klikk-utenfor-lukking — modal lukkes kun via Avbryt/X-knapp
+    // for å unngå tap av utfylt skjemadata
     
     // Form submit - inne i showAddEquipmentForm funksjonen
     formModal.querySelector('#equipment-form').addEventListener('submit', async (e) => {
@@ -826,10 +820,11 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
         modalSaveBtn.addEventListener('click', saveOrderWithEquipment);
     }
 
-    // Oppdater også closeModal funksjonen hvis den ikke allerede finnes
+    // Eneste closeModal — lukker date-modal og rydder opp
     function closeModal() {
         const dateModal = document.getElementById('date-modal');
         dateModal.classList.remove('show');
+        targetCustomer = null;
         setTimeout(() => {
             dateModal.style.display = 'none';
             // Reset modal content til original state
@@ -838,16 +833,16 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
                 <div class="modal-header">
                     <h3>Opprett serviceoppdrag</h3>
                 </div>
-                
+
                 <div class="modal-body">
                     <p id="modal-info-text" class="modal-info-text"></p>
-                    
+
                     <div class="form-group">
                         <label for="modal-date">Velg dato:</label>
                         <input type="date" id="modal-date" required>
                     </div>
                 </div>
-                
+
                 <div class="modal-footer">
                     <button type="button" id="modal-cancel-btn" class="btn btn-secondary">Avbryt</button>
                     <button type="button" id="modal-save-btn" class="btn btn-primary">Lagre Oppdrag</button>
@@ -1077,16 +1072,8 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
         }
     });
 
-    // Modal håndtering
-    modalCancelBtn.addEventListener('click', () => {
-        closeModal();
-    });
-
-    function closeModal() {
-        dateModal.style.display = 'none';
-        dateModal.classList.remove('show');
-        targetCustomer = null;
-    }
+    // Modal håndtering — bruker closeModal definert på linje ~830
+    // (Fjernet duplikat closeModal som overskrev den riktige versjonen)
 
     function showToast(message, type = 'success') {
         const existingToast = document.querySelector('.toast');

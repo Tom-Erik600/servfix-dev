@@ -1,3 +1,11 @@
+# Dependencies - VIKTIG!
+node_modules/
+
+# Environment files
+.env
+.env.*
+
+# IDE/Editor
 .vscode/claudesync.json
 .continue/
 
@@ -8,6 +16,16 @@ test-output/
 
 # Google Cloud credentials
 config/gcp/*.json
+
+# Local dev/test files
 dev/
 test-env.txt
 prod-env.txt
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db

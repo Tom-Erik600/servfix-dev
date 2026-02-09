@@ -29,9 +29,10 @@ router.use((req, res, next) => {
 // Test endpoint for å verifisere at ruten fungerer
 router.get('/test', (req, res) => {
   console.log('✅ [INSTRUCTIONS] Test endpoint reached');
-  res.json({ 
+  const tenantId = req.session?.tenantId || req.tenantId || 'unknown';
+  res.json({
     message: 'Checklist-instructions route is working!',
-    tenantId: req.tenantId || req.session?.tenantId || 'airtech',
+    tenantId: tenantId,
     timestamp: new Date().toISOString()
   });
 });
@@ -40,10 +41,14 @@ router.get('/test', (req, res) => {
 router.get('/:templateName/:itemId', async (req, res) => {
   try {
     const { templateName, itemId } = req.params;
-    
+
     // Forbedret tenant-håndtering for både lokal og cloud
-    let tenantId = req.tenantId || req.session?.tenantId || 'airtech';
-    
+    let tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId:', req.path);
+      return res.status(401).json({ error: 'Ikke autentisert' });
+    }
+
     console.log('🔍 [INSTRUCTIONS] GET request:', {
       templateName,
       itemId,
@@ -92,8 +97,12 @@ router.get('/:templateName/:itemId', async (req, res) => {
 router.get('/:templateName', async (req, res) => {
   try {
     const { templateName } = req.params;
-    let tenantId = req.tenantId || req.session?.tenantId || 'airtech';
-    
+    let tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId:', req.path);
+      return res.status(401).json({ error: 'Ikke autentisert' });
+    }
+
     console.log('📚 [INSTRUCTIONS BULK] Fetching all for template:', templateName);
     
     const pool = await db.getTenantConnection(tenantId);
@@ -126,10 +135,14 @@ router.post('/:templateName/:itemId', async (req, res) => {
   try {
     const { templateName, itemId } = req.params;
     const { instructionText } = req.body;
-    
+
     // Forbedret tenant-håndtering
-    let tenantId = req.tenantId || req.session?.tenantId || 'airtech';
-    
+    let tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId:', req.path);
+      return res.status(401).json({ error: 'Ikke autentisert' });
+    }
+
     console.log('💾 [INSTRUCTIONS] POST request:', {
       templateName,
       itemId,
@@ -213,8 +226,12 @@ router.post('/:templateName/:itemId', async (req, res) => {
 router.delete('/:templateName/:itemId', async (req, res) => {
   try {
     const { templateName, itemId } = req.params;
-    let tenantId = req.tenantId || req.session?.tenantId || 'airtech';
-    
+    let tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId:', req.path);
+      return res.status(401).json({ error: 'Ikke autentisert' });
+    }
+
     console.log('🗑️ [INSTRUCTIONS] DELETE request:', {
       templateName,
       itemId,

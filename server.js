@@ -122,22 +122,51 @@ setupSession().then(() => {
   // Tenant middleware
   app.use((req, res, next) => {
     // Skip for static files og health check
-    if (req.path.startsWith('/assets') || 
-        req.path.startsWith('/app/assets') || 
+    if (req.path.startsWith('/assets') ||
+        req.path.startsWith('/app/assets') ||
         req.path.startsWith('/admin/assets') ||
         req.path === '/health' ||
         req.path === '/') {
       return next();
     }
-    
-    // For API routes (ikke admin), sett default tenantId
-    if (req.path.startsWith('/api') && !req.path.startsWith('/api/admin')) {
-      if (!req.session.tenantId) {
-        req.session.tenantId = process.env.DEFAULT_TENANT_ID || 'airtech';
-      }
-      req.tenantId = req.session.tenantId;
+
+    // Skip for ALL static files (js, css, html, images)
+    const staticExtensions = ['.js', '.css', '.html', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf', '.eot'];
+    if (staticExtensions.some(ext => req.path.toLowerCase().endsWith(ext))) {
+      return next();
     }
-    
+
+    // For API routes (ikke admin), resolve tenant
+    if (req.path.startsWith('/api') && !req.path.startsWith('/api/admin')) {
+      // 1. Prioriter session hvis den finnes (autentisert bruker)
+      if (req.session?.tenantId) {
+        req.tenantId = req.session.tenantId;
+      } else {
+        // 2. Hvis ikke session, resolve fra subdomain eller header
+        const host = req.get('host');
+        let tenantId = process.env.DEFAULT_TENANT_ID || 'airtech'; // Default
+
+        if (host.startsWith('localhost') || host.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/)) {
+          // Localhost: bruk x-tenant-id header eller default
+          tenantId = req.headers['x-tenant-id'] || tenantId;
+        } else {
+          // Production: bruk subdomain
+          const subdomain = host.split('.')[0];
+          if (subdomain && subdomain !== 'www') {
+            tenantId = subdomain;
+          } else {
+            tenantId = req.headers['x-tenant-id'] || tenantId;
+          }
+        }
+
+        // Sett req.tenantId (for pre-auth routes som /api/auth/login, /api/technicians)
+        req.tenantId = tenantId;
+
+        // VIKTIG: Ikke auto-populer req.session.tenantId!
+        // Session skal kun settes ved eksplisitt login i /api/auth/login
+      }
+    }
+
     next();
   });
 

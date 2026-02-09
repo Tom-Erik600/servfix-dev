@@ -2864,14 +2864,28 @@ case 'ok_byttet_avvik':
             // FIX: Sjekk BÅDE result.comment OG result.avvikComment
             const avvikText = result.avvikComment || result.comment;
             if (result.status === 'avvik' && avvikText) {
-                const avvikContainer = element.nextElementSibling;
-                if (avvikContainer && avvikContainer.classList.contains('avvik-container')) {
+                const avvikContainer = document.getElementById(`avvik-${item.id}`);
+                if (avvikContainer) {
                     const textarea = avvikContainer.querySelector('textarea');
                     if (textarea) {
                         textarea.value = avvikText;
                         avvikContainer.classList.add('show');
                         avvikContainer.style.display = 'block';
                         console.log(`  ✅ Set avvik comment: ${avvikText.substring(0, 50)}...`);
+                    }
+                }
+            }
+
+            // FIX: Gjenopprett byttetComment ved reload
+            if (result.status === 'byttet' && result.byttetComment) {
+                const byttetContainer = document.getElementById(`byttet-${item.id}`);
+                if (byttetContainer) {
+                    const textarea = byttetContainer.querySelector('textarea');
+                    if (textarea) {
+                        textarea.value = result.byttetComment;
+                        byttetContainer.classList.add('show');
+                        byttetContainer.style.display = 'block';
+                        console.log(`  ✅ Set byttet comment: ${result.byttetComment.substring(0, 50)}...`);
                     }
                 }
             }
@@ -3094,11 +3108,15 @@ function setupEventListeners() {
 function handleStatusClick(e) {
     const button = e.target.closest('.status-btn');
     if (!button) return;
-    
+
+    // Prevent event from bubbling and default actions
+    e.preventDefault();
+    e.stopPropagation();
+
     const parent = button.parentElement;
     const itemElement = button.closest('.checklist-item');
     const itemId = itemElement.dataset.itemId;
-    
+
     // Toggle active state
     if (button.classList.contains('active')) {
         button.classList.remove('active');
@@ -3548,9 +3566,15 @@ function collectChecklistData() {
         }
         
         // Add label to data object
+        // FIX: Wrapp primitive verdier (string/number) i objekt for å unngå spreading-bug
+        // Uten dette: "1" spreades til {"0":"1"}, "2,3" til {"0":"2","1":",","2":"3"}
+        const dataObj = (typeof data === 'object' && data !== null && !Array.isArray(data))
+            ? data
+            : { value: data };
+
         const dataWithLabel = {
             label: label || itemId,
-            ...data
+            ...dataObj
         };
 
         checklistData[itemId] = dataWithLabel;
@@ -3784,7 +3808,9 @@ function getChecklistItemValue(itemId) {
         
         case 'rengjort_ikke_rengjort': {
             const activeButton = element.querySelector('.status-btn.active');
-            return activeButton ? activeButton.dataset.status : null;
+            if (!activeButton) return null;
+            const status = activeButton.dataset.status;
+            return { status };
         }
         
         case 'image_only': {

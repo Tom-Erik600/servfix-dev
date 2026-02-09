@@ -864,7 +864,7 @@ body {
 
 .customer-search-input {
     width: 100%;
-    padding: 10px 16px 10px 42px; /* Økt left padding til 42px */
+    padding: 10px 16px;
     border: 2px solid #e5e7eb;
     border-radius: 8px;
     font-size: 14px;
@@ -882,17 +882,6 @@ body {
 .customer-search-input::placeholder {
     color: #9ca3af;
     font-style: italic;
-}
-
-.search-icon {
-    position: absolute;
-    left: 16px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #9ca3af;
-    font-size: 16px;
-    pointer-events: none;
-    z-index: 2;
 }
 
 /* ===== FORBEDRET KUNDEKORT DESIGN (breddebasert) ===== */
@@ -1079,15 +1068,10 @@ body {
     }
     
     .customer-search-input {
-        padding: 8px 12px 8px 36px;
+        padding: 8px 12px;
         font-size: 13px;
     }
-    
-    .search-icon {
-        left: 24px;
-        font-size: 14px;
-    }
-    
+
     .modern-customer-card,
     .project-card {
         padding: 10px 12px;

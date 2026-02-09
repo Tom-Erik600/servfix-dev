@@ -8,10 +8,16 @@ const router = express.Router();
 
 // Middleware for å sikre tenantId er satt
 router.use((req, res, next) => {
-    const tenantId = req.session?.tenantId || req.tenantId || process.env.DEFAULT_TENANT_ID || 'airtech';
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+        console.error('❌ Missing tenantId:', req.path);
+        return res.status(401).json({ error: 'Ikke autentisert' });
+    }
     req.tenantId = tenantId;
-    req.session.tenantId = tenantId;
-    
+    if (req.session) {
+        req.session.tenantId = tenantId;
+    }
+
     console.log(`🏢 Quotes API - Tenant: ${tenantId}, Session: ${req.sessionID?.substring(0,8)}...`);
     next();
 });
@@ -54,9 +60,9 @@ function transformQuoteForFrontend(dbQuote) {
 // GET all quotes
 router.get('/', async (req, res) => {
     console.log('🔍 GET /api/quotes called');
-    
+
     try {
-        const tenantId = req.session?.tenantId || req.tenantId || 'airtech';
+        const tenantId = req.tenantId; // Set by middleware
         console.log('Using tenant:', tenantId);
         
         const pool = await db.getTenantConnection(tenantId);
@@ -94,7 +100,7 @@ router.get('/', async (req, res) => {
 router.get('/order/:orderId', async (req, res) => {
     try {
         const { orderId } = req.params;
-        const tenantId = req.session.tenantId || req.tenantId || 'airtech';
+        const tenantId = req.tenantId; // Set by middleware
         const pool = await db.getTenantConnection(tenantId);
         
         const result = await pool.query(`
@@ -124,8 +130,8 @@ router.post('/', async (req, res) => {
         if (!orderId) {
             return res.status(400).json({ error: 'orderId er påkrevd' });
         }
-        
-        const tenantId = req.session.tenantId || req.tenantId || 'airtech';
+
+        const tenantId = req.tenantId; // Set by middleware
         const pool = await db.getTenantConnection(tenantId);
         
         const quoteId = `QUOTE-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -180,8 +186,8 @@ router.put('/:id', async (req, res) => {
             hasProducts: !!products,
             hasTotalAmount: !!total_amount
         });
-        
-        const tenantId = req.session?.tenantId || req.tenantId || 'airtech';
+
+        const tenantId = req.tenantId; // Set by middleware
         const pool = await db.getTenantConnection(tenantId);
         
         // Prepare items JSON
@@ -246,7 +252,7 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const tenantId = req.session.tenantId || req.tenantId || 'airtech';
+        const tenantId = req.tenantId; // Set by middleware
         const pool = await db.getTenantConnection(tenantId);
         
         const result = await pool.query('DELETE FROM quotes WHERE id = $1 RETURNING id', [id]);
@@ -266,7 +272,7 @@ router.delete('/:id', async (req, res) => {
 // GET HTML preview for a quote
 router.get('/:quoteId/html-preview', async (req, res) => {
     const { quoteId } = req.params;
-    const tenantId = req.session.tenantId || 'airtech';
+    const tenantId = req.tenantId; // Set by middleware
 
     try {
         console.log(`📄 Generating HTML preview for quote ${quoteId}`);
@@ -299,10 +305,10 @@ router.get('/:quoteId/html-preview', async (req, res) => {
 router.post('/:quoteId/generate-pdf', async (req, res) => {
     const { quoteId } = req.params;
     console.log('🔍 PDF Generate called for:', quoteId);
-    
+
     let generator;
     try {
-        const tenantId = req.session?.tenantId || req.tenantId || 'airtech';
+        const tenantId = req.tenantId; // Set by middleware
         console.log('PDF Tenant:', tenantId);
         
         const pool = await db.getTenantConnection(tenantId);
@@ -346,7 +352,7 @@ router.post('/:quoteId/generate-pdf', async (req, res) => {
 // GET PDF for a quote - DIREKTE GENERERING
 router.get('/:id/pdf', async (req, res) => {
     const { id } = req.params;
-    const tenantId = req.session.tenantId || 'airtech';
+    const tenantId = req.tenantId; // Set by middleware
     let generator;
 
     try {
@@ -385,7 +391,7 @@ router.get('/:id/pdf', async (req, res) => {
 // POST send quote to customer - FAKTISK EMAIL SENDING
 router.post('/:quoteId/send-to-customer', async (req, res) => {
     const { quoteId } = req.params;
-    const tenantId = req.session.tenantId || 'airtech';
+    const tenantId = req.tenantId; // Set by middleware
     let generator;
 
     try {

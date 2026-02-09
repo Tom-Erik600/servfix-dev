@@ -296,9 +296,13 @@ router.put('/:reportId', async (req, res) => {
     console.error('Mangler reportData i request body');
     return res.status(400).json({ error: 'Mangler reportData' });
   }
-  
+
   try {
-    const tenantId = req.session.tenantId || req.tenantId || 'airtech';
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) {
+      console.error('❌ Missing tenantId in session:', req.path);
+      return res.status(401).json({ error: 'Not authenticated - missing tenant' });
+    }
     console.log('Bruker tenantId:', tenantId);
     
     const pool = await db.getTenantConnection(tenantId);
@@ -459,9 +463,15 @@ router.post('/:reportId/send-til-fakturering', async (req, res) => {
   if (!req.session.technicianId && !req.session.isAdmin) {
     return res.status(401).json({ error: 'Ikke autentisert' });
   }
-  
+
+  const tenantId = req.session?.tenantId;
+  if (!tenantId) {
+    console.error('❌ Missing tenantId in session:', req.path);
+    return res.status(401).json({ error: 'Not authenticated - missing tenant' });
+  }
+
   try {
-    const pool = await db.getTenantConnection(req.session.tenantId || req.tenantId);
+    const pool = await db.getTenantConnection(tenantId);
     
     const result = await pool.query(
       `UPDATE service_reports 
