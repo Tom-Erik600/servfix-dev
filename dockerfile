@@ -15,6 +15,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
 
+ARG CACHEBUST=1
 COPY . .
 
 ENV PORT=8080

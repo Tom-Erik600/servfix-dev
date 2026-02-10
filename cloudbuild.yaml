@@ -1,0 +1,7 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '--no-cache', '-t', 'europe-north1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/servfix-app', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'europe-north1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/servfix-app']
+images:
+  - 'europe-north1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/servfix-app'

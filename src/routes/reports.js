@@ -45,9 +45,10 @@ function splitReportDataForDB(reportData) {
   const dbData = {
     checklist_data: {
       checklist: reportData.checklist || {},
-      systemFields: reportData.systemFields || {},  // ← FIX: Match frontend naming
+      systemFields: reportData.systemFields || {},
+      systemData: reportData.systemData || reportData.systemFields || {},  // ← FIX: Lagre systemData for PDF-generator
       overallComment: reportData.overallComment || '',
-      driftSchedule: reportData.driftSchedule || {},  // ✅ LEGG TIL DENNE LINJEN!
+      driftSchedule: reportData.driftSchedule || {},
       metadata: {
         version: '2.0',
         saved_at: new Date().toISOString()

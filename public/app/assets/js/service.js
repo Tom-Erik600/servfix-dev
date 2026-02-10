@@ -1,3 +1,4 @@
+console.log('🔖 service.js v2.1 loaded (with comment + unwrap fixes)');
 // Global state for change tracking
 const changeTracker = {
     hasUnsavedChanges: false
@@ -2623,9 +2624,15 @@ function loadExistingReportData() {
     
     // 1. LAST INN SYSTEM FIELDS
     // Load systemFields
-    if (reportData.systemFields || reportData.systemData) {
-        const systemData = reportData.systemData || reportData.systemFields || {};
-        console.log('📝 Loading systemFields:', systemData);
+    // FIX: Bruk den som faktisk har data (tom {} er truthy i JS!)
+    const rawSystemData = reportData.systemData || {};
+    const rawSystemFields = reportData.systemFields || {};
+    const hasSystemData = Object.keys(rawSystemData).length > 0;
+    const hasSystemFields = Object.keys(rawSystemFields).length > 0;
+
+    if (hasSystemData || hasSystemFields) {
+        const systemData = hasSystemData ? rawSystemData : rawSystemFields;
+        console.log('📝 Loading systemFields:', systemData, '(source:', hasSystemData ? 'systemData' : 'systemFields', ')');
         
         // Hent systemFields fra template for å vite hvilke felt vi skal se etter
         const systemFields = state.checklistTemplate?.systemFields || [];
@@ -2843,8 +2850,17 @@ function populateChecklistItems(items, checklistData) {
         } else {
             console.log(`✅ Found data for ${item.label}:`, result);
         }
-        
-        console.log(`✅ Found data for ${item.label}:`, result);
+
+        // FIX 4b: Unwrap { value: X } wrapper fra Fix 1 for primitive-typer
+        // Fix 1 wrapper primitiver (f.eks. "1") som { value: "1" } for å unngå spreading-bug.
+        // Men populateChecklistItems trenger den originale primitive verdien tilbake.
+        if (result && typeof result === 'object' && !Array.isArray(result)) {
+            const keys = Object.keys(result);
+            if (keys.length === 1 && keys[0] === 'value') {
+                result = result.value;
+                console.log(`  🔄 Unwrapped {value} → ${result}`);
+            }
+        }
         
         const element = document.querySelector(`[data-item-id="${item.id}"]`);
         if (!element) {
@@ -2898,18 +2914,39 @@ case 'ok_byttet_avvik':
             case 'dropdown_ok_avvik_comment':
                 // Sett dropdown-verdi først
                 if (result.dropdownValue) {
-                    const dropdown = element.querySelector('select');
-                    if (dropdown) {
-                        dropdown.value = result.dropdownValue;
+                    const ddSelect = element.querySelector('select');
+                    if (ddSelect) {
+                        ddSelect.value = result.dropdownValue;
                         console.log(`  ✅ Set dropdown: ${result.dropdownValue}`);
                     }
                 }
                 // Deretter sett status (OK/Avvik)
                 if (result.status) {
-                    const statusButton = element.querySelector(`[data-status="${result.status}"]`);
-                    if (statusButton) {
-                        statusButton.click();
+                    const ddStatusBtn = element.querySelector(`[data-status="${result.status}"]`);
+                    if (ddStatusBtn) {
+                        ddStatusBtn.click();
                         console.log(`  ✅ Set status: ${result.status}`);
+                    }
+                }
+                // FIX 4b: Gjenopprett kommentar for dropdown_ok_avvik_comment
+                if (result.comment) {
+                    const ddCommentTA = document.getElementById(`comment-${item.id}`);
+                    if (ddCommentTA) {
+                        ddCommentTA.value = result.comment;
+                        console.log(`  ✅ Set comment: ${result.comment.substring(0, 50)}...`);
+                    }
+                }
+                // FIX 4b: Gjenopprett avvikComment
+                if (result.status === 'avvik' && (result.avvikComment || result.comment)) {
+                    const ddAvvikCont = document.getElementById(`avvik-${item.id}`);
+                    if (ddAvvikCont) {
+                        const ddAvvikTA = ddAvvikCont.querySelector('textarea');
+                        if (ddAvvikTA) {
+                            ddAvvikTA.value = result.avvikComment || result.comment;
+                            ddAvvikCont.classList.add('show');
+                            ddAvvikCont.style.display = 'block';
+                            console.log(`  ✅ Set avvik comment for dropdown item`);
+                        }
                     }
                 }
                 break;
@@ -3408,20 +3445,28 @@ function resetForm() {
 
 function collectSystemData() {
     const systemData = {};
-    
-    if (state.checklistTemplate?.systemFields) {
-        state.checklistTemplate.systemFields.forEach(field => {
-            // Prøv flere måter å finne feltet på
+
+    const templateFields = state.checklistTemplate?.systemFields;
+    console.log('🔍 collectSystemData: template systemFields:', templateFields?.length || 0, 'felter', templateFields);
+
+    if (templateFields && templateFields.length > 0) {
+        templateFields.forEach(field => {
             const input = document.querySelector(
                 `#system-${field.name}, #${field.name}, [name="${field.name}"]`
             );
-            
+
             if (input) {
                 systemData[field.name] = input.value || '';
+                console.log(`  ✅ ${field.name} = "${input.value}"`);
+            } else {
+                console.warn(`  ❌ Input ikke funnet for systemField: ${field.name} (prøvde #system-${field.name})`);
             }
         });
+    } else {
+        console.warn('⚠️ collectSystemData: Ingen systemFields i template!');
     }
-    
+
+    console.log('🔍 collectSystemData result:', systemData);
     return systemData;
 }
 

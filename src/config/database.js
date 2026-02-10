@@ -12,6 +12,9 @@ class Database {
     
     this.pools = {};
 
+    // Pool-størrelse: bruk env-variabel eller fornuftig default per miljø
+    const poolMax = parseInt(process.env.DB_POOL_MAX) || (process.env.K_SERVICE ? 10 : 5);
+
     // Sjekk FØRST om vi skal bruke Cloud SQL
     if (process.env.CLOUD_SQL_CONNECTION_NAME) {
       console.log('✅ BRUKER CLOUD SQL SOCKET');
@@ -20,9 +23,9 @@ class Database {
         // VIKTIG: Ingen port er satt for Unix socket!
         user: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
-        max: 20,
+        max: poolMax,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: 5000,
       };
     } else {
       console.log('❌ BRUKER LOKAL DATABASE (localhost)');
@@ -31,11 +34,12 @@ class Database {
         port: process.env.DB_PORT || 5432,
         user: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
-        max: 20,
+        max: poolMax,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: 5000,
       };
     }
+    console.log(`🔧 Pool max: ${poolMax} per database`);
 
     console.log('🔧 ENDELIG KONFIG:', JSON.stringify(this.config));
   }

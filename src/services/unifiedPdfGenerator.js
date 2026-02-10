@@ -484,12 +484,20 @@ class UnifiedPDFGenerator {
           
           const filtered = checkpoints.filter(cp => this.itemHasData(cp));
           if (filtered.length > 0) {
-            // ✅ Bruk driftSchedule fra report-nivå, ikke component-nivå
-            result.equipmentSections.push({ 
-              name: sectionName, 
-              system_ref: systemRef, 
+            // Hent systemData og systemFields-definisjoner for dette anlegget
+            // FIX: {} er truthy - sjekk at objektet faktisk har data
+            const rawSysData = report.checklist_data?.systemData || {};
+            const rawSysFields = report.checklist_data?.systemFields || {};
+            const reportSystemData = Object.keys(rawSysData).length > 0 ? rawSysData : rawSysFields;
+            const templateSystemFields = template.systemFields || [];
+
+            result.equipmentSections.push({
+              name: sectionName,
+              system_ref: systemRef,
               checkpoints: filtered,
-              driftSchedule: driftSchedule  // ✅ Fra report.checklist_data
+              driftSchedule: driftSchedule,
+              systemData: reportSystemData,
+              templateSystemFields: templateSystemFields
             });
           }
         });
@@ -547,7 +555,10 @@ class UnifiedPDFGenerator {
     
     // FIX 5: Hent systemfelter fra template (pre-loaded i processAirTechData)
     const firstReport = (data.all_reports || [])[0];
-    const systemData = firstReport?.checklist_data?.systemData || firstReport?.checklist_data?.systemFields || {};
+    // FIX: {} er truthy - sjekk at objektet faktisk har data
+    const ovRawSysData = firstReport?.checklist_data?.systemData || {};
+    const ovRawSysFields = firstReport?.checklist_data?.systemFields || {};
+    const systemData = Object.keys(ovRawSysData).length > 0 ? ovRawSysData : ovRawSysFields;
     const systemFields = data._templateSystemFields || [];
     
     // NYTT: Bygg dynamisk systemfelter-visning
@@ -622,6 +633,25 @@ class UnifiedPDFGenerator {
     </section>`;
 }
 
+  renderSectionSystemFields(section) {
+    const systemData = section.systemData || {};
+    const systemFields = section.templateSystemFields || [];
+
+    if (!systemFields.length) return '';
+
+    const fieldsWithValues = systemFields
+      .sort((a, b) => a.order - b.order)
+      .filter(field => systemData[field.name]);
+
+    if (!fieldsWithValues.length) return '';
+
+    const items = fieldsWithValues.map(field =>
+      `<strong>${this.escapeHtml(field.label)}:</strong> ${this.escapeHtml(systemData[field.name])}`
+    ).join('&nbsp;&nbsp;&nbsp;&nbsp;');
+
+    return `<p style="font-size: 10pt; margin: 4px 0 10px 0; color: #374151; line-height: 1.6;">${items}</p>`;
+  }
+
   renderChecklistResults(data) {
     if (!data.equipmentSections || !data.equipmentSections.length) return '';
     
@@ -663,9 +693,13 @@ const productsHtml = (data.products_used && data.products_used.length > 0) ? thi
 const workHtml = (data.additional_work && data.additional_work.length > 0) ? this.renderWorkTable(data.additional_work) : '';
       // ==================================================
 
+      // Bygg systemfelter-HTML for denne seksjonen
+      const sectionSystemFieldsHtml = this.renderSectionSystemFields(section);
+
       return `
         <div class="checklist-section">
           <h3 class="checklist-section-header">${this.escapeHtml(section.name)}</h3>
+          ${sectionSystemFieldsHtml}
           <table class="styled-table">
             <thead>
               <tr>
