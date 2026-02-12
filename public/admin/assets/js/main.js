@@ -1,5 +1,19 @@
 // Fil: air-tech-adminweb/assets/js/main.js
 
+// Global 401-håndtering: redirect til login ved utløpt/manglende session
+(function() {
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+        const response = await originalFetch.apply(this, args);
+        if (response.status === 401 && window.location.pathname !== '/admin/login.html') {
+            console.warn('Session utløpt — redirecter til login');
+            window.location.href = '/admin/login.html';
+            return response;
+        }
+        return response;
+    };
+})();
+
 document.addEventListener("DOMContentLoaded", async function() {
     // Finner header-elementet på siden
     const headerPlaceholder = document.querySelector("header.app-header");

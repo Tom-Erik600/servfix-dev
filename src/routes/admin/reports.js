@@ -2,15 +2,11 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../config/database');
+const gcs = require('../../config/gcs');
+const adminTenant = require('../../middleware/admin-tenant');
 
-// Auth middleware
-router.use((req, res, next) => {
-  if (!req.session?.isAdmin) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  req.adminTenantId = req.session.tenantId || 'airtech';
-  next();
-});
+// 🔒 Delt middleware: Admin auth + tenant-isolasjon med validering
+router.use(adminTenant);
 
 // GET all reports - GRUPPERER PER ORDRE
 router.get('/', async (req, res) => {
@@ -165,15 +161,8 @@ router.get('/:reportId/pdf', async (req, res) => {
     console.log(`🔧 K_SERVICE: ${process.env.K_SERVICE || 'not set'}`);
     
     if (useCloudStorage) {
-      // PRODUKSJON: Redirect til Google Cloud Storage
-      // Intelligent bucket selection
-      let bucketName = process.env.GCS_BUCKET_NAME;
-      if (!bucketName) {
-        const env = process.env.NODE_ENV || 'development';
-        bucketName = (env === 'production') ? 'servfix-files' : 'servfix-files-test';
-        console.warn(`⚠️ AdminReports: GCS_BUCKET_NAME not set, using ${bucketName}`);
-      }
-      const publicUrl = `https://storage.googleapis.com/${bucketName}/tenants/${req.adminTenantId}/${report.pdf_path}`;
+      // PRODUKSJON: Redirect til Google Cloud Storage (F2: sentralisert bucket)
+      const publicUrl = `https://storage.googleapis.com/${gcs.bucketName}/tenants/${req.adminTenantId}/${report.pdf_path}`;
       console.log(`🌐 Redirecting to GCS: ${publicUrl}`);
       res.redirect(publicUrl);
     } else {

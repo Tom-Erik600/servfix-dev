@@ -4,6 +4,16 @@ const path = require('path');
 const cors = require('cors');
 require('dotenv').config();
 
+// D2: Global feilhåndtering — fang ubehandlede feil før de krasjer prosessen
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️ Unhandled Promise Rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('🚨 Uncaught Exception:', err);
+  // Gi tid til å logge, deretter avslutt
+  setTimeout(() => process.exit(1), 1000);
+});
+
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 8080;
@@ -15,18 +25,21 @@ console.log('Port:', PORT);
 console.log('DB_NAME:', process.env.DB_NAME);
 console.log('Cloud SQL:', process.env.CLOUD_SQL_CONNECTION_NAME);
 
+// 🔒 Security: Require SESSION_SECRET in all environments
+if (!process.env.SESSION_SECRET) {
+  console.error('🚨 FATAL: SESSION_SECRET environment variable is required.');
+  console.error('   Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  process.exit(1);
+}
+
 // 🔒 Security configuration check
 console.log('=== SECURITY STATUS ===');
 console.log('Environment:', process.env.NODE_ENV || 'development');
 console.log('Debug endpoints:', process.env.NODE_ENV !== 'production' ? '⚠️  ENABLED' : '✅ DISABLED');
-console.log('Session secret:', process.env.SESSION_SECRET ? '✅ SET' : '❌ MISSING');
+console.log('Session secret: ✅ SET');
 console.log('Trust proxy:', process.env.NODE_ENV === 'production' ? '✅ ENABLED' : '⚠️  DISABLED');
 
-// Warn if running in production without proper security
 if (process.env.NODE_ENV === 'production') {
-  if (!process.env.SESSION_SECRET) {
-    console.error('🚨 CRITICAL: SESSION_SECRET not set in production!');
-  }
   if (!process.env.CLOUD_SQL_CONNECTION_NAME) {
     console.warn('⚠️  WARNING: CLOUD_SQL_CONNECTION_NAME not set in production');
   }
@@ -36,6 +49,25 @@ console.log('=====================');
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Static files — FØR session-middleware slik at JS/CSS/bilder
+// aldri trenger DB-tilkobling (beskytter mot 500 ved DB-problemer)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// D7: Request timeout — avbryt forespørsler som henger for lenge
+const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS) || 30000;
+app.use((req, res, next) => {
+  // Ikke timeout på PDF-generering og filopplasting (kan ta lang tid)
+  if (req.path.includes('/pdf') || req.path.includes('/upload')) {
+    return next();
+  }
+  req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+    if (!res.headersSent) {
+      res.status(408).json({ error: 'Request timed out' });
+    }
+  });
+  next();
+});
 
 // CORS konfigurasjon - multitenant
 app.use(cors({
@@ -87,7 +119,7 @@ async function setupSession() {
         tableName: 'session',
         createTableIfMissing: true
       }),
-      secret: process.env.SESSION_SECRET || 'secret-key',
+      secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
       proxy: true,
@@ -103,15 +135,17 @@ async function setupSession() {
     
   } catch (error) {
     console.error('❌ Session setup failed:', error);
-    // Fallback til memory store
+    // D8: Fallback til memory store med tydelig advarsel
+    console.warn('⚠️  ADVARSEL: Bruker in-memory session store! Sessions overlever IKKE restart.');
     app.use(session({
-      secret: process.env.SESSION_SECRET || 'fallback-secret',
+      secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
       cookie: {
-        secure: false,
+        secure: !!process.env.CLOUD_SQL_CONNECTION_NAME,
         httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000
+        maxAge: 24 * 60 * 60 * 1000,
+        sameSite: 'lax'
       }
     }));
   }
@@ -170,18 +204,28 @@ setupSession().then(() => {
     next();
   });
 
-  // Static files
-  app.use(express.static(path.join(__dirname, 'public')));
+  // D5: Health check som faktisk verifiserer avhengigheter
+  app.get('/health', async (req, res) => {
+    const checks = { db: 'unknown' };
+    let healthy = true;
 
-  // Health check - VIKTIG for Cloud Run
-  app.get('/health', (req, res) => {
-    res.status(200).json({ 
-      status: 'healthy',
+    // Sjekk DB
+    try {
+      const db = require('./src/config/database');
+      const pool = await db.getPool('servfix_admin');
+      await pool.query('SELECT 1');
+      checks.db = 'ok';
+    } catch (err) {
+      checks.db = 'error';
+      healthy = false;
+    }
+
+    const status = healthy ? 'healthy' : 'degraded';
+    res.status(healthy ? 200 : 503).json({
+      status,
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV,
-      hasDbPassword: !!process.env.DB_PASSWORD,
-      hasSessionSecret: !!process.env.SESSION_SECRET,
-      tenant: process.env.DEFAULT_TENANT_ID
+      checks
     });
   });
 
@@ -306,8 +350,8 @@ setupSession().then(() => {
     res.status(statusCode).json(response);
   });
 
-  // Start server
-  app.listen(PORT, () => {
+  // Start server — lagre referanse for graceful shutdown
+  const server = app.listen(PORT, () => {
     console.log('=== SERVER RUNNING ===');
     console.log(`✅ Port: ${PORT}`);
     console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -317,6 +361,31 @@ setupSession().then(() => {
     }
     console.log('===================');
   });
+
+  // D1+D3: Graceful shutdown ved SIGTERM/SIGINT
+  let isShuttingDown = false;
+  async function gracefulShutdown(signal) {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log(`\n🛑 ${signal} mottatt — starter graceful shutdown...`);
+
+    // 1. Slutt å ta imot nye forespørsler
+    server.close(() => {
+      console.log('  ✅ HTTP-server lukket');
+    });
+
+    // 2. Drain DB-tilkoblinger
+    try {
+      const db = require('./src/config/database');
+      await db.closeAll();
+    } catch (_) {}
+
+    console.log('👋 Shutdown fullført');
+    process.exit(0);
+  }
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 }).catch(error => {
   console.error('❌ Failed to start server:', error);

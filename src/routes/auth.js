@@ -8,9 +8,24 @@ const router = express.Router();
 router.post('/login', async (req, res) => {
   try {
     const { technicianId, password, tenantId } = req.body;
-    
-    // Bruk tenant fra request eller body
-    const tenant = tenantId || req.tenantId;
+
+    // S5: Valider at body-tenant matcher subdomain (forhindrer cross-tenant login)
+    const host = req.get('host') || '';
+    const subdomain = host.split('.')[0];
+    const isProductionHost = !host.startsWith('localhost') && !host.match(/^\d{1,3}\.\d{1,3}/);
+
+    let tenant;
+    if (isProductionHost && subdomain) {
+      // Produksjon: bruk ALLTID subdomain som tenant — ignorer body
+      if (tenantId && tenantId !== subdomain) {
+        console.warn(`🔒 Tech login DENIED: body tenantId '${tenantId}' does not match subdomain '${subdomain}'`);
+        return res.status(403).json({ error: 'Ikke tilgang fra dette domenet' });
+      }
+      tenant = subdomain;
+    } else {
+      // Localhost/dev: tillat body tenantId
+      tenant = tenantId || req.tenantId;
+    }
     
     // Hent database connection for denne tenant
     const pool = await db.getTenantConnection(tenant);
@@ -34,18 +49,32 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Ugyldig brukernavn eller passord' });
     }
     
-    // Lagre i session
-    req.session.technicianId = technician.id;
-    req.session.tenantId = tenant;
-    console.log('Session set for technician:', req.session.technicianId, 'Tenant:', req.session.tenantId);
-    
-    res.json({
-      success: true,
-      technician: {
-        id: technician.id,
-        name: technician.name,
-        initials: technician.initials
+    // S4: Regenerer session-ID for å forhindre session fixation
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('Session regenerate error:', err);
+        return res.status(500).json({ error: 'Server error' });
       }
+
+      req.session.technicianId = technician.id;
+      req.session.tenantId = tenant;
+      console.log('Session set for technician:', req.session.technicianId, 'Tenant:', req.session.tenantId);
+
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          console.error('Session save error:', saveErr);
+          return res.status(500).json({ error: 'Server error' });
+        }
+
+        res.json({
+          success: true,
+          technician: {
+            id: technician.id,
+            name: technician.name,
+            initials: technician.initials
+          }
+        });
+      });
     });
     
   } catch (error) {

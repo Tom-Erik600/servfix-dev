@@ -1,39 +1,16 @@
 // src/routes/images.js - Enhanced with JSON settings system
 const express = require('express');
 const multer = require('multer');
-const { Storage } = require('@google-cloud/storage');
 const path = require('path');
 const db = require('../config/database');
 
 const router = express.Router();
 
-// Google Cloud Storage setup
-const storage = new Storage({
-  projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
-  keyFilename: process.env.GOOGLE_CLOUD_KEY_FILE,
-});
-
-// Intelligent bucket selection based on environment
-// NEVER default to prod bucket in test!
-let bucketName;
-if (process.env.GCS_BUCKET_NAME) {
-  bucketName = process.env.GCS_BUCKET_NAME;
-} else {
-  // Fallback based on NODE_ENV
-  const env = process.env.NODE_ENV || 'development';
-  if (env === 'production') {
-    bucketName = 'servfix-files';
-  } else if (env === 'staging' || env === 'test') {
-    bucketName = 'servfix-files-test';
-  } else {
-    // Development: require explicit configuration
-    throw new Error('GCS_BUCKET_NAME must be set in development environment');
-  }
-  console.warn(`⚠️ GCS_BUCKET_NAME not set, using fallback: ${bucketName} (NODE_ENV: ${env})`);
+// F2: Sentralisert GCS-konfigurasjon
+const { storage, bucket, bucketName } = require('../config/gcs');
+if (!bucket) {
+  throw new Error('GCS bucket not configured — set GCS_BUCKET_NAME environment variable');
 }
-
-console.log(`🪣 Using GCS bucket: ${bucketName}`);
-const bucket = storage.bucket(bucketName);
 
 // Multer setup for memory storage
 const upload = multer({

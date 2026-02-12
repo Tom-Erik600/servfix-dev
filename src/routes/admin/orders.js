@@ -1,24 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../config/database');
+const adminTenant = require('../../middleware/admin-tenant');
 
-// Middleware for å sette adminTenantId (beholdes fra tidligere)
-router.use((req, res, next) => {
-  if (!req.session.isAdmin) {
-    return res.status(401).json({ error: 'Admin authentication required' });
-  }
-  
-  req.adminTenantId = req.headers['x-tenant-id'] || 
-                      req.query.tenantId || 
-                      req.session.selectedTenantId || 
-                      'airtech'; // default
-  
-  if (req.headers['x-tenant-id'] || req.query.tenantId) {
-    req.session.selectedTenantId = req.adminTenantId;
-  }
-  
-  next();
-});
+// 🔒 Delt middleware: Admin auth + tenant-isolasjon med validering
+router.use(adminTenant);
 
 // GET all orders for the selected tenant
 // GET all orders - støtter dateFrom, dateTo og status filtrering

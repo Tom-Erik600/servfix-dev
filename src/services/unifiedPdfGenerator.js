@@ -4,40 +4,16 @@
 const path = require('path');
 const fs = require('fs').promises;
 const puppeteer = require('puppeteer');
-const { Storage } = require('@google-cloud/storage');
 const db = require('../config/database');
+const gcs = require('../config/gcs');
 
 class UnifiedPDFGenerator {
   constructor() {
     this.browser = null;
-    
-    // Intelligent bucket selection
-    let bucketName = process.env.GCS_BUCKET_NAME;
-    if (!bucketName) {
-      const env = process.env.NODE_ENV || 'development';
-      if (env === 'production') {
-        bucketName = 'servfix-files';
-        console.warn('⚠️ UnifiedPDF: Using fallback prod bucket');
-      } else if (env === 'staging' || env === 'test') {
-        bucketName = 'servfix-files-test';
-        console.warn('⚠️ UnifiedPDF: Using fallback test bucket');
-      }
-      // In development, leave as undefined (GCS will be disabled)
-    }
 
-    if (bucketName) {
-      try {
-        this.storage = new Storage({ projectId: process.env.GCP_PROJECT_ID || undefined });
-        this.bucket = this.storage.bucket(bucketName);
-        console.log('✅ GCS init:', bucketName);
-      } catch (e) {
-        console.warn('⚠️  GCS init feilet:', e.message);
-        this.storage = null; this.bucket = null;
-      }
-    } else {
-      console.warn('ℹ️ Ingen GCS bucket konfigurert.');
-      this.storage = null; this.bucket = null;
-    }
+    // F2: Bruk sentralisert GCS-konfigurasjon
+    this.storage = gcs.storage;
+    this.bucket = gcs.bucket;
   }
 
   /* ===========================
@@ -59,7 +35,17 @@ class UnifiedPDFGenerator {
 
   async close() {
     if (!this.browser) return;
-    try { await this.browser.close(); } catch (_) {}
+    try {
+      // D4: Timeout på browser.close() for å unngå henging
+      await Promise.race([
+        this.browser.close(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Browser close timed out')), 10000))
+      ]);
+    } catch (err) {
+      console.error('⚠️ Puppeteer browser.close() feilet:', err.message);
+      // Forsøk å drepe prosessen direkte ved timeout
+      try { this.browser.process()?.kill('SIGKILL'); } catch (_) {}
+    }
     this.browser = null;
   }
 

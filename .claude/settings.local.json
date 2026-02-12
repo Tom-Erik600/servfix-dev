@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(del \"e:\\apps\\servfix-dev\\src\\utils\\validation.js\")",
-      "Bash(node -c:*)"
+      "Bash(node -c:*)",
+      "Bash(npx jest:*)"
     ],
     "deny": [],
     "ask": []

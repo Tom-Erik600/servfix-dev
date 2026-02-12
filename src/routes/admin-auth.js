@@ -29,50 +29,70 @@ router.post('/login', async (req, res) => {
     console.log('👤 Admin found:', { email: admin.email, tenant_id: admin.tenant_id });
     
     const validPassword = await bcrypt.compare(password, admin.password_hash);
-    
+
     if (!validPassword) {
       console.log('❌ Invalid password for:', username);
       return res.status(401).json({ error: 'Ugyldig brukernavn eller passord' });
     }
-    
-    // Lagre admin session med tenant fra database
-    req.session.isAdmin = true;
-    req.session.adminId = admin.id;
-    req.session.adminEmail = admin.email;
-    
-    // Sett tenant fra database hvis kolonnen eksisterer
+
+    // S5: Valider at admin sin tenant matcher subdomainet de logger inn fra
     if (admin.tenant_id) {
-      req.session.selectedTenantId = admin.tenant_id;
-      req.session.tenantId = admin.tenant_id;
-      console.log('🏢 Setting tenant in session:', {
-        tenant_id: admin.tenant_id,
-        sessionId: req.sessionID?.substring(0, 10)
-      });
-    } else {
-      console.warn('⚠️ NO tenant_id in database for admin:', admin.email);
+      const host = req.get('host') || '';
+      const subdomain = host.split('.')[0];
+      // Kun valider for produksjons-domener (ikke localhost/IP)
+      const isProductionHost = !host.startsWith('localhost') && !host.match(/^\d{1,3}\.\d{1,3}/);
+      if (isProductionHost && subdomain && subdomain !== admin.tenant_id) {
+        console.warn(`🔒 Admin login DENIED: ${admin.email} (tenant: ${admin.tenant_id}) tried to login from subdomain '${subdomain}'`);
+        return res.status(403).json({ error: 'Ikke tilgang fra dette domenet' });
+      }
     }
 
-    // KRITISK: Lagre session eksplisitt før response
-    req.session.save((err) => {
-      if (err) {
-        console.error('❌ Session save error:', err);
-        return res.status(500).json({ error: 'Session save failed' });
+    // S4: Regenerer session-ID for å forhindre session fixation
+    req.session.regenerate((regenErr) => {
+      if (regenErr) {
+        console.error('❌ Session regenerate error:', regenErr);
+        return res.status(500).json({ error: 'Server error' });
       }
 
-      console.log('✅ Admin session saved successfully:', {
-        tenant_id: admin.tenant_id,
-        selectedTenantId: req.session.selectedTenantId,
-        sessionTenantId: req.session.tenantId
-      });
+      // Lagre admin session med tenant fra database
+      req.session.isAdmin = true;
+      req.session.adminId = admin.id;
+      req.session.adminEmail = admin.email;
 
-      res.json({
-        success: true,
-        admin: {
-          id: admin.id,
-          email: admin.email,
-          name: admin.name,
-          tenantId: admin.tenant_id
+      // Sett tenant fra database hvis kolonnen eksisterer
+      if (admin.tenant_id) {
+        req.session.selectedTenantId = admin.tenant_id;
+        req.session.tenantId = admin.tenant_id;
+        console.log('🏢 Setting tenant in session:', {
+          tenant_id: admin.tenant_id,
+          sessionId: req.sessionID?.substring(0, 10)
+        });
+      } else {
+        console.warn('⚠️ NO tenant_id in database for admin:', admin.email);
+      }
+
+      // KRITISK: Lagre session eksplisitt før response
+      req.session.save((err) => {
+        if (err) {
+          console.error('❌ Session save error:', err);
+          return res.status(500).json({ error: 'Session save failed' });
         }
+
+        console.log('✅ Admin session saved successfully:', {
+          tenant_id: admin.tenant_id,
+          selectedTenantId: req.session.selectedTenantId,
+          sessionTenantId: req.session.tenantId
+        });
+
+        res.json({
+          success: true,
+          admin: {
+            id: admin.id,
+            email: admin.email,
+            name: admin.name,
+            tenantId: admin.tenant_id
+          }
+        });
       });
     });
 

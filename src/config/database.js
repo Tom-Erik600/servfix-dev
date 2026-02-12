@@ -13,7 +13,9 @@ class Database {
     this.pools = {};
 
     // Pool-størrelse: bruk env-variabel eller fornuftig default per miljø
-    const poolMax = parseInt(process.env.DB_POOL_MAX) || (process.env.K_SERVICE ? 10 : 5);
+    // Cloud Run: hold lavt — med 2 pools (admin + tenant) × max × antall instanser
+    // må total holde seg under PostgreSQL max_connections (typisk 100)
+    const poolMax = parseInt(process.env.DB_POOL_MAX) || (process.env.K_SERVICE ? 5 : 5);
 
     // Sjekk FØRST om vi skal bruke Cloud SQL
     if (process.env.CLOUD_SQL_CONNECTION_NAME) {
@@ -78,6 +80,20 @@ class Database {
       console.log(`🔄 Fallback til airtech_db`);
       return this.getPool('airtech_db');
     }
+  }
+  /** D3: Drain alle DB-tilkoblinger ved shutdown */
+  async closeAll() {
+    const poolNames = Object.keys(this.pools);
+    console.log(`🔌 Closing ${poolNames.length} database pool(s)...`);
+    await Promise.allSettled(
+      poolNames.map(name =>
+        this.pools[name].end().then(
+          () => console.log(`  ✅ Pool [${name}] closed`),
+          err => console.error(`  ❌ Pool [${name}] close error:`, err.message)
+        )
+      )
+    );
+    this.pools = {};
   }
 }
 

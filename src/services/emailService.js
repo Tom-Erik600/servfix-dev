@@ -1,18 +1,14 @@
 const nodemailer = require('nodemailer');
 const tripletexService = require('./tripletexService');
 const path = require('path');
-const { Storage } = require('@google-cloud/storage');
+const gcs = require('../config/gcs');
 
 class EmailService {
   constructor() {
     this.transporter = null;
-    
-    // Google Cloud Storage setup
-    this.storage = new Storage({
-      projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
-      keyFilename: process.env.GOOGLE_CLOUD_KEY_FILE,
-    });
-    this.bucket = this.storage.bucket(process.env.GCS_BUCKET_NAME || ((process.env.NODE_ENV === 'production') ? 'servfix-files' : 'servfix-files-test'));
+
+    // F2: Bruk sentralisert GCS-konfigurasjon
+    this.bucket = gcs.bucket;
   }
 
   async init() {
@@ -32,7 +28,15 @@ class EmailService {
     console.log('✅ Email service ready');
   }
 
+  /** D11: Sikre at transporter er initialisert før sending */
+  async ensureInit() {
+    if (!this.transporter) {
+      await this.init();
+    }
+  }
+
   async sendServiceReport(reportId, tenantId) {
+    await this.ensureInit();
     try {
       const db = require('../config/database');
       const pool = await db.getTenantConnection(tenantId);
@@ -74,11 +78,10 @@ class EmailService {
       
       // Hent PDF - eksakt samme tilnærming som admin/reports.js
       let attachmentOptions;
-      
-      // Bygg GCS path og public URL (samme som admin/reports.js)
-      const bucketName = process.env.GCS_BUCKET_NAME || ((process.env.NODE_ENV === 'production') ? 'servfix-files' : 'servfix-files-test');
+
+      // F2: Bruk sentralisert bucket-navn
       const gcsPath = `tenants/${tenantId}/${report.pdf_path}`;
-      const publicUrl = `https://storage.googleapis.com/${bucketName}/${gcsPath}`;
+      const publicUrl = `https://storage.googleapis.com/${gcs.bucketName}/${gcsPath}`;
       
       console.log(`📥 Fetching PDF for email attachment:`);
       console.log(`  Report ID: ${reportId}`);
@@ -147,6 +150,7 @@ class EmailService {
     }
   }
   async sendQuoteToCustomer(quoteId, tenantId, pdfBuffer, customerEmail, quote) {
+    await this.ensureInit();
     try {
         console.log(`📧 Preparing email for quote ${quoteId} to ${customerEmail}`);
         
@@ -269,6 +273,7 @@ class EmailService {
     }
 }
 async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, order) {
+  await this.ensureInit();
   try {
     console.log(`📧 Sending report for order ${orderId} to ${customerEmail}`);
     
@@ -291,9 +296,9 @@ async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, orde
       throw new Error('Ingen PDF funnet for denne ordren');
     }
     
-    const bucketName = process.env.GCS_BUCKET_NAME || ((process.env.NODE_ENV === 'production') ? 'servfix-files' : 'servfix-files-test');
+    // F2: Bruk sentralisert bucket-navn
     const gcsPath = `tenants/${tenantId}/${firstReport.pdf_path}`;
-    const publicUrl = `https://storage.googleapis.com/${bucketName}/${gcsPath}`;
+    const publicUrl = `https://storage.googleapis.com/${gcs.bucketName}/${gcsPath}`;
 
     let pdfBuffer;
     try {

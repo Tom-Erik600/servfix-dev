@@ -1,44 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../config/database');
-const bcrypt = require('bcryptjs'); // Import bcryptjs
+const bcrypt = require('bcryptjs');
+const adminTenant = require('../../middleware/admin-tenant');
 
-// Middleware for å sette adminTenantId - DEBUG VERSION
-router.use((req, res, next) => {
-  console.log('🚀 MIDDLEWARE: Technicians route accessed', {
-    method: req.method,
-    path: req.path,
-    url: req.url,
-    sessionExists: !!req.session,
-    isAdmin: req.session?.isAdmin
-  });
-
-  if (!req.session.isAdmin) {
-    console.log('❌ MIDDLEWARE: Admin authentication failed', {
-      session: req.session,
-      isAdmin: req.session?.isAdmin
-    });
-    return res.status(401).json({ error: 'Admin authentication required' });
-  }
-  
-  req.adminTenantId = req.headers['x-tenant-id'] || 
-                      req.query.tenantId || 
-                      req.session.selectedTenantId || 
-                      'airtech'; // default
-  
-  console.log('✅ MIDDLEWARE: Admin auth passed', {
-    adminTenantId: req.adminTenantId,
-    headers: req.headers['x-tenant-id'],
-    query: req.query.tenantId,
-    selected: req.session.selectedTenantId
-  });
-  
-  if (req.headers['x-tenant-id'] || req.query.tenantId) {
-    req.session.selectedTenantId = req.adminTenantId;
-  }
-  
-  next();
-});
+// 🔒 Delt middleware: Admin auth + tenant-isolasjon med validering
+router.use(adminTenant);
 
 // GET all technicians for the selected tenant
 router.get('/', async (req, res) => {

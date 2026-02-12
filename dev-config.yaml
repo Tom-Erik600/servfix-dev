@@ -1,0 +1,92 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/client-name: gcloud
+  labels:
+    cloud.googleapis.com/location: europe-north1
+  name: servfix-app
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: '3'
+        run.googleapis.com/client-name: gcloud
+        run.googleapis.com/cloudsql-instances: servfix-dev:europe-north1:servfix-dev-db
+        run.googleapis.com/startup-cpu-boost: 'true'
+      labels:
+        run.googleapis.com/startupProbeType: Default
+    spec:
+      containerConcurrency: 80
+      containers:
+      - env:
+        - name: NODE_ENV
+          value: development
+        - name: CLOUD_SQL_CONNECTION_NAME
+          value: servfix-dev:europe-north1:servfix-dev-db
+        - name: DB_USER
+          value: postgres
+        - name: DB_NAME
+          value: servfix_admin
+        - name: DEFAULT_TENANT_ID
+          value: airtech
+        - name: GCS_BUCKET_NAME
+          value: servfix-files-dev
+        - name: GOOGLE_CLOUD_PROJECT_ID
+          value: servfix-dev
+        - name: DB_POOL_MAX
+          value: '5'
+        - name: BASE_URL
+          value: https://api-test.tripletex.tech/v2
+        - name: SMTP_HOST
+          value: smtp.gmail.com
+        - name: SMTP_PORT
+          value: '587'
+        - name: SMTP_USER
+          value: servfixadm@gmail.com
+        - name: SMTP_FROM
+          value: servfixadm@gmail.com
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: db-password
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: session-secret
+        - name: CONSUMER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: tripletex-consumer-token
+        - name: EMPLOYEE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: tripletex-employee-token
+        - name: SMTP_PASS
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: smtp-password
+        image: europe-north1-docker.pkg.dev/servfix-dev/cloud-run-source-deploy/servfix-app
+        ports:
+        - containerPort: 8080
+          name: http1
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        startupProbe:
+          failureThreshold: 1
+          periodSeconds: 240
+          tcpSocket:
+            port: 8080
+          timeoutSeconds: 240
+      timeoutSeconds: 300
+  traffic:
+  - latestRevision: true
+    percent: 100

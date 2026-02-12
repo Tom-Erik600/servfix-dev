@@ -56,7 +56,8 @@ router.get('/', async (req, res) => {
       const response = await client.get('/customer', {
         params: {
           from: currentPage * pageSize,
-          count: pageSize
+          count: pageSize,
+          fields: 'id,name,customerNumber,organizationNumber,email,phoneNumber,phoneNumberMobile,isCustomer,isSupplier,isPrivateIndividual,invoiceEmail,overdueNoticeEmail,currency(id),language(id),physicalAddress(id),postalAddress(id),customerContact(id,firstName,lastName,email),accountManager(id,firstName,lastName)'
         }
       });
       
@@ -99,7 +100,8 @@ router.get('/', async (req, res) => {
       isCustomer: c.isCustomer || false,
       isSupplier: c.isSupplier || false,
       isPrivate: c.isPrivateIndividual || false,
-      customerAccountManager: c.accountManager?.name || '',
+      customerAccountManager: c.accountManager ?
+        `${c.accountManager.firstName || ''} ${c.accountManager.lastName || ''}`.trim() : '',
       invoiceEmail: c.invoiceEmail || '',
       overdueNoticeEmail: c.overdueNoticeEmail || ''
     }));

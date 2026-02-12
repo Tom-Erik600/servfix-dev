@@ -1,27 +1,14 @@
 // src/services/quotePDFGenerator.js
-const { Storage } = require('@google-cloud/storage');
 const puppeteer = require('puppeteer');
 const db = require('../config/database');
+const gcs = require('../config/gcs');
 const { getTenantGCSFile, getTenantLocalFile } = require('./storage');
 
 class QuotePDFGenerator {
     constructor() {
         this.browser = null;
-        this.bucket = null;
-        
-        // Initialize Google Cloud Storage if credentials available
-        if (process.env.GOOGLE_CLOUD_PROJECT_ID && process.env.GCS_BUCKET_NAME) {
-          try {
-            const storage = new Storage({
-              projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
-              keyFilename: process.env.GOOGLE_CLOUD_KEY_FILE,
-            });
-            this.bucket = storage.bucket(process.env.GCS_BUCKET_NAME);
-            console.log('✅ QuotePDFGenerator: GCS enabled');
-          } catch (error) {
-            console.warn('⚠️ QuotePDFGenerator: GCS disabled -', error.message);
-          }
-        }
+        // F2: Bruk sentralisert GCS-konfigurasjon
+        this.bucket = gcs.bucket;
     }
 
     async init() {
@@ -156,26 +143,13 @@ class QuotePDFGenerator {
     console.log(`🔧 Loading company settings from JSON for tenant: ${tenantId}`);
     
     try {
-        // Bruk SAMME loadTenantSettings funksjon som images.js bruker
-        const { Storage } = require('@google-cloud/storage');
-        
-        const storage = new Storage({
-            projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
-            keyFilename: process.env.GOOGLE_CLOUD_KEY_FILE,
-        });
-        
-        // Intelligent bucket selection - never default to prod in test
-        let bucketName;
-        if (process.env.GCS_BUCKET_NAME) {
-            bucketName = process.env.GCS_BUCKET_NAME;
-        } else {
-            const env = process.env.NODE_ENV || 'development';
-            bucketName = (env === 'production') ? 'servfix-files' : 'servfix-files-test';
-            console.warn(`⚠️ QuotePDF: GCS_BUCKET_NAME not set, using ${bucketName} (${env})`);
+        // F2: Bruk sentralisert GCS-konfigurasjon
+        const bucket = gcs.bucket;
+        if (!bucket) {
+            console.warn('⚠️ GCS not configured, using default settings');
+            return { companyInfo: {}, quoteSettings: {}, logo_base64: null };
         }
-        
-        const bucket = storage.bucket(bucketName);
-        
+
         // Last innstillinger fra JSON-fil (samme som images.js)
         const settingsPath = `tenants/${tenantId}/assets/settings.json`;
         const file = bucket.file(settingsPath);
@@ -195,7 +169,7 @@ class QuotePDFGenerator {
         if (settings.logo && settings.logo.url) {
             try {
                 // Last logo fra GCS og konverter til base64
-                const logoPath = settings.logo.url.replace(`https://storage.googleapis.com/${bucketName}/`, '');
+                const logoPath = settings.logo.url.replace(`https://storage.googleapis.com/${gcs.bucketName}/`, '');
                 const logoFile = bucket.file(logoPath);
                 const [logoExists] = await logoFile.exists();
                 

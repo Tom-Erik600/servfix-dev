@@ -298,7 +298,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    function updateItemOrder() {
+    async function updateItemOrder() {
         const items = checklistItemsContainer.querySelectorAll('.checklist-item');
         items.forEach((div, index) => {
             const itemId = div.dataset.itemId;
@@ -308,7 +308,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
         console.log('📋 Rekkefølge oppdatert');
-        showFeedback('📋 Rekkefølge endret - husk å lagre!', 'success');
+
+        // Auto-lagre til database
+        await saveChecklistTemplates();
     }
 
     // ============================================================
@@ -435,7 +437,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         systemFieldsModal.classList.remove('show');
     }
 
-    function saveSystemFields() {
+    async function saveSystemFields() {
         if (!currentFacilityType) return;
 
         const systemFields = [];
@@ -452,7 +454,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentFacilityType.systemFields = systemFields;
         renderChecklistConfig();
         closeSystemFieldsModal();
-        showFeedback('✅ Systemfelter oppdatert! Husk å lagre.', 'success');
+
+        // Auto-lagre til database
+        await saveChecklistTemplates();
     }
 
     // ============================================================
@@ -499,7 +503,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentEditingItem = null;
     }
 
-    function saveChecklistItem() {
+    async function saveChecklistItem() {
         if (!currentFacilityType) return;
 
         const label = checklistItemLabelInput.value.trim();
@@ -538,7 +542,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                     delete item.dropdownOptions;
                 }
             }
-            showFeedback('✅ Sjekkpunkt oppdatert!', 'success');
         } else {
             // Opprett ny
             const maxOrder = Math.max(0, ...currentFacilityType.checklistItems.map(i => i.order || 0));
@@ -552,14 +555,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 newItem.dropdownOptions = dropdownOptions;
             }
             currentFacilityType.checklistItems.push(newItem);
-            showFeedback('✅ Sjekkpunkt lagt til!', 'success');
         }
 
         renderChecklistItems();
         closeChecklistItemModal();
+
+        // Auto-lagre til database
+        await saveChecklistTemplates();
     }
 
-    function deleteChecklistItem() {
+    async function deleteChecklistItem() {
         if (!currentEditingItem || !currentFacilityType) return;
 
         if (!confirm(`Er du sikker på at du vil slette "${currentEditingItem.label}"?`)) return;
@@ -570,7 +575,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         renderChecklistItems();
         closeChecklistItemModal();
-        showFeedback('✅ Sjekkpunkt slettet!', 'success');
+
+        // Auto-lagre til database
+        await saveChecklistTemplates();
     }
 
     // ============================================================
@@ -695,21 +702,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Toggles
-    allowProductsCheckbox.addEventListener('change', (e) => {
-        if (currentFacilityType) currentFacilityType.allowProducts = e.target.checked;
+    allowProductsCheckbox.addEventListener('change', async (e) => {
+        if (currentFacilityType) {
+            currentFacilityType.allowProducts = e.target.checked;
+            await saveChecklistTemplates();
+        }
     });
-    allowAdditionalWorkCheckbox.addEventListener('change', (e) => {
-        if (currentFacilityType) currentFacilityType.allowAdditionalWork = e.target.checked;
+    allowAdditionalWorkCheckbox.addEventListener('change', async (e) => {
+        if (currentFacilityType) {
+            currentFacilityType.allowAdditionalWork = e.target.checked;
+            await saveChecklistTemplates();
+        }
     });
-    allowCommentsCheckbox.addEventListener('change', (e) => {
-        if (currentFacilityType) currentFacilityType.allowComments = e.target.checked;
+    allowCommentsCheckbox.addEventListener('change', async (e) => {
+        if (currentFacilityType) {
+            currentFacilityType.allowComments = e.target.checked;
+            await saveChecklistTemplates();
+        }
     });
-    hasDriftScheduleCheckbox.addEventListener('change', (e) => {
+    hasDriftScheduleCheckbox.addEventListener('change', async (e) => {
         if (currentFacilityType) {
             currentFacilityType.hasDriftSchedule = e.target.checked;
             if (driftScheduleSection) {
                 driftScheduleSection.style.display = e.target.checked ? 'block' : 'none';
             }
+            await saveChecklistTemplates();
         }
     });
 
