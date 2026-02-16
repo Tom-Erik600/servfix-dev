@@ -23,8 +23,7 @@ router.get('/', async (req, res) => {
     const response = await client.get('/customer', {
       params: {
         from: 0,
-        count: 1000,
-        fields: 'id,name,customerNumber,organizationNumber,email,phoneNumber,phoneNumberMobile,isCustomer,isSupplier,isPrivateIndividual,invoiceEmail,overdueNoticeEmail,currency(id),language(id),physicalAddress(id),postalAddress(id),customerContact(id,firstName,lastName,email),accountManager(id,firstName,lastName)'
+        count: 1000
       }
     });
     
@@ -131,6 +130,48 @@ router.get('/:customerId/addresses', async (req, res) => {
       error: 'Failed to fetch addresses',
       details: error.message 
     });
+  }
+});
+
+// Hent kontaktperson for kunde via /contact API
+// Tripletex har ikke et pålitelig "primær kontaktperson"-felt på Customer.
+// Vi henter fra /contact?customerId=... og velger deterministisk.
+router.get('/:customerId/contact', async (req, res) => {
+  const { customerId } = req.params;
+  console.log(`👤 [ADMIN CUSTOMERS] GET contact for customer ${customerId}`);
+
+  try {
+    const tripletexService = require('../../services/tripletexService');
+    const contacts = await tripletexService.getCustomerContacts(customerId);
+
+    // Filtrer bort service-kontakter (servfixmail, faktura, noreply osv.)
+    const excludePatterns = ['servfixmail', 'faktura', 'invoice', 'noreply', 'no-reply'];
+    const realContacts = contacts.filter(c => {
+      const fullName = `${c.firstName || ''} ${c.lastName || ''}`.toLowerCase();
+      const email = (c.email || '').toLowerCase();
+      return !excludePatterns.some(p => fullName.includes(p) || email.includes(p));
+    });
+
+    // Prioriter kontakter med e-post, sorter etter lavest ID for konsistens
+    const withEmail = realContacts.filter(c => c.email).sort((a, b) => a.id - b.id);
+    const withoutEmail = realContacts.filter(c => !c.email).sort((a, b) => a.id - b.id);
+
+    const primary = withEmail[0] || withoutEmail[0] || null;
+
+    // Fallback: bruk customer.email/invoiceEmail hvis ingen kontakter
+    let fallbackEmail = '';
+    if (!primary) {
+      const customer = await tripletexService.getCustomer(customerId);
+      fallbackEmail = customer.email || customer.invoiceEmail || '';
+    }
+
+    res.json({
+      contact: primary ? `${primary.firstName || ''} ${primary.lastName || ''}`.trim() : '',
+      email: primary?.email || fallbackEmail
+    });
+  } catch (error) {
+    console.error(`❌ [ADMIN CUSTOMERS] Error fetching contact:`, error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 

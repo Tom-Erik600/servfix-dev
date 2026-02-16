@@ -578,13 +578,36 @@ window.sendOrderToCustomer = async function(orderId) {
         const reportYear = reportDate ? new Date(reportDate).getFullYear() : new Date().getFullYear();
         const formattedReportDate = reportDate ? new Date(reportDate).toLocaleDateString('nb-NO') : 'N/A';
 
+        // Parse adresse fra physicalAddress (samme logikk som PDF-generatoren)
+        let parsedAddress = 'Ikke spesifisert';
+        let parsedPostalCode = 'Ikke spesifisert';
+        const physicalAddress = customerData.physicalAddress || '';
+        if (physicalAddress) {
+            const parts = physicalAddress.split(',').map(p => p.trim());
+            if (parts.length >= 2) {
+                parsedAddress = parts[0];
+                parsedPostalCode = parts[parts.length - 1];
+            } else {
+                parsedAddress = physicalAddress;
+            }
+        } else if (customerData.post_address) {
+            const pa = customerData.post_address;
+            parsedAddress = pa.addressLine1 || '';
+            parsedPostalCode = pa.postalCode ? `${pa.postalCode} ${pa.city || ''}`.trim() : '';
+        }
+
+        // Parse mottaker fra contacts (samme logikk som PDF-generatoren)
+        let recipient = '';
+        const contacts = customerData.contacts || [];
+        const servfixMatch = contacts.find(c => (c.last_name || '').toLowerCase() === 'servfixmail');
+        recipient = servfixMatch?.email || customerData.email || '';
+
         let html = `
             <div class="edit-form">
-                <!-- Header med kunde og anlegg info -->
+                <!-- Header med kunde info -->
                 <div class="edit-header">
                     <h3>Servicerapport: ${escapeHtml(data.customerName || 'Ukjent kunde')}</h3>
                     <p class="order-info">Ordre ${escapeHtml(data.orderId || 'N/A')} • ${formattedReportDate}</p>
-                    <p><strong>Anlegg:</strong> ${escapeHtml(data.equipmentName || 'N/A')} (${escapeHtml(data.equipmentType || 'N/A')})</p>
                 </div>
 
                 <!-- METADATA SECTION - TABELL LAYOUT SOM PDF -->
@@ -638,27 +661,21 @@ window.sendOrderToCustomer = async function(orderId) {
                                 <td>
                                     <div class="metadata-cell">
                                         <label>MOTTAKER AV RAPPORT</label>
-                                        <div class="readonly-field">${escapeHtml(customerData.recipient || 'N/A')}</div>
+                                        <div class="readonly-field">${escapeHtml(recipient || 'N/A')}</div>
                                     </div>
                                 </td>
                             </tr>
                             <tr>
-                                <td>
-                                    <div class="metadata-cell">
-                                        <label>BYGGNAVN</label>
-                                        <div class="readonly-field">${escapeHtml(data.equipmentLocation || 'Ikke spesifisert')}</div>
-                                    </div>
-                                </td>
-                                <td>
+                                <td colspan="2">
                                     <div class="metadata-cell">
                                         <label>ADRESSE</label>
-                                        <div class="readonly-field">${escapeHtml(customerData.address || 'Ikke spesifisert')}</div>
+                                        <div class="readonly-field">${escapeHtml(parsedAddress)}</div>
                                     </div>
                                 </td>
                                 <td>
                                     <div class="metadata-cell">
                                         <label>POST NR. / POSTSTED</label>
-                                        <div class="readonly-field">${escapeHtml(customerData.postalCode || 'Ikke spesifisert')}</div>
+                                        <div class="readonly-field">${escapeHtml(parsedPostalCode)}</div>
                                     </div>
                                 </td>
                             </tr>
@@ -692,7 +709,7 @@ window.sendOrderToCustomer = async function(orderId) {
 
                 <!-- SJEKKPUNKTER SECTION -->
                 <div class="edit-section">
-                    <h4>✅ Sjekkpunkter - ${escapeHtml(data.equipmentType || 'Ukjent type')}</h4>
+                    <h4>✅ Sjekkpunkter - ${escapeHtml(data.equipmentName || '')} (${escapeHtml(data.equipmentType || 'Ukjent type')})</h4>
                     <p class="section-description">Viser kun kontrollerte sjekkpunkter. Status er låst, kun kommentarer kan redigeres.</p>
                     <div id="checklist-comments-container">
         `;

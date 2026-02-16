@@ -56,8 +56,7 @@ router.get('/', async (req, res) => {
       const response = await client.get('/customer', {
         params: {
           from: currentPage * pageSize,
-          count: pageSize,
-          fields: 'id,name,customerNumber,organizationNumber,email,phoneNumber,phoneNumberMobile,isCustomer,isSupplier,isPrivateIndividual,invoiceEmail,overdueNoticeEmail,currency(id),language(id),physicalAddress(id),postalAddress(id),customerContact(id,firstName,lastName,email),accountManager(id,firstName,lastName)'
+          count: pageSize
         }
       });
       

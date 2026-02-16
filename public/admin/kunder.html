@@ -99,6 +99,83 @@
         </div>
     </div>
     
+    <!-- Modal for redigering av anlegg -->
+    <div class="modal-overlay" id="equipment-edit-modal">
+        <div class="modal-content" style="max-width: 640px;">
+            <div class="modal-header">
+                <h3 id="equipment-edit-title">Rediger anlegg</h3>
+                <button type="button" class="close-btn" onclick="closeEquipmentEditModal()">&times;</button>
+            </div>
+
+            <div class="modal-body" id="equipment-edit-body">
+                <input type="hidden" id="edit-equipment-id">
+
+                <div class="edit-form-row">
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Systemnavn</label>
+                        <input type="text" class="edit-form-input" id="edit-systemnavn">
+                    </div>
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Systemtype</label>
+                        <input type="text" class="edit-form-input" id="edit-systemtype">
+                    </div>
+                </div>
+
+                <div class="edit-form-row">
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Systemnummer</label>
+                        <input type="text" class="edit-form-input" id="edit-systemnummer">
+                    </div>
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Plassering</label>
+                        <input type="text" class="edit-form-input" id="edit-plassering">
+                    </div>
+                </div>
+
+                <div class="edit-form-row">
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Betjener</label>
+                        <input type="text" class="edit-form-input" id="edit-betjener">
+                    </div>
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Lokasjon</label>
+                        <input type="text" class="edit-form-input" id="edit-location">
+                    </div>
+                </div>
+
+                <div class="edit-form-group" style="margin-top: 4px;">
+                    <label class="edit-form-label">Notater</label>
+                    <textarea class="edit-form-input" id="edit-notater" rows="3" style="resize: vertical;"></textarea>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeEquipmentEditModal()">Avbryt</button>
+                <button type="button" class="btn btn-primary" onclick="confirmSaveEquipment()">Lagre</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bekreftelsesdialog for lagring av anleggsendringer -->
+    <div class="modal-overlay" id="equipment-confirm-modal">
+        <div class="modal-content" style="max-width: 480px;">
+            <div class="modal-header">
+                <h3>Bekreft endring</h3>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 14px; color: #374151; line-height: 1.7; margin: 0;">
+                    Anleggsinformasjon som navn og type vises direkte fra anleggskortet.
+                    Endringer du gjør her vil derfor også vises i tidligere servicehistorikk.
+                    Allerede genererte PDF-rapporter påvirkes ikke.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="cancelSaveEquipment()">Avbryt</button>
+                <button type="button" class="btn btn-primary" onclick="executeSaveEquipment()">OK</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/admin/assets/js/main.js"></script>
     <script src="/admin/assets/js/kunder.js"></script>
 </body>

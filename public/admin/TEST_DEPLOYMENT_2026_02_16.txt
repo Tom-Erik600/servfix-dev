@@ -1,0 +1,2 @@
+This file was created on 2026-02-16 at 15:40 to test if Cloud Run deployment includes new files.
+If you can see this file on the deployed server, then COPY works for new files but not modified files.

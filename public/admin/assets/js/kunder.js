@@ -1,6 +1,7 @@
-
+// VERSION CHECK: 2026-02-16 15:35 - EQUIPMENT FEATURE ADDED
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Starter kundesystem (fullstendig versjon)...');
+    console.log('🔧 VERSION: 2026-02-16 15:35 - Equipment feature included');
     
     let allCustomers = [];
     let currentSelectedCustomer = null;
@@ -13,6 +14,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const detailsContent = document.getElementById('customer-details-content');
     const serviceHistoryContent = document.getElementById('service-history-content');
     const orderModal = document.getElementById('order-modal');
+    const equipmentEditModal = document.getElementById('equipment-edit-modal');
+    const equipmentConfirmModal = document.getElementById('equipment-confirm-modal');
+    let currentCustomerEquipment = [];
 
     /**
      * Laster inn alle data
@@ -155,7 +159,9 @@ window.selectCustomer = async function(customerId) {
     currentSelectedCustomer = customer;
     
     // Render med placeholder-adresser først
+    currentCustomerEquipment = [];
     renderCustomerDetails(customer);
+    renderEquipmentLoading();
     renderServiceHistory(customer);
     
     // NYTT: Hent adresser i bakgrunnen hvis de ikke allerede er hentet
@@ -173,7 +179,7 @@ window.selectCustomer = async function(customerId) {
                 customer.physicalAddress = addresses.physicalAddress;
                 customer.postalAddress = addresses.postalAddress;
                 
-                // Re-render med faktiske adresser
+                // Re-render kun kundedetaljer (ikke anlegg — de lastes separat)
                 renderCustomerDetails(customer);
                 console.log('✅ Adresser hentet og oppdatert');
             } else {
@@ -184,7 +190,33 @@ window.selectCustomer = async function(customerId) {
         }
     }
 
-    // NYTT: Hent rapport-epost (servfixmail) i bakgrunnen
+    // Hent kontaktperson fra /contact endpoint (Tripletex har ikke pålitelig
+    // primærkontakt på Customer — vi henter alltid fra /contact API)
+    if (!customer._contactFetched) {
+        console.log(`👤 Henter kontaktperson for ${customer.name}...`);
+        try {
+            const contactResponse = await fetch(`/api/admin/customers/${customerId}/contact`, {
+                credentials: 'include'
+            });
+
+            if (contactResponse.ok) {
+                const contactData = await contactResponse.json();
+                customer._contactFetched = true;
+                if (contactData.contact) {
+                    customer.contact = contactData.contact;
+                }
+                if (contactData.email && !customer.email) {
+                    customer.email = contactData.email;
+                }
+                renderCustomerDetails(customer);
+                console.log('✅ Kontaktperson hentet:', customer.contact || '(ingen funnet)');
+            }
+        } catch (error) {
+            console.error('Feil ved henting av kontaktperson:', error);
+        }
+    }
+
+    // Hent rapport-epost (servfixmail) i bakgrunnen
     if (!customer.reportEmail) {
         console.log(`📧 Henter rapport-epost for ${customer.name}...`);
         try {
@@ -198,7 +230,7 @@ window.selectCustomer = async function(customerId) {
                 // Oppdater customer-objektet
                 customer.reportEmail = reportData.email || null;
                 
-                // Re-render med rapport-epost
+                // Re-render kun kundedetaljer (ikke anlegg — de lastes separat)
                 renderCustomerDetails(customer);
                 console.log('✅ Rapport-epost hentet:', customer.reportEmail || 'Ikke funnet');
             } else {
@@ -207,6 +239,28 @@ window.selectCustomer = async function(customerId) {
         } catch (error) {
             console.error('Feil ved henting av rapport-epost:', error);
         }
+    }
+
+    // Hent anlegg for kunden
+    console.log(`🏢 Henter anlegg for ${customer.name}...`);
+    try {
+        const equipmentResponse = await fetch(`/api/admin/equipment?customerId=${customerId}`, {
+            credentials: 'include'
+        });
+
+        if (equipmentResponse.ok) {
+            currentCustomerEquipment = await equipmentResponse.json();
+            renderEquipmentList(currentCustomerEquipment);
+            console.log(`✅ Hentet ${currentCustomerEquipment.length} anlegg`);
+        } else {
+            console.error('Feil ved henting av anlegg:', equipmentResponse.status);
+            currentCustomerEquipment = [];
+            renderEquipmentList([]);
+        }
+    } catch (error) {
+        console.error('Feil ved henting av anlegg:', error);
+        currentCustomerEquipment = [];
+        renderEquipmentList([]);
     }
 };
 
@@ -296,13 +350,71 @@ window.selectCustomer = async function(customerId) {
                 </div>
             </div>
         </div>
+
+        <!-- ANLEGG-SEKSJON (fylles av renderEquipmentList) -->
+        <div id="equipment-list-section"></div>
     `;
-    
+
     detailsPlaceholder.style.display = 'none';
     detailsContent.style.display = 'block';
-    
+
     console.log('✅ Moderne kundedetaljer rendret');
 }
+
+    /**
+     * Viser laste-indikator for anlegg
+     */
+    function renderEquipmentLoading() {
+        const container = document.getElementById('equipment-list-section');
+        if (!container) return;
+
+        container.innerHTML = `
+            <div class="modern-equipment-section">
+                <h3 class="modern-section-title">Anlegg</h3>
+                <div class="equipment-empty-state" style="font-style: normal;">
+                    Laster anlegg...
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Rendrer anleggsliste under kundedetaljer
+     */
+    function renderEquipmentList(equipment) {
+        const container = document.getElementById('equipment-list-section');
+        if (!container) return;
+
+        if (!equipment || equipment.length === 0) {
+            container.innerHTML = `
+                <div class="modern-equipment-section">
+                    <h3 class="modern-section-title">Anlegg</h3>
+                    <div class="equipment-empty-state">
+                        Ingen anlegg registrert for denne kunden
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="modern-equipment-section">
+                <h3 class="modern-section-title">Anlegg (${equipment.length})</h3>
+                <div class="equipment-card-grid">
+                    ${equipment.map(eq => `
+                        <div class="equipment-list-card" onclick="openEquipmentEditModal('${eq.id}')" title="Klikk for å redigere">
+                            <div class="equipment-card-name">${eq.name || 'Uten navn'}</div>
+                            <div class="equipment-card-details">
+                                <span class="equipment-card-type">${eq.type || '-'}</span>
+                                ${eq.systemNumber ? `<span class="equipment-card-number">#${eq.systemNumber}</span>` : ''}
+                            </div>
+                            ${eq.systemPlacement ? `<div class="equipment-card-placement">${eq.systemPlacement}</div>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
 
     function renderServiceHistory(customer) {
     console.log('📊 Rendrer servicehistorikk for:', customer.name);
@@ -492,7 +604,13 @@ window.selectCustomer = async function(customerId) {
     const modalBody = document.getElementById('order-modal-body');
     modalBody.innerHTML = `
     <div class="simple-order-modal">
-        <!-- Header uten bakgrunn -->
+        <!-- Header med kundenavn og dato -->
+        <div style="margin-bottom: 4px;">
+            <div style="font-size: 16px; font-weight: 600; color: #1e293b;">
+                Service — ${currentSelectedCustomer ? currentSelectedCustomer.name : (order.customer_name || order.customerName || '')}
+            </div>
+            <div style="font-size: 13px; color: #64748b; margin-top: 2px;">${planlagtDateTime}</div>
+        </div>
         <div class="modal-simple-header">
             <div class="order-number-black">#${orderNumber}</div>
             <div class="status-badge-blue">${getStatusText(order.status || 'scheduled')}</div>
@@ -558,6 +676,106 @@ window.selectCustomer = async function(customerId) {
      */
     window.closeOrderModal = function() {
         orderModal.classList.remove('show');
+    };
+
+    /**
+     * Åpner redigering av anlegg
+     */
+    window.openEquipmentEditModal = function(equipmentId) {
+        const eq = currentCustomerEquipment.find(e => String(e.id) === String(equipmentId));
+        if (!eq) {
+            console.error('Anlegg ikke funnet:', equipmentId);
+            return;
+        }
+
+        document.getElementById('edit-equipment-id').value = eq.id;
+        document.getElementById('edit-systemnavn').value = eq.name || '';
+        document.getElementById('edit-systemtype').value = eq.type || '';
+        document.getElementById('edit-systemnummer').value = eq.systemNumber || '';
+        document.getElementById('edit-plassering').value = eq.systemPlacement || '';
+        document.getElementById('edit-betjener').value = eq.betjener || '';
+        document.getElementById('edit-location').value = eq.location || '';
+        document.getElementById('edit-notater').value = eq.internalNotes || '';
+
+        // Dynamisk tittel: Rediger Anlegg — Kundenavn — Anleggsnavn
+        const customerName = currentSelectedCustomer ? currentSelectedCustomer.name : '';
+        const equipmentName = eq.name || 'Uten navn';
+        document.getElementById('equipment-edit-title').textContent =
+            `Rediger Anlegg — ${customerName} — ${equipmentName}`;
+
+        equipmentEditModal.classList.add('show');
+    };
+
+    /**
+     * Lukker redigeringsmodal
+     */
+    window.closeEquipmentEditModal = function() {
+        equipmentEditModal.classList.remove('show');
+    };
+
+    /**
+     * Viser bekreftelsesdialog før lagring
+     */
+    window.confirmSaveEquipment = function() {
+        equipmentConfirmModal.classList.add('show');
+    };
+
+    /**
+     * Avbryter lagring (lukker bekreftelsesdialog)
+     */
+    window.cancelSaveEquipment = function() {
+        equipmentConfirmModal.classList.remove('show');
+    };
+
+    /**
+     * Utfører lagring av anleggsendringer
+     */
+    window.executeSaveEquipment = async function() {
+        const equipmentId = document.getElementById('edit-equipment-id').value;
+
+        const body = {
+            systemnavn: document.getElementById('edit-systemnavn').value,
+            systemtype: document.getElementById('edit-systemtype').value,
+            systemnummer: document.getElementById('edit-systemnummer').value,
+            plassering: document.getElementById('edit-plassering').value,
+            betjener: document.getElementById('edit-betjener').value,
+            location: document.getElementById('edit-location').value,
+            notater: document.getElementById('edit-notater').value
+        };
+
+        try {
+            const response = await fetch(`/api/admin/equipment/${equipmentId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(body)
+            });
+
+            if (response.ok) {
+                console.log('✅ Anlegg oppdatert');
+
+                // Lukk begge modaler
+                equipmentConfirmModal.classList.remove('show');
+                equipmentEditModal.classList.remove('show');
+
+                // Re-hent anleggsliste
+                if (currentSelectedCustomer) {
+                    const eqResponse = await fetch(`/api/admin/equipment?customerId=${currentSelectedCustomer.id}`, {
+                        credentials: 'include'
+                    });
+                    if (eqResponse.ok) {
+                        currentCustomerEquipment = await eqResponse.json();
+                        renderEquipmentList(currentCustomerEquipment);
+                    }
+                }
+            } else {
+                const errorData = await response.json();
+                alert('Feil ved lagring: ' + (errorData.error || 'Ukjent feil'));
+            }
+        } catch (error) {
+            console.error('Feil ved lagring av anlegg:', error);
+            alert('Nettverksfeil ved lagring av anlegg');
+        }
     };
 
     /**
@@ -627,12 +845,32 @@ window.selectCustomer = async function(customerId) {
         }
     });
 
+    if (equipmentEditModal) {
+        equipmentEditModal.addEventListener('click', function(e) {
+            if (e.target === equipmentEditModal) {
+                closeEquipmentEditModal();
+            }
+        });
+    }
+
+    if (equipmentConfirmModal) {
+        equipmentConfirmModal.addEventListener('click', function(e) {
+            if (e.target === equipmentConfirmModal) {
+                cancelSaveEquipment();
+            }
+        });
+    }
+
     /**
      * Lukker modal med ESC-tasten
      */
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            if (orderModal.classList.contains('show')) {
+            if (equipmentConfirmModal.classList.contains('show')) {
+                cancelSaveEquipment();
+            } else if (equipmentEditModal.classList.contains('show')) {
+                closeEquipmentEditModal();
+            } else if (orderModal.classList.contains('show')) {
                 closeOrderModal();
             } else {
                 searchInput.value = '';

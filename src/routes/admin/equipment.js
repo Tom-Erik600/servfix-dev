@@ -102,4 +102,49 @@ router.post('/', async (req, res) => {
   }
 });
 
+// PUT update equipment (admin)
+router.put('/:equipmentId', async (req, res) => {
+  try {
+    const { equipmentId } = req.params;
+    const {
+      systemtype, systemnummer, systemnavn, plassering,
+      betjener, location, notater
+    } = req.body;
+
+    const pool = await db.getTenantConnection(req.adminTenantId);
+
+    const result = await pool.query(
+      `UPDATE equipment
+       SET
+         systemtype = $1, systemnummer = $2, systemnavn = $3, plassering = $4,
+         betjener = $5, location = $6, notater = $7,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = $8
+       RETURNING *;`,
+      [
+        systemtype, systemnummer, systemnavn, plassering,
+        betjener, location, notater, equipmentId
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Anlegg ikke funnet' });
+    }
+
+    console.log('Equipment updated by admin:', result.rows[0].id);
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating equipment:', error);
+
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Systemnummer er allerede i bruk' });
+    }
+
+    res.status(500).json({
+      error: 'Kunne ikke oppdatere anlegg',
+      details: error.message
+    });
+  }
+});
+
 module.exports = router;

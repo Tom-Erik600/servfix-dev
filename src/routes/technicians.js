@@ -3,15 +3,8 @@ const db = require('../config/database');
 
 const router = express.Router();
 
-// 🔒 Auth middleware — krever innlogget tekniker eller admin
-router.use((req, res, next) => {
-  if (!req.session.technicianId && !req.session.isAdmin) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-});
-
-// GET all technicians for the current tenant
+// 🔓 GET all technicians — public (brukes på login-side for å vise dropdown)
+// Returnerer kun id, name, initials, stilling — ingen sensitiv data
 router.get('/', async (req, res) => {
   try {
     // Use req.tenantId from middleware (set in app.js)
