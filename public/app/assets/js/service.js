@@ -1858,6 +1858,8 @@ function createChecklistItemHTML(item) {
     switch (item.inputType) {
         case 'ok_avvik':
             return createOkAvvikItemHTML(item);
+        case 'ok_avvik_comment':
+            return createOkAvvikCommentItemHTML(item);
         case 'ok_byttet_avvik':
             return createOkByttetAvvikItemHTML(item);
         case 'numeric':
@@ -1914,6 +1916,36 @@ function createOkAvvikItemHTML(item) {
         <div class="checklist-item" data-item-id="${item.id}" data-item-type="ok_avvik">
             <span class="item-label">${item.label}</span>
             <div class="item-actions">${buttonsHTML}</div>
+        </div>
+        <div class="avvik-container" id="avvik-${item.id}">
+            <textarea placeholder="Beskriv avvik..."></textarea>
+            <div class="photo-dropdown-wrapper" style="position: relative; display: inline-block;">
+                <button type="button" class="photo-btn" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer;">
+                    <i data-lucide="camera"></i>Ta bilde av avvik<i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 4px;"></i>
+                </button>
+                <div class="photo-dropdown" style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; opacity: 0; visibility: hidden; min-width: 180px;">
+                    <button class="photo-option" data-action="camera" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="camera"></i>Ta bilde med kamera</button>
+                    <button class="photo-option" data-action="upload" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: none; background: none; width: 100%; text-align: left; font-size: 13px; cursor: pointer;"><i data-lucide="upload"></i>Last opp fil</button>
+                </div>
+            </div>
+            <div id="avvik-images-container-${item.id}" class="avvik-images-container"></div>
+        </div>
+    `;
+}
+
+function createOkAvvikCommentItemHTML(item) {
+    const buttonsHTML = `
+        <button type="button" class="status-btn ok" data-status="ok">OK</button>
+        <button type="button" class="status-btn avvik" data-status="avvik">Avvik</button>
+    `;
+
+    return `
+        <div class="checklist-item" data-item-id="${item.id}" data-item-type="ok_avvik_comment">
+            <div class="item-top-row">
+                <span class="item-label">${item.label}</span>
+                <div class="item-actions">${buttonsHTML}</div>
+            </div>
+            <textarea id="comment-${item.id}" placeholder="Kommentar..." class="checklist-input-textarea"></textarea>
         </div>
         <div class="avvik-container" id="avvik-${item.id}">
             <textarea placeholder="Beskriv avvik..."></textarea>
@@ -2106,8 +2138,6 @@ function createDropdownOkAvvikCommentItemHTML(item) {
                 </select>
                 <div class="item-actions">${buttonsHTML}</div>
             </div>
-        </div>
-        <div class="comment-section" style="margin-top: 10px;">
             <textarea id="comment-${item.id}" placeholder="Kommentar..." class="checklist-input-textarea"></textarea>
         </div>
         <div class="avvik-container" id="avvik-${item.id}">
@@ -2950,7 +2980,36 @@ case 'ok_byttet_avvik':
                     }
                 }
                 break;
-                
+
+            case 'ok_avvik_comment':
+                if (result.status) {
+                    const oacStatusBtn = element.querySelector(`[data-status="${result.status}"]`);
+                    if (oacStatusBtn) {
+                        oacStatusBtn.click();
+                        console.log(`  ✅ Set status: ${result.status}`);
+                    }
+                }
+                if (result.comment) {
+                    const oacCommentTA = document.getElementById(`comment-${item.id}`);
+                    if (oacCommentTA) {
+                        oacCommentTA.value = result.comment;
+                        console.log(`  ✅ Set comment: ${result.comment.substring(0, 50)}...`);
+                    }
+                }
+                if (result.status === 'avvik' && result.avvikComment) {
+                    const oacAvvikCont = document.getElementById(`avvik-${item.id}`);
+                    if (oacAvvikCont) {
+                        const oacAvvikTA = oacAvvikCont.querySelector('textarea');
+                        if (oacAvvikTA) {
+                            oacAvvikTA.value = result.avvikComment;
+                            oacAvvikCont.classList.add('show');
+                            oacAvvikCont.style.display = 'block';
+                            console.log(`  ✅ Set avvik comment for ok_avvik_comment item`);
+                        }
+                    }
+                }
+                break;
+
             case 'text':
             case 'number':
                 const input = element.querySelector('input');
@@ -3692,7 +3751,34 @@ function getChecklistItemValue(itemId) {
             
             return result;
         }
-        
+
+        case 'ok_avvik_comment': {
+            const activeButton = element.querySelector('.status-btn.active');
+            if (!activeButton) return null;
+
+            const status = activeButton.dataset.status;
+            const result = { status };
+
+            // Hent kommentar (alltid synlig)
+            const commentTextarea = document.getElementById(`comment-${itemId}`);
+            if (commentTextarea && commentTextarea.value.trim()) {
+                result.comment = commentTextarea.value.trim();
+            }
+
+            // Hent avvikkommentar
+            if (status === 'avvik') {
+                const avvikContainer = document.getElementById(`avvik-${itemId}`);
+                if (avvikContainer && avvikContainer.classList.contains('show')) {
+                    const textarea = avvikContainer.querySelector('textarea');
+                    if (textarea && textarea.value.trim()) {
+                        result.avvikComment = textarea.value.trim();
+                    }
+                }
+            }
+
+            return result;
+        }
+
         case 'numeric': {
             const input = element.querySelector(`#number-${itemId}, input[type="number"]`);
             if (!input) return null;

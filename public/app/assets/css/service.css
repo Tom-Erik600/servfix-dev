@@ -262,6 +262,48 @@
     flex-shrink: 0;
 }
 
+/* OK/Avvik + Kommentar elementer */
+.checklist-item[data-item-type="ok_avvik_comment"] {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.checklist-item[data-item-type="ok_avvik_comment"] .item-top-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.checklist-item[data-item-type="ok_avvik_comment"] .item-label {
+    flex: 1 1 auto;
+    max-width: 60%;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    word-wrap: break-word;
+}
+
+.checklist-item[data-item-type="ok_avvik_comment"] .item-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+.checklist-item[data-item-type="ok_avvik_comment"] .checklist-input-textarea {
+    width: 100%;
+    margin-top: 8px;
+    min-height: 50px;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    border: 1px solid #ced4da;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
 /* Dropdown + OK/Avvik elementer */
 .checklist-item[data-item-type="dropdown_ok_avvik"],
 .checklist-item[data-item-type="dropdown_ok_avvik_comment"],
@@ -308,6 +350,18 @@
     gap: 6px;
     justify-content: flex-end;
     flex-shrink: 0;
+}
+
+.checklist-item[data-item-type="dropdown_ok_avvik_comment"] .checklist-input-textarea {
+    width: 100%;
+    margin-top: 8px;
+    min-height: 50px;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    border: 1px solid #ced4da;
+    resize: vertical;
+    box-sizing: border-box;
 }
 
 /* Temperature input */

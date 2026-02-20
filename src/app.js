@@ -82,7 +82,7 @@ module.exports = async () => {
 
   // Håndter rot-URL
   app.get('/', (req, res) => {
-    res.redirect('/login.html');
+    res.redirect('/app/login.html');
   });
 
   // Admin authentication routes (login/logout)

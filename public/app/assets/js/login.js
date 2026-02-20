@@ -6,6 +6,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     const loginForm = document.getElementById('loginForm');
     const errorMessageDiv = document.getElementById('errorMessage');
 
+    // Load tenant branding (logo + company name)
+    try {
+        const brandingRes = await fetch('/api/images/branding');
+        if (brandingRes.ok) {
+            const branding = await brandingRes.json();
+            if (branding.companyName) {
+                document.getElementById('company-name').textContent = branding.companyName;
+            }
+            if (branding.logoUrl) {
+                const logoEl = document.getElementById('login-logo');
+                const img = document.createElement('img');
+                img.src = branding.logoUrl;
+                img.alt = branding.companyName || 'Bedriftslogo';
+                logoEl.innerHTML = '';
+                logoEl.appendChild(img);
+            }
+        }
+    } catch (e) {
+        // Fallback: keep default SVG icon and text
+    }
+
     // Function to show error message
     function showErrorMessage(message) {
         errorMessageDiv.textContent = message;

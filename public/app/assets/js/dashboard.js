@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 2. Sjekke om bruker er pålogget, redirect til login hvis ikke
     if (!window.authManager.isLoggedIn()) {
         console.log("Not logged in, redirecting to login.");
-        window.location.href = '/login.html';
+        window.location.href = '/app/login.html';
         return;
     }
 

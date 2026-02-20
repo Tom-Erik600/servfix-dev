@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
     debugSteps.push('✅ DB connection OK');
     
     // Build query med conditional WHERE clause
-    let whereClause = "WHERE sr.status = 'completed'";
+    let whereClause = "WHERE sr.status = 'completed' AND o.status = 'completed'";
     let queryParams = [];
     
     if (orderId) {

@@ -1,14 +1,18 @@
 // Fil: air-tech-adminweb/assets/js/main.js
 
-// Global 401-håndtering: redirect til login ved utløpt/manglende session
+// Global 401-håndtering: redirect til login ved utløpt/manglende admin-session
+// Kun redirect for /api/admin/-kall — andre API-er bruker en annen session-cookie
 (function() {
     const originalFetch = window.fetch;
     window.fetch = async function(...args) {
         const response = await originalFetch.apply(this, args);
         if (response.status === 401 && window.location.pathname !== '/admin/login.html') {
-            console.warn('Session utløpt — redirecter til login');
-            window.location.href = '/admin/login.html';
-            return response;
+            const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+            if (url.startsWith('/api/admin/')) {
+                console.warn('Admin-session utløpt — redirecter til login');
+                window.location.href = '/admin/login.html';
+                return response;
+            }
         }
         return response;
     };
@@ -23,12 +27,10 @@ document.addEventListener("DOMContentLoaded", async function() {
     let companyName = 'NN'; // Fallback
 
     try {
-        const response = await fetch('/api/images/settings', {
-            credentials: 'include'
-        });
+        const response = await fetch('/api/images/branding');
         if (response.ok) {
-            const settings = await response.json();
-            companyName = settings.companyInfo?.name || 'NN';
+            const branding = await response.json();
+            companyName = branding.companyName || 'NN';
         }
     } catch (error) {
         console.warn('Could not fetch company name for header:', error.message);

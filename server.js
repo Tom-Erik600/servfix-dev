@@ -113,12 +113,15 @@ async function setupSession() {
     await pool.query('SELECT 1');
     console.log('✅ Database connected for sessions via database.js');
 
-    app.use(session({
+    // Separate sessions for admin og tekniker slik at begge kan være
+    // innlogget samtidig i samme nettleser (ulike cookie-navn).
+    const makeSessionOpts = (cookieName) => ({
       store: new pgSession({
         pool: pool,
         tableName: 'session',
         createTableIfMissing: true
       }),
+      name: cookieName,
       secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
@@ -129,15 +132,26 @@ async function setupSession() {
         maxAge: 30 * 24 * 60 * 60 * 1000,
         sameSite: 'lax'
       }
-    }));
-    
-    console.log('✅ Session store configured');
+    });
+
+    const adminSession = session(makeSessionOpts('admin.sid'));
+    const techSession = session(makeSessionOpts('tech.sid'));
+
+    // Én middleware som velger riktig session basert på URL-path.
+    app.use((req, res, next) => {
+      const isAdminRoute = req.path.startsWith('/api/admin/') || req.path === '/api/admin';
+      const mw = isAdminRoute ? adminSession : techSession;
+      mw(req, res, next);
+    });
+
+    console.log('✅ Session store configured (admin.sid + tech.sid)');
     
   } catch (error) {
     console.error('❌ Session setup failed:', error);
     // D8: Fallback til memory store med tydelig advarsel
     console.warn('⚠️  ADVARSEL: Bruker in-memory session store! Sessions overlever IKKE restart.');
-    app.use(session({
+    const makeFallbackOpts = (cookieName) => ({
+      name: cookieName,
       secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
@@ -147,7 +161,16 @@ async function setupSession() {
         maxAge: 24 * 60 * 60 * 1000,
         sameSite: 'lax'
       }
-    }));
+    });
+
+    const adminSessionFallback = session(makeFallbackOpts('admin.sid'));
+    const techSessionFallback = session(makeFallbackOpts('tech.sid'));
+
+    app.use((req, res, next) => {
+      const isAdmin = req.path.startsWith('/api/admin/') || req.path === '/api/admin';
+      const mw = isAdmin ? adminSessionFallback : techSessionFallback;
+      mw(req, res, next);
+    });
   }
 }
 
@@ -231,7 +254,7 @@ setupSession().then(() => {
 
   // Test endpoint
   app.get('/api/test', (req, res) => {
-    res.json({ 
+    res.json({
       message: 'API fungerer!',
       session: {
         id: req.sessionID,

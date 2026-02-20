@@ -16,7 +16,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
 
-# Force rebuild - updated 2026-02-16
+# Force rebuild - updated 2026-02-20-v3
 COPY . .
 
 # D15: Kjør som non-root bruker

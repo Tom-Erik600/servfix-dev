@@ -292,8 +292,16 @@ class UnifiedPDFGenerator {
 
     // Fritekst-kommentarer
     if (itemData.byttetComment) parts.push(itemData.byttetComment);
-    if (itemData.avvikComment) parts.push(itemData.avvikComment);
-    if (itemData.comment && !parts.includes(itemData.comment)) parts.push(itemData.comment);
+
+    // For typer med kommentar+avvik: kommentar først, avvik på ny linje
+    const commentAvvikTypes = ['ok_avvik_comment', 'dropdown_ok_avvik_comment'];
+    if (commentAvvikTypes.includes(inputType) && itemData.comment && itemData.avvikComment) {
+      parts.push(itemData.comment);
+      parts.push(`\nAvvik: ${itemData.avvikComment}`);
+    } else {
+      if (itemData.avvikComment) parts.push(itemData.avvikComment);
+      if (itemData.comment && !parts.includes(itemData.comment)) parts.push(itemData.comment);
+    }
 
     return parts.join(' | ');
   }
@@ -434,9 +442,14 @@ class UnifiedPDFGenerator {
             const actualName = templateItem.label || templateItem.name;
 
             // Handle status - can be string or object { status: 'value' }
-            let statusValue = itemData.status || 'ok';
+            const statusInputTypes = ['ok_avvik', 'ok_avvik_comment', 'dropdown_ok_avvik', 'dropdown_ok_avvik_comment'];
+            let statusValue = itemData.status || '';
             if (typeof statusValue === 'object' && statusValue.status) {
               statusValue = statusValue.status;
+            }
+            // Kun default til 'ok' for inputtyper som har et status-konsept
+            if (!statusValue && statusInputTypes.includes(inputType)) {
+              statusValue = 'ok';
             }
 
             // Map status values for display
@@ -444,7 +457,7 @@ class UnifiedPDFGenerator {
               'rengjort': 'RENGJORT',
               'ikke_rengjort': 'IKKE RENGJORT',
             };
-            const displayStatus = statusMap[statusValue] || statusValue.toUpperCase();
+            const displayStatus = statusValue ? (statusMap[statusValue] || statusValue.toUpperCase()) : '';
 
             const cp = {
               item_id: originalItemId,
@@ -658,7 +671,7 @@ class UnifiedPDFGenerator {
           </div>` : '';
 
         const statusBadge = cp.status ? `<span class="status-badge status-${cp.status.toLowerCase().replace(/\s+/g, '-')}">${this.escapeHtml(cp.status)}</span>` : '';
-        const merknad = cp.comment ? `<span class="merknad-text">${this.escapeHtml(cp.comment)}</span>` : '';
+        const merknad = cp.comment ? `<span class="merknad-text">${this.escapeHtml(cp.comment).replace(/\n/g, '<br>')}</span>` : '';
 
         return `
           <tr>

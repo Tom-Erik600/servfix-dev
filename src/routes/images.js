@@ -127,6 +127,24 @@ function getDefaultSettings(tenantId) {
   };
 }
 
+// GET /api/images/branding - Offentlig endepunkt for logo og firmanavn (brukes på login-side)
+router.get('/branding', async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Kunne ikke identifisere bedrift' });
+    }
+    const settings = await loadTenantSettings(tenantId);
+    res.json({
+      logoUrl: settings.logo?.url || null,
+      companyName: settings.companyInfo?.name || null,
+    });
+  } catch (error) {
+    console.error('Error loading branding:', error);
+    res.json({ logoUrl: null, companyName: null });
+  }
+});
+
 // Auth middleware
 router.use((req, res, next) => {
   if (!req.session.technicianId && !req.session.isAdmin) {
