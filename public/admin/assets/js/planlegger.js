@@ -435,8 +435,16 @@ function escapeHtml(unsafe) {
                 
                 <div class="form-group">
                     <label for="modal-description">Beskrivelse:</label>
-                    <input type="text" id="modal-description" value="Service hos ${customer.name}" 
-                           placeholder="Skriv inn beskrivelse..." required>
+                    <div id="description-dropdown-wrapper">
+                        <select id="modal-description-select" style="width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; color: #374151; background: white; cursor: pointer;">
+                            <option value="">⏳ Laster prosjekter...</option>
+                        </select>
+                    </div>
+                    <input type="text" id="modal-description"
+                           value="Service hos ${customer.name}"
+                           placeholder="Skriv inn beskrivelse..."
+                           style="display: none; width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; box-sizing: border-box;"
+                           required>
                 </div>
                 
                 <div class="equipment-selection-section">
@@ -480,7 +488,8 @@ function escapeHtml(unsafe) {
         // Vis modal
         dateModal.style.display = 'flex';
         dateModal.classList.add('show');
-        
+        loadProjectSuggestions(customer);
+
         // Re-attach event listeners til nye buttons
         document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
         document.getElementById('modal-save-btn').addEventListener('click', saveOrderWithEquipment);
@@ -499,6 +508,64 @@ function escapeHtml(unsafe) {
         console.error('Error loading equipment:', error);
         // Vis standard modal hvis equipment loading feiler
         showStandardModal(customer, technicianName);
+    }
+}
+
+async function loadProjectSuggestions(customer) {
+    const select = document.getElementById('modal-description-select');
+    const textInput = document.getElementById('modal-description');
+    if (!select || !textInput) return;
+
+    try {
+        const response = await fetch(`/api/admin/customers/${customer.externalId || customer.id}/projects`, {
+            credentials: 'include'
+        });
+        const projects = await response.json();
+
+        select.innerHTML = '';
+
+        if (projects.length === 0) {
+            // Ingen prosjekter — gå rett til fritekst
+            select.style.display = 'none';
+            textInput.style.display = 'block';
+            textInput.value = `Service hos ${customer.name}`;
+            return;
+        }
+
+        // Fyll inn prosjekter (nyeste øverst = allerede sortert fra backend)
+        projects.forEach((p, i) => {
+            const opt = document.createElement('option');
+            opt.value = p.displayName;
+            opt.textContent = p.displayName;
+            if (i === 0) opt.selected = true;
+            select.appendChild(opt);
+        });
+
+        // Legg til manuelt-valg nederst
+        const manualOpt = document.createElement('option');
+        manualOpt.value = '__manual__';
+        manualOpt.textContent = '✏️ Skriv inn manuelt...';
+        select.appendChild(manualOpt);
+
+        // Synk textInput med første valg (brukes av saveOrderWithEquipment)
+        textInput.value = projects[0].displayName;
+
+        select.addEventListener('change', () => {
+            if (select.value === '__manual__') {
+                select.style.display = 'none';
+                textInput.style.display = 'block';
+                textInput.value = '';
+                textInput.focus();
+            } else {
+                textInput.value = select.value;
+            }
+        });
+
+    } catch (error) {
+        console.error('Kunne ikke laste prosjekter:', error);
+        select.style.display = 'none';
+        textInput.style.display = 'block';
+        textInput.value = `Service hos ${customer.name}`;
     }
 }
 

@@ -6,7 +6,8 @@
       "Bash(npx jest:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
-      "Bash(cat migrations/*.sql)"
+      "Bash(cat migrations/*.sql)",
+      "Bash(gcloud run:*)"
     ],
     "deny": [],
     "ask": []
