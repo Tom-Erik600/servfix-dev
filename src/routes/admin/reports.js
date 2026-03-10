@@ -79,20 +79,20 @@ router.get('/', async (req, res) => {
     const result = await pool.query(query, queryParams);
     debugSteps.push(`✅ Query OK - ${result.rows.length} order groups`);
     
-    // Hent servfixmail email for hver ordre
-    const tripletexService = require('../../services/tripletexService');
+    // Hent rapport-mottaker e-post fra lokal customer_contacts
+    const customerService = require('../../services/customerService');
     const ordersWithEmail = await Promise.all(result.rows.map(async (order) => {
       let customerEmail = null;
-      
+
       if (order.customer_id) {
         try {
-          const servfixContact = await tripletexService.getServfixmailContact(order.customer_id);
-          customerEmail = servfixContact?.email || null;
+          const recipient = await customerService.getReportRecipientByExternalId(req.adminTenantId, order.customer_id);
+          customerEmail = recipient?.email || null;
         } catch (error) {
-          console.warn(`Could not fetch servfixmail for customer ${order.customer_id}:`, error.message);
+          console.warn(`Could not fetch report recipient for customer ${order.customer_id}:`, error.message);
         }
       }
-      
+
       return {
         ...order,
         customer_email: customerEmail,
@@ -214,13 +214,13 @@ router.post('/order/:orderId/send', async (req, res) => {
     
     const order = orderResult.rows[0];
     
-    // Hent servfixmail email
-    const tripletexService = require('../../services/tripletexService');
-    const servfixContact = await tripletexService.getServfixmailContact(order.customer_id);
-    
-    if (!servfixContact || !servfixContact.email) {
-      return res.status(400).json({ 
-        error: `Ingen servfixmail-kontakt funnet for kunde: ${order.customer_name}`,
+    // Hent rapport-mottaker fra lokal customer_contacts
+    const customerService = require('../../services/customerService');
+    const recipient = await customerService.getReportRecipientByExternalId(req.adminTenantId, order.customer_id);
+
+    if (!recipient || !recipient.email) {
+      return res.status(400).json({
+        error: `Ingen rapport-mottaker funnet for kunde: ${order.customer_name}`,
         customer_id: order.customer_id
       });
     }
@@ -246,7 +246,7 @@ router.post('/order/:orderId/send', async (req, res) => {
       orderId,
       req.adminTenantId,
       reportsResult.rows,
-      servfixContact.email,
+      recipient.email,
       order
     );
     

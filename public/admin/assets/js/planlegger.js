@@ -349,10 +349,10 @@ function escapeHtml(unsafe) {
             const technician = strongElement.textContent;
             console.log('✅ 4. Tekniker navn:', technician);
             
-            targetCustomer = { 
+            targetCustomer = {
                 ...customer,
-                technicianId, 
-                customerId: customer.id || customer.customerId,
+                technicianId,
+                customerId: customer.externalId || customer.id || customer.customerId,
                 customerName: customer.name
             };
             
@@ -369,7 +369,7 @@ function escapeHtml(unsafe) {
 
     async function loadEquipmentForModal(customer) {
     try {
-        const response = await fetch(`/api/admin/equipment?customerId=${customer.id}`, {
+        const response = await fetch(`/api/admin/equipment?customerId=${customer.externalId || customer.id}`, {
             credentials: 'include'
         });
         
@@ -418,10 +418,16 @@ function escapeHtml(unsafe) {
             
             <div class="modal-body">
                 <p class="modal-info-text">
-                    Opprett nytt serviceoppdrag for <strong>${customer.name}</strong> 
+                    Opprett nytt serviceoppdrag for <strong>${customer.name}</strong>
                     med tekniker <strong>${technicianName}</strong>.
                 </p>
-                
+
+                <div style="background: #f9fafb; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 13px; color: #374151;">
+                    ${customer.contact ? `<div style="margin-bottom: 4px;"><strong>Kontakt:</strong> ${customer.contact}</div>` : ''}
+                    ${customer.email ? `<div style="margin-bottom: 4px;"><strong>E-post:</strong> ${customer.email}</div>` : ''}
+                    ${customer.phone ? `<div><strong>Telefon:</strong> ${customer.phone}</div>` : ''}
+                </div>
+
                 <div class="form-group">
                     <label for="modal-date">Velg dato:</label>
                     <input type="date" id="modal-date" value="${today}" min="${today}" required>
@@ -448,6 +454,12 @@ function escapeHtml(unsafe) {
                         <span style="font-size: 16px;">➕</span> Opprett nytt anlegg
                     </button>
                 </div>
+
+                <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                    <label for="modal-customer-notes">Kundenotat:</label>
+                    <textarea id="modal-customer-notes" rows="3" placeholder="Notat om kunden (vises ikke på rapport)..."
+                              style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; resize: vertical;"></textarea>
+                </div>
             </div>
             
             <div class="modal-footer">
@@ -458,7 +470,13 @@ function escapeHtml(unsafe) {
 
         // Last anlegg inn i den nye strukturen
         await loadEquipmentForModal(customer);
-        
+
+        // Last kundenotat
+        const notesField = document.getElementById('modal-customer-notes');
+        if (notesField && customer.notes) {
+            notesField.value = customer.notes;
+        }
+
         // Vis modal
         dateModal.style.display = 'flex';
         dateModal.classList.add('show');
@@ -654,7 +672,7 @@ function showEquipmentForm(customer, equipmentType) {
         e.preventDefault();
         
         const equipmentData = {
-            customerId: customer.id || customer.customerId,
+            customerId: customer.externalId || customer.id || customer.customerId,
             systemtype: equipmentType,
             systemnummer: document.getElementById('systemnummer').value,
             systemnavn: document.getElementById('systemnavn').value,
@@ -918,6 +936,7 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
     
     const scheduledDate = document.getElementById('modal-date')?.value;
     const description = document.getElementById('modal-description')?.value;
+    const customerNotes = document.getElementById('modal-customer-notes')?.value?.trim() ?? '';
     
     if (!scheduledDate) {
         showToast('Vennligst velg en dato', 'error');
@@ -983,7 +1002,22 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
         if (response.ok) {
             const newOrder = await response.json();
             console.log('Ordre opprettet med valgte anlegg:', newOrder);
-            
+
+            // Lagre kundenotat hvis endret
+            const localCustomerId = targetCustomer.id || targetCustomer.customerId;
+            if (customerNotes !== (targetCustomer.notes || '')) {
+                try {
+                    await fetch(`/api/admin/customers/${localCustomerId}/notes`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ notes: customerNotes })
+                    });
+                } catch (e) {
+                    console.error('Kunne ikke lagre kundenotat:', e);
+                }
+            }
+
             // Lukk modal FØRST
             closeModal();
             

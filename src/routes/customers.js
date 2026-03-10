@@ -38,149 +38,92 @@ router.use((req, res, next) => {
   next();
 });
 
-// GET all customers (UTEN adresser for å unngå rate limiting)
+// GET all customers — fra lokal DB (ikke Tripletex)
 router.get('/', async (req, res) => {
-  console.log('🟢 [CUSTOMERS] GET all customers with pagination');
-  
+  console.log('🟢 [CUSTOMERS] GET all customers (lokal DB)');
+
   try {
-    const tripletexService = require('../services/tripletexService');
-    const allCustomers = [];
-    const pageSize = 100; // Hent 100 om gangen
-    let currentPage = 0;
-    let hasMore = true;
-    
-    while (hasMore) {
-      console.log(`📄 Fetching page ${currentPage + 1} (from: ${currentPage * pageSize})`);
-      
-      const client = await tripletexService.getApiClient();
-      const response = await client.get('/customer', {
-        params: {
-          from: currentPage * pageSize,
-          count: pageSize
-        }
-      });
-      
-      const customers = response.data.values || [];
-      allCustomers.push(...customers);
-      
-      console.log(`   ✅ Got ${customers.length} customers, total so far: ${allCustomers.length}`);
-      
-      // Sjekk om det er flere sider
-      hasMore = customers.length === pageSize;
-      currentPage++;
-      
-      // Legg inn delay mellom requests for å unngå rate limiting
-      if (hasMore) {
-        await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay
-      }
+    const customerService = require('../services/customerService');
+    const tenantId = req.session?.tenantId || req.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant ID mangler' });
     }
-    
-    console.log(`✅ Total customers fetched: ${allCustomers.length}`);
-    
-    // Transform customers...
-    const transformed = allCustomers.map(c => ({
+
+    const customers = await customerService.getCustomers(tenantId);
+    console.log(`✅ Got ${customers.length} customers from local DB`);
+
+    // Transform til samme shape som frontend forventer
+    const transformed = customers.map(c => ({
       id: String(c.id),
       name: c.name || '',
-      customerNumber: c.customerNumber || '',
-      organizationNumber: c.organizationNumber || '',
-      contact: c.customerContact ? 
-        `${c.customerContact.firstName || ''} ${c.customerContact.lastName || ''}`.trim() : '',
-      email: c.email || c.customerContact?.email || '',
-      phone: c.phoneNumber || c.phoneNumberMobile || '',
-      
-      // Bare lagre ID-ene, hent faktisk adresse senere (lazy loading)
-      physicalAddressId: c.physicalAddress?.id || null,
-      postalAddressId: c.postalAddress?.id || null,
-      physicalAddress: '', // Tom til den hentes
-      postalAddress: '', // Tom til den hentes
-      
-      currency: c.currency?.id || 'NOK',
-      language: c.language?.id || 'NO',
-      isCustomer: c.isCustomer || false,
-      isSupplier: c.isSupplier || false,
-      isPrivate: c.isPrivateIndividual || false,
-      customerAccountManager: c.accountManager ?
-        `${c.accountManager.firstName || ''} ${c.accountManager.lastName || ''}`.trim() : '',
-      invoiceEmail: c.invoiceEmail || '',
-      overdueNoticeEmail: c.overdueNoticeEmail || ''
+      customerNumber: c.customer_number || '',
+      organizationNumber: c.organization_number || '',
+      contact: '',
+      email: c.email || '',
+      phone: c.phone || '',
+      physicalAddress: c.physical_address || '',
+      postalAddress: c.postal_address || '',
+      invoiceEmail: c.invoice_email || '',
+      externalId: c.external_id || null,
+      notes: c.notes || ''
     }));
-    
+
     console.log(`✅ Transformed ${transformed.length} customers`);
     res.json(transformed);
-    
+
   } catch (error) {
-    console.error('❌ [CUSTOMERS] Detailed error:', {
-      message: error.message,
-      status: error.response?.status,
-      data: error.response?.data,
-      stack: error.stack
-    });
-    
-    res.status(500).json({ 
+    console.error('❌ [CUSTOMERS] Error:', error.message);
+    res.status(500).json({
       error: 'Failed to fetch customers',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
 
-// NY ENDPOINT: Hent adresser for EN spesifikk kunde (LAZY LOADING)
+// PUT: Oppdater kundenotat
+router.put('/:customerId/notes', async (req, res) => {
+  const { customerId } = req.params;
+  try {
+    const customerService = require('../services/customerService');
+    const tenantId = req.session?.tenantId || req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID mangler' });
+
+    const { notes } = req.body;
+    const updated = await customerService.updateCustomer(tenantId, customerId, { notes: notes || '' });
+    if (!updated) return res.status(404).json({ error: 'Kunde ikke funnet' });
+    res.json({ success: true, notes: updated.notes });
+  } catch (error) {
+    console.error('Error updating notes:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Hent adresser for kunde — fra lokal DB
 router.get('/:customerId/addresses', async (req, res) => {
   const { customerId } = req.params;
-  console.log(`🟢 [CUSTOMERS] GET addresses for customer ${customerId}`);
-  
+  console.log(`🟢 [CUSTOMERS] GET addresses for customer ${customerId} (lokal DB)`);
+
   try {
-    const tripletexService = require('../services/tripletexService');
-    
-    // Hent kunde for å få address IDs
-    const customer = await tripletexService.getCustomer(customerId);
-    
-    const addresses = {
-      physicalAddress: '',
-      postalAddress: ''
-    };
-    
-    // Hent physical address hvis den finnes
-    if (customer.physicalAddress?.id) {
-      const addr = await tripletexService.getAddress(customer.physicalAddress.id);
-      if (addr) {
-        const parts = [];
-        if (addr.addressLine1) parts.push(addr.addressLine1);
-        if (addr.addressLine2) parts.push(addr.addressLine2);
-        const loc = [];
-        if (addr.postalCode) loc.push(addr.postalCode);
-        if (addr.city) loc.push(addr.city);
-        if (loc.length) parts.push(loc.join(' '));
-        addresses.physicalAddress = parts.join(', ');
-      }
+    const customerService = require('../services/customerService');
+    const tenantId = req.session?.tenantId || req.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant ID mangler' });
     }
-    
-    // Hent postal address hvis den finnes
-    if (customer.postalAddress?.id) {
-      const addr = await tripletexService.getAddress(customer.postalAddress.id);
-      if (addr) {
-        const parts = [];
-        if (addr.addressLine1) parts.push(addr.addressLine1);
-        if (addr.addressLine2) parts.push(addr.addressLine2);
-        const loc = [];
-        if (addr.postalCode) loc.push(addr.postalCode);
-        if (addr.city) loc.push(addr.city);
-        if (loc.length) parts.push(loc.join(' '));
-        addresses.postalAddress = parts.join(', ');
-      }
+
+    const customer = await customerService.getCustomer(tenantId, customerId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Kunde ikke funnet' });
     }
-    
-    console.log(`✅ [CUSTOMERS] Fetched addresses for ${customerId}:`, {
-      physicalAddress: addresses.physicalAddress || 'none',
-      postalAddress: addresses.postalAddress || 'none'
+
+    res.json({
+      physicalAddress: customer.physical_address || '',
+      postalAddress: customer.postal_address || ''
     });
-    
-    res.json(addresses);
-    
   } catch (error) {
     console.error(`❌ [CUSTOMERS] Error fetching addresses:`, error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch addresses',
-      details: error.message 
+      details: error.message
     });
   }
 });

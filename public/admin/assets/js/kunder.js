@@ -241,10 +241,11 @@ window.selectCustomer = async function(customerId) {
         }
     }
 
-    // Hent anlegg for kunden
-    console.log(`🏢 Henter anlegg for ${customer.name}...`);
+    // Hent anlegg for kunden (bruk externalId for å matche equipment-tabellen)
+    const equipmentCustomerId = customer.externalId || customerId;
+    console.log(`🏢 Henter anlegg for ${customer.name} (equipmentId: ${equipmentCustomerId})...`);
     try {
-        const equipmentResponse = await fetch(`/api/admin/equipment?customerId=${customerId}`, {
+        const equipmentResponse = await fetch(`/api/admin/equipment?customerId=${equipmentCustomerId}`, {
             credentials: 'include'
         });
 
@@ -262,6 +263,9 @@ window.selectCustomer = async function(customerId) {
         currentCustomerEquipment = [];
         renderEquipmentList([]);
     }
+
+    // Hent kontaktpersoner
+    loadAndRenderContacts(customerId);
 };
 
     /**
@@ -351,6 +355,9 @@ window.selectCustomer = async function(customerId) {
             </div>
         </div>
 
+        <!-- KONTAKTPERSONER -->
+        <div id="contacts-section"></div>
+
         <!-- ANLEGG-SEKSJON (fylles av renderEquipmentList) -->
         <div id="equipment-list-section"></div>
     `;
@@ -423,22 +430,25 @@ window.selectCustomer = async function(customerId) {
     
     // FORBEDRET MATCHING - prøv alle mulige ID-kombinasjoner
     const customerServiceHistory = customerHistory.filter(order => {
-        // Debug hver ordre
         const matches = [
-            // Direkte ID matching  
+            // Direkte ID matching (lokal DB ID)
             order.customerId === customer.id,
             order.customer_id === customer.id,
-            
-            // String vs Number konvertering
             String(order.customerId) === String(customer.id),
             String(order.customer_id) === String(customer.id),
-            Number(order.customerId) === Number(customer.id),
-            Number(order.customer_id) === Number(customer.id),
-            
+
+            // Tripletex external ID matching (gamle ordrer)
+            customer.externalId && order.customerId === customer.externalId,
+            customer.externalId && order.customer_id === customer.externalId,
+            customer.externalId && String(order.customerId) === String(customer.externalId),
+            customer.externalId && String(order.customer_id) === String(customer.externalId),
+            customer.externalId && Number(order.customerId) === Number(customer.externalId),
+            customer.externalId && Number(order.customer_id) === Number(customer.externalId),
+
             // Customer number matching
             order.customerNumber === customer.customerNumber,
             String(order.customerNumber) === String(customer.customerNumber),
-            
+
             // Name matching (backup)
             order.customerName === customer.name,
             order.customer_name === customer.name
@@ -760,7 +770,7 @@ window.selectCustomer = async function(customerId) {
 
                 // Re-hent anleggsliste
                 if (currentSelectedCustomer) {
-                    const eqResponse = await fetch(`/api/admin/equipment?customerId=${currentSelectedCustomer.id}`, {
+                    const eqResponse = await fetch(`/api/admin/equipment?customerId=${currentSelectedCustomer.externalId || currentSelectedCustomer.id}`, {
                         credentials: 'include'
                     });
                     if (eqResponse.ok) {
@@ -836,8 +846,489 @@ window.selectCustomer = async function(customerId) {
         return statusMap[status] || status || 'Planlagt';
     }
 
+    // ============================================================
+    // KONTAKTPERSONER — CRUD
+    // ============================================================
+
+    const contactEditModal = document.getElementById('contact-edit-modal');
+    let currentCustomerContacts = [];
+
+    async function loadAndRenderContacts(customerId) {
+        const container = document.getElementById('contacts-section');
+        if (!container) return;
+
+        container.innerHTML = `
+            <div class="modern-equipment-section">
+                <h3 class="modern-section-title">Kontaktpersoner</h3>
+                <div class="equipment-empty-state" style="font-style: normal;">Laster kontakter...</div>
+            </div>`;
+
+        try {
+            const response = await fetch(`/api/admin/customers/${customerId}/contacts`, {
+                credentials: 'include'
+            });
+            if (response.ok) {
+                currentCustomerContacts = await response.json();
+                renderContacts(customerId, currentCustomerContacts);
+            } else {
+                container.innerHTML = '';
+            }
+        } catch (error) {
+            console.error('Feil ved henting av kontakter:', error);
+            container.innerHTML = '';
+        }
+    }
+
+    function renderContacts(customerId, contacts) {
+        const container = document.getElementById('contacts-section');
+        if (!container) return;
+
+        container.innerHTML = `
+            <div class="modern-equipment-section">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3 class="modern-section-title">Kontaktpersoner (${contacts.length})</h3>
+                    <button type="button" class="btn btn-primary" onclick="openNewContactModal('${customerId}')"
+                            style="font-size: 11px; padding: 4px 10px;">+ Ny kontakt</button>
+                </div>
+                ${contacts.length === 0 ? `
+                    <div class="equipment-empty-state">
+                        Ingen kontaktpersoner registrert
+                    </div>
+                ` : `
+                    <div class="equipment-card-grid">
+                        ${contacts.map(c => `
+                            <div class="equipment-list-card" onclick="openEditContactModal('${c.id}')" title="Klikk for å redigere"
+                                 style="position: relative;">
+                                <div class="equipment-card-name">${c.name || 'Uten navn'}</div>
+                                <div class="equipment-card-details">
+                                    <span class="equipment-card-type">${c.email || 'Ingen epost'}</span>
+                                </div>
+                                ${c.phone ? `<div class="equipment-card-placement">${c.phone}</div>` : ''}
+                                ${c.role ? `<div class="equipment-card-placement" style="color: #6b7280;">${c.role}</div>` : ''}
+                                ${c.is_report_recipient ? `
+                                    <span style="position: absolute; top: 8px; right: 8px; background: #dbeafe;
+                                          color: #1d4ed8; padding: 2px 6px; border-radius: 8px;
+                                          font-size: 10px; font-weight: 600;">Rapport</span>
+                                ` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                `}
+            </div>
+        `;
+    }
+
+    window.openNewContactModal = function(customerId) {
+        document.getElementById('contact-edit-id').value = '';
+        document.getElementById('contact-edit-customer-id').value = customerId;
+        document.getElementById('contact-edit-name').value = '';
+        document.getElementById('contact-edit-email').value = '';
+        document.getElementById('contact-edit-phone').value = '';
+        document.getElementById('contact-edit-role').value = '';
+        document.getElementById('contact-edit-report-recipient').checked = false;
+        document.getElementById('contact-edit-title').textContent = 'Ny kontaktperson';
+        contactEditModal.classList.add('show');
+    };
+
+    window.openEditContactModal = function(contactId) {
+        const c = currentCustomerContacts.find(x => String(x.id) === String(contactId));
+        if (!c) return;
+
+        document.getElementById('contact-edit-id').value = c.id;
+        document.getElementById('contact-edit-customer-id').value = c.customer_id;
+        document.getElementById('contact-edit-name').value = c.name || '';
+        document.getElementById('contact-edit-email').value = c.email || '';
+        document.getElementById('contact-edit-phone').value = c.phone || '';
+        document.getElementById('contact-edit-role').value = c.role || '';
+        document.getElementById('contact-edit-report-recipient').checked = c.is_report_recipient || false;
+        document.getElementById('contact-edit-title').textContent = 'Rediger kontaktperson';
+        contactEditModal.classList.add('show');
+    };
+
+    window.closeContactModal = function() {
+        contactEditModal.classList.remove('show');
+    };
+
+    window.saveContact = async function() {
+        const contactId = document.getElementById('contact-edit-id').value;
+        const customerId = document.getElementById('contact-edit-customer-id').value;
+        const data = {
+            name: document.getElementById('contact-edit-name').value.trim(),
+            email: document.getElementById('contact-edit-email').value.trim(),
+            phone: document.getElementById('contact-edit-phone').value.trim(),
+            role: document.getElementById('contact-edit-role').value.trim(),
+            is_report_recipient: document.getElementById('contact-edit-report-recipient').checked
+        };
+
+        if (!data.name && !data.email) {
+            alert('Fyll inn minst navn eller e-post.');
+            return;
+        }
+
+        try {
+            let response;
+            if (contactId) {
+                // Oppdater
+                response = await fetch(`/api/admin/customers/contacts/${contactId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(data)
+                });
+            } else {
+                // Opprett
+                response = await fetch(`/api/admin/customers/${customerId}/contacts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(data)
+                });
+            }
+
+            if (response.ok) {
+                closeContactModal();
+                loadAndRenderContacts(customerId);
+                // Oppdater rapport-epost i kundekortet hvis relevant
+                if (data.is_report_recipient && currentSelectedCustomer) {
+                    currentSelectedCustomer.reportEmail = data.email;
+                    renderCustomerDetails(currentSelectedCustomer);
+                }
+            } else {
+                const err = await response.json().catch(() => ({}));
+                alert('Feil: ' + (err.error || 'Kunne ikke lagre kontakt'));
+            }
+        } catch (error) {
+            console.error('Feil ved lagring av kontakt:', error);
+            alert('Nettverksfeil ved lagring av kontakt');
+        }
+    };
+
+    window.deleteContact = async function(contactId) {
+        if (!confirm('Er du sikker på at du vil slette denne kontaktpersonen?')) return;
+
+        const customerId = currentSelectedCustomer?.id;
+        try {
+            const response = await fetch(`/api/admin/customers/contacts/${contactId}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                if (customerId) loadAndRenderContacts(customerId);
+            } else {
+                alert('Kunne ikke slette kontakt');
+            }
+        } catch (error) {
+            console.error('Feil ved sletting av kontakt:', error);
+        }
+    };
+
+    // ============================================================
+    // IMPORT FRA TRIPLETEX — Preview + selektiv import
+    // ============================================================
+
+    const importPreviewModal = document.getElementById('import-preview-modal');
+    let importPreviewData = null;
+
+    window.openImportPreview = async function() {
+        importPreviewModal.classList.add('show');
+        const modalBody = document.getElementById('import-modal-body');
+        const applyBtn = document.getElementById('import-apply-btn');
+        applyBtn.style.display = 'none';
+
+        modalBody.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px;">
+                <div style="width: 40px; height: 40px; border: 3px solid var(--primary-color);
+                     border-top: 3px solid transparent; border-radius: 50%;
+                     animation: spin 1s linear infinite; margin: 0 auto 16px;"></div>
+                <p style="font-size: 15px; color: #374151; font-weight: 500;">
+                    Henter kunder fra Tripletex...
+                </p>
+                <p style="font-size: 13px; color: #64748b;">
+                    Dette kan ta opptil 30 sekunder
+                </p>
+            </div>
+        `;
+
+        try {
+            const response = await fetch('/api/admin/customers/import/preview', {
+                method: 'POST',
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.details || errData.error || `HTTP ${response.status}`);
+            }
+            importPreviewData = await response.json();
+            renderImportPreview(importPreviewData);
+        } catch (error) {
+            modalBody.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #ef4444;">
+                    <p><strong>Feil:</strong> ${error.message}</p>
+                    <button class="btn btn-primary" onclick="openImportPreview()"
+                            style="margin-top: 16px;">Pr\u00f8v igjen</button>
+                </div>
+            `;
+        }
+    };
+
+    function renderImportPreview(data) {
+        const modalBody = document.getElementById('import-modal-body');
+        const applyBtn = document.getElementById('import-apply-btn');
+
+        const hasChanges = data.new.length > 0 || data.updated.length > 0;
+        applyBtn.style.display = hasChanges ? 'inline-block' : 'none';
+
+        // Sammendragskort
+        let html = `
+            <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 110px; padding: 14px; background: #dcfce7;
+                     border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: 700; color: #166534;">${data.new.length}</div>
+                    <div style="font-size: 12px; color: #166534; font-weight: 500;">Nye</div>
+                </div>
+                <div style="flex: 1; min-width: 110px; padding: 14px; background: #fef3c7;
+                     border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: 700; color: #92400e;">${data.updated.length}</div>
+                    <div style="font-size: 12px; color: #92400e; font-weight: 500;">Endret</div>
+                </div>
+                <div style="flex: 1; min-width: 110px; padding: 14px; background: #f3f4f6;
+                     border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: 700; color: #374151;">${data.unchanged}</div>
+                    <div style="font-size: 12px; color: #6b7280; font-weight: 500;">Uendret</div>
+                </div>
+                <div style="flex: 1; min-width: 110px; padding: 14px; background: #eff6ff;
+                     border-radius: 8px; text-align: center;">
+                    <div style="font-size: 24px; font-weight: 700; color: #1d4ed8;">${data.total}</div>
+                    <div style="font-size: 12px; color: #1d4ed8; font-weight: 500;">Totalt</div>
+                </div>
+            </div>
+        `;
+
+        // Nye kunder
+        if (data.new.length > 0) {
+            html += `
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <h4 style="margin: 0; color: #166534;">Nye kunder (${data.new.length})</h4>
+                        <label style="font-size: 12px; color: #6b7280; cursor: pointer;">
+                            <input type="checkbox" id="select-all-new" checked
+                                   onchange="toggleAllImport('new', this.checked)"> Velg alle
+                        </label>
+                    </div>
+                    <div style="max-height: 220px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        ${data.new.map(c => `
+                            <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+                                 border-bottom: 1px solid #f3f4f6;">
+                                <input type="checkbox" class="import-cb import-cb-new"
+                                       value="${c.tripletexId}" checked>
+                                <div style="flex: 1; min-width: 0;">
+                                    <div style="font-weight: 600; font-size: 13px; color: #1e293b;">
+                                        ${c.name}
+                                    </div>
+                                    <div style="font-size: 11px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                        Nr. ${c.customerNumber || '-'} | ${c.email || 'Ingen epost'} | ${c.phone || 'Ingen tlf'}
+                                    </div>
+                                </div>
+                                <span style="background: #dcfce7; color: #166534; padding: 2px 8px;
+                                      border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap;">NY</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Endrede kunder
+        if (data.updated.length > 0) {
+            html += `
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <h4 style="margin: 0; color: #92400e;">Endrede kunder (${data.updated.length})</h4>
+                        <label style="font-size: 12px; color: #6b7280; cursor: pointer;">
+                            <input type="checkbox" id="select-all-updated" checked
+                                   onchange="toggleAllImport('updated', this.checked)"> Velg alle
+                        </label>
+                    </div>
+                    <div style="max-height: 350px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        ${data.updated.map(c => `
+                            <div style="padding: 12px 14px; border-bottom: 1px solid #f3f4f6;">
+                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px;">
+                                    <input type="checkbox" class="import-cb import-cb-updated"
+                                           value="${c.tripletexId}" ${c.locallyModified ? '' : 'checked'}>
+                                    <div style="flex: 1; min-width: 0;">
+                                        <span style="font-weight: 600; font-size: 13px; color: #1e293b;">
+                                            ${c.name}
+                                        </span>
+                                        <span style="font-size: 11px; color: #6b7280; margin-left: 8px;">
+                                            Nr. ${c.customerNumber || '-'}
+                                        </span>
+                                    </div>
+                                    ${c.locallyModified ? `
+                                        <span style="background: #fee2e2; color: #dc2626; padding: 2px 8px;
+                                              border-radius: 10px; font-size: 10px; font-weight: 600; white-space: nowrap;">
+                                            LOKALT ENDRET
+                                        </span>
+                                    ` : ''}
+                                    <span style="background: #fef3c7; color: #92400e; padding: 2px 8px;
+                                          border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap;">ENDRET</span>
+                                </div>
+                                <div style="margin-left: 30px;">
+                                    ${renderFieldChanges(c.changes)}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Ingen endringer
+        if (!hasChanges) {
+            html += `
+                <div style="text-align: center; padding: 40px; color: #6b7280;">
+                    <p style="font-size: 16px; font-weight: 500;">Ingen endringer funnet</p>
+                    <p style="font-size: 13px;">Alle ${data.unchanged} kunder er allerede oppdatert.</p>
+                </div>
+            `;
+        }
+
+        // Feil
+        if (data.errors && data.errors.length > 0) {
+            html += `
+                <div style="margin-top: 16px; padding: 12px; background: #fee2e2;
+                     border-radius: 8px; font-size: 12px; color: #dc2626;">
+                    <strong>Feil under sammenligning:</strong><br>
+                    ${data.errors.join('<br>')}
+                </div>
+            `;
+        }
+
+        modalBody.innerHTML = html;
+    }
+
+    const fieldLabels = {
+        name: 'Navn',
+        organization_number: 'Org.nr',
+        customer_number: 'Kundenr',
+        phone: 'Telefon',
+        email: 'E-post',
+        invoice_email: 'Faktura e-post'
+    };
+
+    function renderFieldChanges(changes) {
+        return Object.entries(changes).map(([field, val]) => `
+            <div style="display: flex; gap: 8px; font-size: 12px; padding: 2px 0; align-items: center;">
+                <span style="color: #6b7280; min-width: 100px; font-weight: 500;">
+                    ${fieldLabels[field] || field}:
+                </span>
+                <span style="color: #dc2626; text-decoration: line-through;">
+                    ${val.old || '(tom)'}
+                </span>
+                <span style="color: #6b7280;">\u2192</span>
+                <span style="color: #166534; font-weight: 600;">
+                    ${val.new || '(tom)'}
+                </span>
+            </div>
+        `).join('');
+    }
+
+    window.toggleAllImport = function(type, checked) {
+        document.querySelectorAll(`.import-cb-${type}`).forEach(cb => cb.checked = checked);
+    };
+
+    window.applySelectedImport = async function() {
+        const newCbs = document.querySelectorAll('.import-cb-new:checked');
+        const updatedCbs = document.querySelectorAll('.import-cb-updated:checked');
+
+        const newCustomerIds = Array.from(newCbs).map(cb => cb.value);
+        const updatedCustomerIds = Array.from(updatedCbs).map(cb => cb.value);
+
+        if (newCustomerIds.length === 0 && updatedCustomerIds.length === 0) {
+            alert('Ingen kunder valgt for import.');
+            return;
+        }
+
+        const modalBody = document.getElementById('import-modal-body');
+        const applyBtn = document.getElementById('import-apply-btn');
+        applyBtn.disabled = true;
+        applyBtn.textContent = 'Importerer...';
+
+        modalBody.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px;">
+                <div style="width: 40px; height: 40px; border: 3px solid var(--primary-color);
+                     border-top: 3px solid transparent; border-radius: 50%;
+                     animation: spin 1s linear infinite; margin: 0 auto 16px;"></div>
+                <p style="font-size: 15px; color: #374151; font-weight: 500;">
+                    Importerer ${newCustomerIds.length + updatedCustomerIds.length} kunder...
+                </p>
+                <p style="font-size: 13px; color: #64748b;">
+                    Henter adresser og oppdaterer database
+                </p>
+            </div>
+        `;
+
+        try {
+            const response = await fetch('/api/admin/customers/import/apply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ newCustomerIds, updatedCustomerIds })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.details || errData.error || `HTTP ${response.status}`);
+            }
+            const stats = await response.json();
+
+            applyBtn.style.display = 'none';
+            modalBody.innerHTML = `
+                <div style="text-align: center; padding: 40px 20px;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">&#10003;</div>
+                    <h3 style="color: #166534; margin-bottom: 16px;">Import fullf\u00f8rt</h3>
+                    <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+                        <div style="padding: 12px 20px; background: #dcfce7; border-radius: 8px;">
+                            <strong>${stats.imported}</strong> nye
+                        </div>
+                        <div style="padding: 12px 20px; background: #fef3c7; border-radius: 8px;">
+                            <strong>${stats.updated}</strong> oppdatert
+                        </div>
+                        <div style="padding: 12px 20px; background: #eff6ff; border-radius: 8px;">
+                            <strong>${stats.contacts_created}</strong> kontakter
+                        </div>
+                    </div>
+                    ${stats.errors && stats.errors.length > 0 ? `
+                        <div style="margin-top: 16px; padding: 12px; background: #fee2e2;
+                             border-radius: 8px; font-size: 12px; color: #dc2626; text-align: left;">
+                            <strong>Feil:</strong><br>${stats.errors.join('<br>')}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        } catch (error) {
+            modalBody.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #ef4444;">
+                    <p><strong>Feil ved import:</strong> ${error.message}</p>
+                </div>
+            `;
+            applyBtn.disabled = false;
+            applyBtn.textContent = 'Importer valgte';
+        }
+    };
+
+    window.closeImportModal = function() {
+        importPreviewModal.classList.remove('show');
+        importPreviewData = null;
+    };
+
+    // ============================================================
+    // MODAL EVENT HANDLERS
+    // ============================================================
+
     /**
-     * Lukker modal når man klikker utenfor
+     * Lukker modal n\u00e5r man klikker utenfor
      */
     orderModal.addEventListener('click', function(e) {
         if (e.target === orderModal) {
@@ -861,12 +1352,32 @@ window.selectCustomer = async function(customerId) {
         });
     }
 
+    if (importPreviewModal) {
+        importPreviewModal.addEventListener('click', function(e) {
+            if (e.target === importPreviewModal) {
+                closeImportModal();
+            }
+        });
+    }
+
+    if (contactEditModal) {
+        contactEditModal.addEventListener('click', function(e) {
+            if (e.target === contactEditModal) {
+                closeContactModal();
+            }
+        });
+    }
+
     /**
      * Lukker modal med ESC-tasten
      */
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            if (equipmentConfirmModal.classList.contains('show')) {
+            if (contactEditModal && contactEditModal.classList.contains('show')) {
+                closeContactModal();
+            } else if (importPreviewModal.classList.contains('show')) {
+                closeImportModal();
+            } else if (equipmentConfirmModal.classList.contains('show')) {
                 cancelSaveEquipment();
             } else if (equipmentEditModal.classList.contains('show')) {
                 closeEquipmentEditModal();

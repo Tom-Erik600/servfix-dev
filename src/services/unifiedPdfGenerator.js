@@ -443,6 +443,7 @@ class UnifiedPDFGenerator {
 
             // Handle status - can be string or object { status: 'value' }
             const statusInputTypes = ['ok_avvik', 'ok_avvik_comment', 'dropdown_ok_avvik', 'dropdown_ok_avvik_comment'];
+            const inputType = templateItem?.inputType || '';
             let statusValue = itemData.status || '';
             if (typeof statusValue === 'object' && statusValue.status) {
               statusValue = statusValue.status;

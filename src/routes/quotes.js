@@ -413,18 +413,18 @@ router.post('/:quoteId/send-to-customer', async (req, res) => {
         const quote = quoteResult.rows[0];
         console.log(`📧 Quote found: ${quote.customer_name} (ID: ${quote.customer_id})`);
         
-        // Hent servfixmail-kontakt
-        const tripletexService = require('../services/tripletexService');
-        const servfixContact = await tripletexService.getServfixmailContact(quote.customer_id);
-        
-        if (!servfixContact || !servfixContact.email) {
-            return res.status(400).json({ 
-                error: `Ingen servfixmail-kontakt funnet for kunde: ${quote.customer_name}`,
+        // Hent rapport-mottaker fra lokal customer_contacts
+        const customerService = require('../services/customerService');
+        const recipient = await customerService.getReportRecipientByExternalId(tenantId, quote.customer_id);
+
+        if (!recipient || !recipient.email) {
+            return res.status(400).json({
+                error: `Ingen rapport-mottaker funnet for kunde: ${quote.customer_name}`,
                 customer_id: quote.customer_id
             });
         }
-        
-        console.log(`📧 Found servfixmail email: ${servfixContact.email}`);
+
+        console.log(`📧 Found report recipient email: ${recipient.email}`);
         
         // GENERER PDF FØRST
         console.log(`📧 Generating PDF for email attachment...`);
@@ -443,7 +443,7 @@ router.post('/:quoteId/send-to-customer', async (req, res) => {
             quoteId, 
             tenantId, 
             pdfBuffer,
-            servfixContact.email,
+            recipient.email,
             quote
         );
         

@@ -17,15 +17,16 @@
         <main class="main-content">
             <div class="page-header">
                 <h1>Kundeoversikt</h1>
-                <p>Søk og administrer alle kunder i systemet. Data hentes direkte fra Tripletex.</p>
+                <p>Søk og administrer alle kunder i systemet.</p>
             </div>
             
             <div class="customer-layout">
                 <!-- Venstre sidebar med kundeliste -->
                 <div class="customer-sidebar">
                     <div class="card">
-                        <div class="card-header">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                             <h2>Alle Kunder</h2>
+                            <button type="button" class="btn btn-primary" id="import-btn" onclick="openImportPreview()" style="font-size: 12px; padding: 5px 12px; white-space: nowrap;">Importer fra Tripletex</button>
                         </div>
                         <div class="search-container">
                             <input type="text" id="customer-search" placeholder="Søk etter kundenavn eller kundenummer..." class="search-input">
@@ -172,6 +173,66 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="cancelSaveEquipment()">Avbryt</button>
                 <button type="button" class="btn btn-primary" onclick="executeSaveEquipment()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for redigering av kontaktperson -->
+    <div class="modal-overlay" id="contact-edit-modal">
+        <div class="modal-content" style="max-width: 540px;">
+            <div class="modal-header">
+                <h3 id="contact-edit-title">Rediger kontaktperson</h3>
+                <button type="button" class="close-btn" onclick="closeContactModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="contact-edit-id">
+                <input type="hidden" id="contact-edit-customer-id">
+
+                <div class="edit-form-group">
+                    <label class="edit-form-label">Navn</label>
+                    <input type="text" class="edit-form-input" id="contact-edit-name" placeholder="Fornavn Etternavn">
+                </div>
+                <div class="edit-form-group" style="margin-top: 12px;">
+                    <label class="edit-form-label">E-post</label>
+                    <input type="email" class="edit-form-input" id="contact-edit-email" placeholder="epost@firma.no">
+                </div>
+                <div class="edit-form-row" style="margin-top: 12px;">
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Telefon</label>
+                        <input type="text" class="edit-form-input" id="contact-edit-phone" placeholder="Telefonnummer">
+                    </div>
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Rolle</label>
+                        <input type="text" class="edit-form-input" id="contact-edit-role" placeholder="F.eks. Driftsleder">
+                    </div>
+                </div>
+                <div class="edit-form-group" style="margin-top: 12px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #374151;">
+                        <input type="checkbox" id="contact-edit-report-recipient">
+                        Rapport-mottaker (mottar servicerapporter per e-post)
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeContactModal()">Avbryt</button>
+                <button type="button" class="btn btn-primary" onclick="saveContact()">Lagre</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for kundeimport-preview -->
+    <div class="modal-overlay" id="import-preview-modal">
+        <div class="modal-content" style="max-width: 900px; max-height: 85vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h3 id="import-modal-title">Import fra Tripletex</h3>
+                <button type="button" class="close-btn" onclick="closeImportModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="import-modal-body" style="overflow-y: auto; flex: 1;">
+                <!-- Dynamisk innhold -->
+            </div>
+            <div class="modal-footer" id="import-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeImportModal()">Lukk</button>
+                <button type="button" class="btn btn-primary" id="import-apply-btn" onclick="applySelectedImport()" style="display: none;">Importer valgte</button>
             </div>
         </div>
     </div>

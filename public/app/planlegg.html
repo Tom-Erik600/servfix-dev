@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Air-Tech AS - Planlegg Oppdrag</title>
+    <link rel="stylesheet" href="assets/css/main.css">
+    <link rel="stylesheet" href="assets/css/service.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .emergency-header {
+            background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
+            color: white;
+            padding: 24px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 8px 24px rgba(74, 144, 226, 0.25);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .emergency-icon {
+            font-size: 18px;
+        }
+
+        .search-section {
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+            border: 1px solid rgba(74, 144, 226, 0.1);
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-description {
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .search-input-container {
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 16px 20px;
+            font-size: 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            transition: all 0.2s;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #4A90E2;
+            box-shadow: 0 0 0 4px rgba(74, 144, 226, 0.1);
+            transform: translateY(-1px);
+        }
+
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            margin-top: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+            z-index: 100;
+        }
+
+        .search-results.active {
+            display: block;
+            animation: slideDown 0.2s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .search-result-item {
+            padding: 16px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid #f3f4f6;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .search-result-item:hover {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border-left: 3px solid #4A90E2;
+            padding-left: 17px;
+        }
+
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+
+        /* Customer Info */
+        .customer-info {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
+            display: none;
+            margin-bottom: 16px;
+        }
+
+        .customer-info.active {
+            display: block;
+        }
+
+        .customer-info .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1f2937;
+            margin: 0 0 16px 0;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #4A90E2;
+            display: inline-block;
+        }
+
+        .customer-info-card {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .info-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .info-list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 24px;
+            border-bottom: 1px solid #f1f5f9;
+            transition: background-color 0.2s ease;
+        }
+
+        .info-list-item:hover {
+            background: #f8fafc;
+        }
+
+        .info-list-item:last-child {
+            border-bottom: none;
+        }
+
+        .info-list-label {
+            font-size: 14px;
+            color: #64748b;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .info-list-value {
+            font-size: 15px;
+            color: #1e293b;
+            font-weight: 600;
+            text-align: right;
+            word-break: break-word;
+            max-width: 60%;
+        }
+
+        .icon {
+            width: 16px;
+            height: 16px;
+            opacity: 0.7;
+            flex-shrink: 0;
+        }
+
+        /* Order Details Section */
+        .order-details-section {
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+            border: 1px solid rgba(74, 144, 226, 0.1);
+        }
+
+        .order-details-section .section-title {
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 6px;
+            color: #374151;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #4A90E2;
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+        }
+
+        /* Equipment checkbox list */
+        .equipment-list-container {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .equipment-list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .equipment-list-header span {
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        .add-equipment-btn {
+            padding: 6px 14px;
+            background: #4A90E2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .add-equipment-btn:hover {
+            background: #357ABD;
+        }
+
+        .equipment-list {
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .equipment-list-empty {
+            padding: 20px;
+            text-align: center;
+            color: #9ca3af;
+            font-size: 13px;
+        }
+
+        .equipment-checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border-bottom: 1px solid #f3f4f6;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .equipment-checkbox-item:last-child {
+            border-bottom: none;
+        }
+
+        .equipment-checkbox-item:hover {
+            background: #f0f7ff;
+        }
+
+        .equipment-checkbox-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #4A90E2;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .equipment-checkbox-label {
+            font-size: 14px;
+            color: #1f2937;
+            font-weight: 500;
+            line-height: 1.3;
+        }
+
+        .equipment-checkbox-sublabel {
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .time-option-btn {
+            padding: 8px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 20px;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .time-option-btn.active {
+            border-color: #4A90E2;
+            background: #eff6ff;
+            color: #4A90E2;
+        }
+
+        .create-order-btn {
+            width: 100%;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, #4A90E2, #5ba3f5);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(74, 144, 226, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .create-order-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(74, 144, 226, 0.4);
+        }
+
+        .create-order-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .no-results {
+            padding: 32px 24px;
+            text-align: center;
+            color: #6b7280;
+            font-style: italic;
+        }
+
+        .search-icon {
+            color: #4A90E2;
+        }
+
+        /* Modal styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 4px;
+            line-height: 1;
+        }
+
+        .btn-secondary {
+            padding: 10px 20px;
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            padding: 10px 20px;
+            background: #4A90E2;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-primary:hover {
+            background: #357ABD;
+        }
+
+        .type-selection-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .type-selection-grid button {
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .type-selection-grid button:hover {
+            border-color: #4A90E2;
+            background: #eff6ff;
+            color: #4A90E2;
+        }
+
+        /* Confirm dialog */
+        .confirm-dialog {
+            text-align: center;
+            padding: 8px 0;
+        }
+
+        .confirm-dialog p {
+            font-size: 16px;
+            color: #1f2937;
+            margin: 0 0 24px 0;
+            line-height: 1.5;
+        }
+
+        .confirm-dialog-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .confirm-dialog-buttons button {
+            flex: 1;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* Mobile optimizations */
+        @media (max-width: 640px) {
+            .emergency-header {
+                padding: 20px;
+                gap: 12px;
+            }
+
+            .section-title {
+                font-size: 16px;
+            }
+
+            .search-input {
+                padding: 14px 16px;
+                font-size: 15px;
+            }
+
+            .create-order-btn {
+                padding: 16px 24px;
+                font-size: 15px;
+            }
+        }
+
+        /* Toast styles */
+        #toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1001;
+        }
+
+        .toast {
+            background: #4b5563;
+            color: white;
+            padding: 14px 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            margin-top: 8px;
+            transform: translateX(400px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        .toast-error {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
+
+        .toast-success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .toast-warning {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        }
+    </style>
+</head>
+<body>
+    <div id="toast-container"></div>
+
+    <div id="loading-indicator" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>Laster...</p>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <header class="app-header" id="app-header">
+            <a href="home.html" class="header-nav-button" title="Tilbake til hovedmeny">&#8249;</a>
+            <div class="header-main-content">
+                <div class="logo-circle">
+                    <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="16" cy="16" r="14" stroke="white" stroke-width="2" fill="none"/>
+                        <circle cx="16" cy="16" r="8" stroke="white" stroke-width="2" fill="none"/>
+                        <circle cx="16" cy="16" r="3" fill="white"/>
+                        <path d="M16 2 L16 8" stroke="white" stroke-width="2"/>
+                        <path d="M16 24 L16 30" stroke="white" stroke-width="2"/>
+                        <path d="M30 16 L24 16" stroke="white" stroke-width="2"/>
+                        <path d="M8 16 L2 16" stroke="white" stroke-width="2"/>
+                    </svg>
+                </div>
+                <div class="company-info">
+                    <h1>AIR-TECH AS</h1>
+                    <span class="app-subtitle">Planlegg oppdrag</span>
+                </div>
+            </div>
+            <div class="header-user-info">
+                <span id="technician-initials"></span>
+                <span id="current-date"></span>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="emergency-header">
+                <span class="emergency-icon">&#128197;</span>
+                <div>
+                    <h2 style="margin: 0; font-size: 20px; font-weight: 700;">Planlegg Oppdrag</h2>
+                    <p style="margin: 6px 0 0; opacity: 0.95; font-size: 14px;">Planlegg fremtidige serviceoppdrag</p>
+                </div>
+            </div>
+
+            <div class="search-section">
+                <h3 class="section-title">
+                    <span class="search-icon">&#128269;</span>
+                    Søk etter kunde
+                </h3>
+                <p class="section-description">Søk på kundenavn eller kundenummer for å planlegge et oppdrag</p>
+                <div class="search-input-container">
+                    <input
+                        type="text"
+                        id="customerSearch"
+                        class="search-input"
+                        placeholder="Skriv inn kundenavn eller kundenummer..."
+                        autocomplete="off"
+                    >
+                    <div class="search-results" id="searchResults"></div>
+                </div>
+            </div>
+
+            <div class="customer-info" id="customerInfo">
+                <h3 class="section-title">Kundeinfo</h3>
+                <div class="customer-info-card">
+                    <ul class="info-list">
+                        <li class="info-list-item">
+                            <span class="info-list-label">
+                                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zM18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z"></path>
+                                </svg>
+                                Kundenummer
+                            </span>
+                            <span class="info-list-value" id="customerNumber">-</span>
+                        </li>
+                        <li class="info-list-item">
+                            <span class="info-list-label">
+                                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z" clip-rule="evenodd"></path>
+                                </svg>
+                                Firmanavn
+                            </span>
+                            <span class="info-list-value" id="customerName">-</span>
+                        </li>
+                        <li class="info-list-item">
+                            <span class="info-list-label">
+                                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path>
+                                </svg>
+                                Adresse
+                            </span>
+                            <span class="info-list-value" id="customerAddress">-</span>
+                        </li>
+                        <li class="info-list-item">
+                            <span class="info-list-label">
+                                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path>
+                                </svg>
+                                Telefon
+                            </span>
+                            <span class="info-list-value" id="customerPhone">-</span>
+                        </li>
+                        <li class="info-list-item">
+                            <span class="info-list-label">
+                                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"></path>
+                                </svg>
+                                Kontaktperson
+                            </span>
+                            <span class="info-list-value" id="customerContact">-</span>
+                        </li>
+                        <li class="info-list-item">
+                            <span class="info-list-label">
+                                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"></path>
+                                    <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"></path>
+                                </svg>
+                                E-post
+                            </span>
+                            <span class="info-list-value" id="customerEmail">-</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Oppdragsdetaljer - vises etter kunde er valgt -->
+            <div class="order-details-section" id="orderDetailsSection" style="display: none;">
+                <h3 class="section-title">&#128203; Oppdragsdetaljer</h3>
+
+                <!-- Anleggsvalg (checkbox-liste) -->
+                <div class="form-group">
+                    <label class="form-label">Anlegg (valgfritt)</label>
+                    <div class="equipment-list-container">
+                        <div class="equipment-list-header">
+                            <span id="equipmentCount">Ingen anlegg lastet</span>
+                            <button type="button" id="addEquipmentBtn" class="add-equipment-btn">+ Nytt anlegg</button>
+                        </div>
+                        <div class="equipment-list" id="equipmentList">
+                            <div class="equipment-list-empty">Velg en kunde for å se anlegg</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Kundenotat -->
+                <div class="form-group">
+                    <label class="form-label">Kundenotat</label>
+                    <textarea id="customerNotes" class="form-input" rows="2"
+                              placeholder="Notat om kunden (vises ikke på rapport)..."
+                              style="font-size: 13px;"></textarea>
+                </div>
+
+                <!-- Beskrivelse -->
+                <div class="form-group">
+                    <label class="form-label">Beskrivelse</label>
+                    <input type="text" id="orderDescription" class="form-input"
+                           placeholder="Skriv inn beskrivelse...">
+                </div>
+
+                <!-- Når -->
+                <div class="form-group">
+                    <label class="form-label">Når skal det utføres?</label>
+                    <div class="time-options" id="timeOptions" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+                        <button type="button" class="time-option-btn" data-days="7">Neste uke</button>
+                        <button type="button" class="time-option-btn" data-days="30">Om 1 måned</button>
+                        <button type="button" class="time-option-btn" data-days="90">Om 3 måneder</button>
+                        <button type="button" class="time-option-btn" data-days="180">Om 6 måneder</button>
+                    </div>
+                    <input type="date" id="scheduledDate" class="form-input"
+                           min="" placeholder="Eller velg dato">
+                </div>
+
+                <!-- Opprett-knapp -->
+                <button class="create-order-btn" id="createPlannedOrderBtn" disabled>
+                    &#128197; Planlegg oppdrag
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <!-- Equipment Modal -->
+    <div class="modal-overlay" id="equipmentModal">
+        <div class="modal-content"></div>
+    </div>
+
+    <!-- Confirm Modal (Ja/Nei) -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal-content" style="max-width: 380px;">
+            <div class="modal-body">
+                <div class="confirm-dialog">
+                    <p id="confirmMessage"></p>
+                    <div class="confirm-dialog-buttons">
+                        <button id="confirmNo" class="btn-secondary" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 600;">Nei</button>
+                        <button id="confirmYes" class="btn-primary" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 600;">Ja</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth check først -->
+    <script src="assets/js/auth-check.js"></script>
+    <script src="assets/js/planlegg.js"></script>
+</body>
+</html>

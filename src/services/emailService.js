@@ -1,5 +1,4 @@
 const nodemailer = require('nodemailer');
-const tripletexService = require('./tripletexService');
 const path = require('path');
 const gcs = require('../config/gcs');
 
@@ -55,12 +54,13 @@ class EmailService {
       
       const report = reportResult.rows[0];
       
-      // Hent servfixmail-kontaktens e-post fra Tripletex
-      const servfixContact = await tripletexService.getServfixmailContact(report.customer_id);
-      const customerEmail = servfixContact?.email;
+      // Hent rapport-mottaker fra lokal customer_contacts (via Tripletex external_id)
+      const customerService = require('./customerService');
+      const recipient = await customerService.getReportRecipientByExternalId(tenantId, report.customer_id);
+      const customerEmail = recipient?.email;
 
       if (!customerEmail) {
-          throw new Error('Ingen servfixmail-kontakt funnet for kunde');
+          throw new Error('Ingen rapport-mottaker funnet for kunde');
       }
       
       // Hent from-adresse fra lagrede innstillinger
