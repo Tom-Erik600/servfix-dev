@@ -76,6 +76,8 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Robo
 .order-status-indicator.status-in_progress { background: #ffc107; }
 .order-status-indicator.status-completed { background: #28a745; }
 .order-info { flex: 1; min-width: 0; }
+.order-title { font-weight: 600; font-size: 14px; color: #1f2937; line-height: 1.4; word-break: break-word; }
+.order-subtitle { font-size: 12px; color: #6b7280; line-height: 1.3; margin-top: 2px; }
 .order-customer { font-weight: 600; font-size: 14px; color: #374151; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .order-details { display: flex; gap: 6px; font-size: 12px; color: #6b7280; }
 .order-meta { text-align: right; }
@@ -230,32 +232,31 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Robo
     font-size: 13px;
     color: #212529;
 }
-/* Justeringer for ordrekort - bredere knapp, fet skrift, konsistent tekststørrelse */
 
-/* 1. Åpne ordre knapp skal dekke nesten hele bredden */
+/* Klikkbare lenker i ordrekort (telefon, epost) */
+.info-link {
+    color: #2563eb;
+    text-decoration: none;
+}
+.info-link:hover {
+    text-decoration: underline;
+}
+
+/* Justeringer for ordrekort */
 .order-card-details .action-btn.primary.open-order-btn {
-    width: calc(100% - 8px) !important;
-    margin: 12px 4px 0 4px;
+    width: 100%;
+    margin-top: 12px;
     padding: 12px 20px;
     font-size: 14px;
     font-weight: 600;
 }
 
-/* 2. Fet skrift på alle labels/overskrifter */
 .order-card-details .info-label {
-    font-weight: 600 !important; /* Øker fra 500 til 600 */
-}
-
-.order-card-details .detail-label {
-    font-weight: 600 !important; /* Øker fra standard til 600 */
-    font-size: 12px; /* Beholder samme størrelse som info-label */
-}
-
-/* 3. Beskrivelse får samme skriftstørrelse som andre verdier */
-.order-card-details .detail-item span:not(.detail-label) {
-    font-size: 14px !important; /* Matcher info-value størrelse */
-    color: #212529; /* Matcher info-value farge */
-    font-weight: 400; /* Matcher info-value vekt */
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #9ca3af;
 }
 
 /* KOMPLETT CSS FIX for admin layout - legg til i main.css eller egen fil */

@@ -3,6 +3,8 @@ const db = require('../config/database');
 const path = require('path');
 const fs = require('fs').promises;
 
+const customerService = require('../services/customerService');
+
 const router = express.Router();
 
 // Middleware - sjekk auth
@@ -12,6 +14,72 @@ router.use((req, res, next) => {
   }
   next();
 });
+
+/**
+ * Berik ordrer med kontaktperson fra lokal customer_contacts-tabell.
+ * Prøver først customer_id som lokal ID, deretter som external_id (Tripletex).
+ */
+async function enrichOrdersWithContacts(orders, tenantId) {
+  const pool = await db.getTenantConnection(tenantId);
+
+  // Samle unike customer_ids
+  const customerIds = [...new Set(orders.map(o => o.customer_id).filter(Boolean))];
+  if (customerIds.length === 0) return orders;
+
+  // Hent alle relevante kunder og kontakter i bulk
+  const contactMap = new Map(); // customer_id (fra ordre) -> kontaktinfo
+
+  for (const custId of customerIds) {
+    try {
+      // Prøv direkte lokal ID først
+      let localCustomer = await customerService.getCustomer(tenantId, custId);
+
+      // Hvis ikke funnet, prøv som Tripletex external_id
+      if (!localCustomer) {
+        localCustomer = await customerService.getCustomerByExternalId(tenantId, String(custId));
+      }
+
+      if (localCustomer) {
+        // Hent primær kontaktperson (ikke rapport-mottaker)
+        const contacts = await customerService.getContacts(tenantId, localCustomer.id);
+        const primaryContact = contacts.find(c => !c.is_report_recipient) || contacts[0];
+
+        contactMap.set(String(custId), {
+          contact: primaryContact?.name || null,
+          contactPhone: primaryContact?.phone || null,
+          contactEmail: primaryContact?.email || null,
+          localPhone: localCustomer.phone || null,
+          localEmail: localCustomer.email || null
+        });
+      }
+    } catch (err) {
+      // Ignorer feil per kunde, bruk fallback
+    }
+  }
+
+  // Berik ordrene
+  return orders.map(order => {
+    const enrichment = contactMap.get(String(order.customer_id));
+    if (!enrichment) return order;
+
+    // Parse customer_data hvis nødvendig
+    let customerData = order.customer_data;
+    if (typeof customerData === 'string') {
+      try { customerData = JSON.parse(customerData); } catch (e) { customerData = {}; }
+    }
+    customerData = customerData || {};
+
+    // Berik med lokale kontaktdata (lokalt overstyrer snapshot)
+    if (enrichment.contact) customerData.contact = enrichment.contact;
+    if (enrichment.contactPhone) customerData.contactPhone = enrichment.contactPhone;
+    if (enrichment.contactEmail) customerData.contactEmail = enrichment.contactEmail;
+    // Fyll inn telefon/epost fra lokal kunde hvis mangler
+    if (!customerData.phone && enrichment.localPhone) customerData.phone = enrichment.localPhone;
+    if (!customerData.email && enrichment.localEmail) customerData.email = enrichment.localEmail;
+
+    return { ...order, customer_data: customerData };
+  });
+}
 
 // Hent alle ordrer for pålogget tekniker
 router.get('/', async (req, res) => {
@@ -74,7 +142,9 @@ router.get('/', async (req, res) => {
         };
     }));
 
-    res.json(ordersWithEquipment);
+    // Berik med kontaktpersoner fra lokal DB
+    const enrichedOrders = await enrichOrdersWithContacts(ordersWithEquipment, req.session.tenantId);
+    res.json(enrichedOrders);
   } catch (error) {
     console.error('Error fetching all orders:', error);
     res.status(500).json({ error: 'Server error' });
@@ -131,8 +201,10 @@ router.get('/today', async (req, res) => {
         return order;
     }));
 
-    res.json(ordersWithEquipment);
-    
+    // Berik med kontaktpersoner fra lokal DB
+    const enrichedOrders = await enrichOrdersWithContacts(ordersWithEquipment, req.session.tenantId);
+    res.json(enrichedOrders);
+
   } catch (error) {
     console.error('Error fetching orders:', error);
     res.status(500).json({ error: 'Server error' });
@@ -173,8 +245,11 @@ router.get('/all', async (req, res) => {
     });
     
     console.log(`Found ${ordersWithNumber.length} total orders`);
-    res.json(ordersWithNumber);
-    
+
+    // Berik med kontaktpersoner fra lokal DB
+    const enrichedOrders = await enrichOrdersWithContacts(ordersWithNumber, req.session.tenantId);
+    res.json(enrichedOrders);
+
   } catch (error) {
     console.error('Error fetching all orders:', error);
     res.status(500).json({ error: 'Server error' });

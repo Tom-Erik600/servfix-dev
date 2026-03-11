@@ -365,17 +365,17 @@ function updateCard(type, orders) {
 }
 
 function createOrderCardHTML(order, listType) {
-    const customer = { name: order.customerName || 'Ukjent kunde' };
+    const customerName = order.customerName || 'Ukjent kunde';
     const cardKey = `${listType}-${order.id}`;
     const isExpanded = appState.expandedCardKey === cardKey;
     const derivedStatus = deriveOrderStatus(order);
     const statusMap = {
-        'scheduled': 'Planlagt', 
-        'in_progress': 'Pågår', 
+        'scheduled': 'Planlagt',
+        'in_progress': 'Pågår',
         'completed': 'Fullført',
         'pending': 'Venter'
     };
-    
+
     let timeDisplay = 'Ikke planlagt';
     if (order.scheduledDate) {
         const orderDate = new Date(order.scheduledDate + 'T12:00:00');
@@ -388,16 +388,19 @@ function createOrderCardHTML(order, listType) {
         }
     }
 
+    const description = order.description || 'Ingen beskrivelse';
+    const address = order.customerData?.physicalAddress || '';
+    const contactName = order.customerData?.contact || '';
+    const contactPhone = order.customerData?.contactPhone || order.customerData?.phone || '';
+    const contactEmail = order.customerData?.contactEmail || order.customerData?.email || '';
+
     return `
         <div class="order-card ${isExpanded ? 'expanded' : ''} status-${derivedStatus}" data-card-key="${cardKey}">
             <div class="order-card-header">
                 <div class="order-status-indicator status-${derivedStatus}"></div>
                 <div class="order-info">
-                    <div class="order-customer">${customer.name}</div>
-                    <div class="order-details">
-                        <span>${order.serviceType || 'Service'}</span> • 
-                        <span>${statusMap[derivedStatus] || derivedStatus}</span>
-                    </div>
+                    <div class="order-title">${description}</div>
+                    <div class="order-subtitle">${statusMap[derivedStatus] || derivedStatus}</div>
                 </div>
                 <div class="order-meta">
                     <div class="order-time">${timeDisplay}</div>
@@ -408,30 +411,29 @@ function createOrderCardHTML(order, listType) {
                 <div class="order-card-details">
                     <div class="customer-info-section">
                         <div class="customer-info-grid">
-                            <div class="info-item">
-                                <span class="info-label">Kontaktperson:</span>
-                                <span class="info-value">${order.customerData?.contact || '(Mangler)'}</span>
+                            <div class="info-item full-width">
+                                <span class="info-label">Kunde</span>
+                                <span class="info-value">${customerName}</span>
                             </div>
                             <div class="info-item">
-                                <span class="info-label">Telefon:</span>
-                                <span class="info-value">${order.customerData?.phone || '(Mangler)'}</span>
+                                <span class="info-label">Kontaktperson</span>
+                                <span class="info-value">${contactName || '–'}</span>
                             </div>
                             <div class="info-item">
-                                <span class="info-label">E-post:</span>
-                                <span class="info-value">${order.customerData?.email || '(Mangler)'}</span>
+                                <span class="info-label">Telefon</span>
+                                <span class="info-value">${contactPhone ? `<a href="tel:${contactPhone}" class="info-link">${contactPhone}</a>` : '–'}</span>
                             </div>
                             <div class="info-item full-width">
-                                <span class="info-label">Besøksadresse:</span>
-                                <span class="info-value">${order.customerData?.physicalAddress || '(Mangler)'}</span>
+                                <span class="info-label">E-post</span>
+                                <span class="info-value">${contactEmail ? `<a href="mailto:${contactEmail}" class="info-link">${contactEmail}</a>` : '–'}</span>
+                            </div>
+                            <div class="info-item full-width">
+                                <span class="info-label">Besøksadresse</span>
+                                <span class="info-value">${address || '–'}</span>
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="detail-item">
-                        <span class="detail-label">Beskrivelse:</span>
-                        <span>${order.description || 'Ingen beskrivelse'}</span>
-                    </div>
-                    
+
                     <button class="action-btn primary open-order-btn" data-order-id="${order.id}">
                         Åpne ordre →
                     </button>
