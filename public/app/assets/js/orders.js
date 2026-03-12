@@ -1,13 +1,28 @@
 // air-tech-app/assets/js/orders.js - Tekniker frontend
 
-let pageState = { 
-    order: null, 
-    customer: null, 
-    equipment: [], 
+let pageState = {
+    order: null,
+    customer: null,
+    equipment: [],
     technician: null,
     quotes: [],
     selectedEquipmentIds: [] // For equipment selection
 };
+
+// HMS-innstillinger — lastes ved sideload
+let hmsSettings = { hmsMenuEnabled: true, sjaPerOrderEnabled: true };
+
+async function loadHmsSettings() {
+    try {
+        const res = await fetch('/api/images/settings', { credentials: 'include' });
+        const settings = await res.json();
+        if (settings?.hmsSettings) {
+            hmsSettings = settings.hmsSettings;
+        }
+    } catch (e) {
+        console.warn('Kunne ikke hente HMS-innstillinger, bruker default');
+    }
+}
 
 /**
  * Nullstiller pageState eksplisitt for å unngå at gammel state vises
@@ -100,10 +115,13 @@ function clearAllImageContainers() {
 
 async function initializePage() {
     setLoading(true);
-    
+
     // VIKTIG: Nullstill state FØRST for å unngå gammel cached data
     resetPageState();
-    
+
+    // Last HMS-innstillinger (for SJA-knapp i footer)
+    await loadHmsSettings();
+
     clearAllImageContainers();
     const orderId = new URLSearchParams(window.location.search).get('id');
     if (!orderId) {
@@ -134,6 +152,13 @@ async function initializePage() {
         pageState.order = orderData;
         pageState.customer = orderData.customer_data || {};
         pageState.technician = data.technician || {};
+
+        // ✅ Sikre at technician data er tilgjengelig (fallback hvis API ikke returnerer det)
+        if (!pageState.technician || !pageState.technician.name) {
+            console.warn('⚠️ No technician data in order API response, using fallback');
+            pageState.technician = { name: 'Ukjent tekniker' };
+        }
+
         pageState.quotes = data.quotes || [];
         
         // ✅ KRITISK: Filtrer ut inaktive anlegg EKSPLISITT
@@ -343,8 +368,15 @@ function renderEquipmentList() {
     
     // Legg til "Opprett tilbud" knapp
     equipmentHTML += `<button class="create-quote-btn" data-action="create-quote">+ Opprett tilbud</button>`;
+    if (hmsSettings.sjaPerOrderEnabled !== false) {
+        equipmentHTML += `
+          <button class="sja-inline-btn" data-action="open-sja">
+            <span class="sja-inline-icon">🛡️</span>
+            <span>SJA</span>
+          </button>`;
+    }
     
-    container.innerHTML = `<div class="section-header"><h3>🏭 Anlegg for service</h3></div>` + equipmentHTML;
+    container.innerHTML = `<div class="section-header"><h3>Anlegg for service</h3></div>` + equipmentHTML;
 }
 
 function createEquipmentCard(eq) {
@@ -479,13 +511,14 @@ function renderActionButtons() {
         const readyClass = canComplete ? 'ready' : '';
         
         footer.innerHTML = `
-            <button class="btn-complete-order ${readyClass}" 
-                    onclick="handleCompleteOrder()" 
+            <button class="btn-complete-order ${readyClass}"
+                    onclick="handleCompleteOrder()"
                     ${!canComplete ? 'disabled' : ''}>
                 ${canComplete ? '<span style="font-size: 18px;">✓</span>' : ''}
                 ${buttonText}
             </button>
         `;
+
     }
 }
 
@@ -527,6 +560,14 @@ function setupEventListeners() {
                 break;
             case 'complete-order': handleCompleteOrder(); break;
             case 'create-quote': handleCreateQuote(); break;
+            case 'open-sja': {
+                const orderNumber = pageState.order?.order_number || pageState.order?.id;
+                const customerName = encodeURIComponent(pageState.customer?.name || '');
+                const address = encodeURIComponent(pageState.customer?.physicalAddress || '');
+                const serviceType = encodeURIComponent(pageState.order?.service_type || '');
+                window.location.href = `sja.html?orderId=${pageState.order.id}&orderNumber=${orderNumber}&customerName=${customerName}&address=${address}&serviceType=${serviceType}`;
+                break;
+            }
             // ... andre cases
         }
     });

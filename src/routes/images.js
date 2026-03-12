@@ -123,6 +123,10 @@ function getDefaultSettings(tenantId) {
       copyAdmin: false,
       senderEmail: "post@air-tech.no"
     },
+    hmsSettings: {
+      hmsMenuEnabled: true,
+      sjaPerOrderEnabled: true
+    },
     lastUpdated: new Date().toISOString()
   };
 }
@@ -226,7 +230,14 @@ router.post('/save-settings', async (req, res) => {
         ...settingsUpdate.logo
       };
     }
-    
+
+    if (settingsUpdate.hmsSettings) {
+      updatedSettings.hmsSettings = {
+        ...currentSettings.hmsSettings,
+        ...settingsUpdate.hmsSettings
+      };
+    }
+
     // Save to GCS
     const saved = await saveTenantSettings(tenantId, updatedSettings);
     

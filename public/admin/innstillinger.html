@@ -145,6 +145,40 @@
                 </div>
             </div>
 
+            <!-- HMS-innstillinger -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>🛡️ HMS-modul</h2>
+                </div>
+                <div class="card-body">
+                    <p style="color: var(--text-light); margin-bottom: 16px;">Konfigurer HMS-funksjonalitet for tekniker-appen.</p>
+
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <div class="setting-title">📱 HMS-meny i mobilappen</div>
+                                <div class="setting-description">Viser eller skjuler HMS-knappen i navigasjonsmenyen</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="hms-menu-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <div class="setting-title">📋 SJA-knapp på ordresiden</div>
+                                <div class="setting-description">Viser eller skjuler «SJA»-knappen på hver enkelt ordre</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="sja-order-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Tilbud-innstillinger -->
             <div class="card">
                 <div class="card-header">
@@ -319,6 +353,14 @@
                     includeForbeholdToggle.checked = true;
                 }
                 
+                // HMS settings
+                if (currentSettings.hmsSettings) {
+                    document.getElementById('hms-menu-toggle').checked =
+                        currentSettings.hmsSettings.hmsMenuEnabled !== false;
+                    document.getElementById('sja-order-toggle').checked =
+                        currentSettings.hmsSettings.sjaPerOrderEnabled !== false;
+                }
+
                 // Logo
                 if (currentSettings.logo?.url) {
                     currentLogoUrl = currentSettings.logo.url;
@@ -568,6 +610,10 @@ async function saveCompanyInfo() {
                         quoteSettings: {
                             forbeholdText: forbeholdTextInput.value.trim(),
                             includeForbehold: includeForbeholdToggle.checked
+                        },
+                        hmsSettings: {
+                            hmsMenuEnabled: document.getElementById('hms-menu-toggle').checked,
+                            sjaPerOrderEnabled: document.getElementById('sja-order-toggle').checked
                         }
                     };
                     

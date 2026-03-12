@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ROS-analyser</title>
+  <link rel="stylesheet" href="assets/css/main.css">
+  <style>
+    .ros-container { padding: 16px; }
+    .ros-card {
+      background: white; border-radius: 12px; padding: 16px;
+      margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      border-left: 4px solid #EA580C; cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .ros-card:active { transform: scale(0.98); }
+    .ros-card h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; color: #1B2A4A; }
+    .ros-card .ros-meta { font-size: 12px; color: #94A3B8; }
+    .ros-card .ros-type { font-size: 13px; color: #EA580C; font-weight: 500; margin-bottom: 4px; }
+    .ros-card .ros-risk-badge {
+      display: inline-block; font-size: 11px; font-weight: 600;
+      padding: 2px 8px; border-radius: 10px; margin-top: 6px;
+    }
+    .empty-state { text-align: center; padding: 40px 20px; color: #94A3B8; }
+
+    /* Bunnark */
+    .ros-view-modal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5); z-index: 1000;
+      align-items: flex-end; justify-content: center;
+    }
+    .ros-view-modal.open { display: flex; }
+    .ros-view-sheet {
+      background: white; border-radius: 16px 16px 0 0;
+      width: 100%; max-width: 480px; max-height: 88vh;
+      overflow-y: auto; padding: 20px 16px 32px;
+    }
+    .ros-view-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 4px;
+    }
+    .ros-view-header h3 { font-size: 17px; font-weight: 700; color: #1B2A4A; margin: 0; flex: 1; padding-right: 12px; }
+    .ros-view-close {
+      background: none; border: none; font-size: 24px;
+      cursor: pointer; color: #64748B; line-height: 1; flex-shrink: 0;
+    }
+    .ros-view-type { font-size: 13px; color: #EA580C; font-weight: 600; margin-bottom: 16px; }
+
+    .ros-section-title {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #0E9CB5; margin: 18px 0 8px;
+      border-bottom: 1px solid #E2E8F0; padding-bottom: 4px;
+    }
+    .ros-view-field { margin-bottom: 10px; }
+    .ros-view-field label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.05em; color: #94A3B8; display: block; margin-bottom: 3px;
+    }
+    .ros-view-field p {
+      font-size: 14px; color: #1E293B; line-height: 1.5;
+      background: #F4F7FA; border-radius: 8px; padding: 8px 10px;
+      white-space: pre-wrap; margin: 0;
+    }
+    .ros-risk-score-box {
+      border-radius: 10px; padding: 12px 14px; margin: 10px 0;
+      font-size: 16px; font-weight: 700; text-align: center;
+    }
+    .ros-meta-row {
+      font-size: 12px; color: #94A3B8; margin-top: 16px;
+      padding-top: 12px; border-top: 1px solid #E2E8F0;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header" id="app-header"></header>
+    <main class="main-content">
+      <div class="ros-container">
+        <div id="ros-list"><p style="text-align:center;color:#94A3B8;padding:40px 0;">Laster...</p></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Visningsbunnark -->
+  <div class="ros-view-modal" id="ros-view-modal">
+    <div class="ros-view-sheet">
+      <div class="ros-view-header">
+        <h3 id="ros-view-title"></h3>
+        <button class="ros-view-close" onclick="closeRosView()">×</button>
+      </div>
+      <div class="ros-view-type" id="ros-view-type"></div>
+      <div id="ros-view-content"></div>
+    </div>
+  </div>
+
+  <script src="assets/js/auth-check.js"></script>
+  <script src="assets/js/header.js"></script>
+  <script>
+    let _rosList = [];
+
+    function getRiskStyle(score) {
+      if (!score) return { bg: '#F4F7FA', border: '#E2E8F0', color: '#94A3B8', label: 'Ikke beregnet' };
+      if (score <= 4)  return { bg: '#F0FDF4', border: '#BBF7D0', color: '#16A34A', label: 'Lav risiko' };
+      if (score <= 9)  return { bg: '#FEFCE8', border: '#FDE68A', color: '#CA8A04', label: 'Middels risiko' };
+      if (score <= 14) return { bg: '#FFF7ED', border: '#FED7AA', color: '#EA580C', label: 'Høy risiko' };
+      return { bg: '#FEF2F2', border: '#FECACA', color: '#DC2626', label: 'Svært høy risiko' };
+    }
+
+    function escHtml(str) {
+      if (!str) return '—';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (window.authManager) await window.authManager.waitForInitialization();
+      const user = window.authManager?.getCurrentUser();
+      if (user?.technician) {
+        await renderAppHeader({
+          backUrl: 'hms.html',
+          subtitle: 'ROS-analyser',
+          technician: user.technician
+        });
+      }
+
+      try {
+        const res = await fetch('/api/hms/ros', { credentials: 'include' });
+        _rosList = await res.json();
+        const container = document.getElementById('ros-list');
+
+        if (!Array.isArray(_rosList) || !_rosList.length) {
+          container.innerHTML = '<div class="empty-state">Ingen ROS-analyser er opprettet ennå.</div>';
+          return;
+        }
+
+        container.innerHTML = _rosList.map(ros => {
+          const fd = ros.form_data || {};
+          const risk = getRiskStyle(fd.risk_score);
+          return `
+            <div class="ros-card" onclick="openRosView(${ros.id})">
+              <div class="ros-type">${escHtml(ros.project_type) || 'Generell'}</div>
+              <h3>${escHtml(ros.title)}</h3>
+              ${fd.risk_score ? `
+                <span class="ros-risk-badge" style="background:${risk.bg};color:${risk.color};border:1px solid ${risk.border};">
+                  RV ${fd.risk_score} — ${risk.label}
+                </span>` : ''}
+              <div class="ros-meta" style="margin-top:6px;">
+                Opprettet: ${new Date(ros.created_at).toLocaleDateString('no-NO')} · av ${escHtml(ros.created_by)}
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        document.getElementById('ros-list').innerHTML =
+          '<div class="empty-state">Kunne ikke laste ROS-analyser.</div>';
+      }
+    });
+
+    function openRosView(rosId) {
+      const ros = _rosList.find(r => r.id === rosId);
+      if (!ros) return;
+      const fd = ros.form_data || {};
+      const risk = getRiskStyle(fd.risk_score);
+
+      document.getElementById('ros-view-title').textContent = ros.title;
+      document.getElementById('ros-view-type').textContent = ros.project_type || 'Generell';
+
+      const field = (label, val) => val && val !== '—' ? `
+        <div class="ros-view-field">
+          <label>${label}</label>
+          <p>${escHtml(val)}</p>
+        </div>` : '';
+
+      document.getElementById('ros-view-content').innerHTML = `
+        ${fd.risk_score ? `
+          <div class="ros-risk-score-box" style="background:${risk.bg};border:1.5px solid ${risk.border};color:${risk.color};">
+            Risikoverdi: ${fd.risk_score} — ${risk.label}
+            ${fd.s && fd.k ? `<div style="font-size:12px;font-weight:500;margin-top:2px;">(S=${fd.s} × K=${fd.k})</div>` : ''}
+          </div>` : ''}
+
+        <div class="ros-section-title">Risikovurdering</div>
+        ${field('Aktuelle problemstillinger', fd.problems)}
+        ${field('Mulig risiko', fd.risks)}
+        ${field('Antatt konsekvens', fd.consequence)}
+
+        ${fd.measures || fd.executionMeasures ? `
+          <div class="ros-section-title">Tiltak</div>
+          ${field('Tiltak i prosjekteringsfasen', fd.measures)}
+          ${field('Tiltak i utførelsesfasen', fd.executionMeasures)}
+        ` : ''}
+
+        ${fd.responsible ? `
+          <div class="ros-section-title">Ansvarlig</div>
+          ${field('Ansvarlig', fd.responsible)}
+        ` : ''}
+
+        <div class="ros-meta-row">
+          Opprettet: ${new Date(ros.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric' })}
+          · av ${escHtml(ros.created_by)}
+        </div>
+      `;
+
+      document.getElementById('ros-view-modal').classList.add('open');
+    }
+
+    function closeRosView() {
+      document.getElementById('ros-view-modal').classList.remove('open');
+    }
+  </script>
+</body>
+</html>

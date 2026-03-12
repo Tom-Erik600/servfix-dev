@@ -439,9 +439,25 @@
                         <path d="M9 18l6-6-6-6"/>
                     </svg>
                 </a>
+
+                <!-- HMS-meny — vises kun hvis hms_menu_enabled === true -->
+                <a href="hms.html" class="menu-card" id="hms-menu-card" style="display:none; border-left-color: #0E9CB5;">
+                    <div class="menu-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                    </div>
+                    <div class="menu-content">
+                        <h2 class="menu-title">HMS</h2>
+                        <p class="menu-description">Sikker Jobb Analyse og Risikovurdering</p>
+                    </div>
+                    <svg class="menu-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 18l6-6-6-6"/>
+                    </svg>
+                </a>
             </div>
         </main>
-        
+
         <footer class="app-footer">
             <p>Leaptek AS © 2025</p>
         </footer>
@@ -474,6 +490,20 @@
             showDate: true
         });
     });
+</script>
+<script>
+  // Vis HMS-knapp basert på innstillinger
+  (async () => {
+    try {
+      const res = await fetch('/api/images/settings', { credentials: 'include' });
+      const settings = await res.json();
+      if (settings?.hmsSettings?.hmsMenuEnabled !== false) {
+        document.getElementById('hms-menu-card').style.display = '';
+      }
+    } catch (e) {
+      document.getElementById('hms-menu-card').style.display = '';
+    }
+  })();
 </script>
 </body>
 </html>

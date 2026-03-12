@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Sikker Jobb Analyse</title>
+  <link rel="stylesheet" href="assets/css/main.css">
+  <style>
+    .sja-form { padding: 16px; }
+    .sja-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+    @media (max-width: 500px) { .sja-grid { grid-template-columns: 1fr; } }
+    .sja-grid .full { grid-column: 1 / -1; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label {
+      display: block; font-weight: 600; font-size: 13px;
+      color: #1B2A4A; margin-bottom: 5px;
+    }
+    .form-group textarea, .form-group input {
+      width: 100%; padding: 10px 12px; border: 1.5px solid #D1D5DB;
+      border-radius: 8px; font-size: 14px; font-family: inherit;
+      box-sizing: border-box; transition: border-color 0.2s; background: white;
+    }
+    .form-group textarea { min-height: 90px; resize: vertical; }
+    .form-group textarea:focus, .form-group input:focus {
+      outline: none; border-color: #0E9CB5;
+      box-shadow: 0 0 0 3px rgba(14, 156, 181, 0.1);
+    }
+    .form-group input[readonly] {
+      background: #F4F7FA; color: #64748B; cursor: default;
+    }
+    .order-badge {
+      background: #E8F6FA; border: 1px solid #0E9CB5;
+      border-radius: 8px; padding: 10px 14px; margin-bottom: 16px;
+      font-size: 13px; color: #0E9CB5; font-weight: 600;
+    }
+    .section-title {
+      font-size: 12px; font-weight: 700; color: #94A3B8;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      margin: 18px 0 10px; border-bottom: 1px solid #E2E8F0; padding-bottom: 4px;
+    }
+    .btn-submit {
+      width: 100%; padding: 14px; background: #0E9CB5; color: white;
+      border: none; border-radius: 10px; font-size: 16px; font-weight: 600;
+      cursor: pointer; margin-top: 10px;
+    }
+    .btn-submit:disabled { background: #94A3B8; cursor: not-allowed; }
+    .required { color: #EA580C; }
+
+    .existing-sja-card {
+      background: white; border: 1.5px solid #E2E8F0;
+      border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .existing-sja-card:hover { border-color: #0E9CB5; box-shadow: 0 2px 8px rgba(14,156,181,0.12); }
+    .existing-sja-card .sja-card-top {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;
+    }
+    .existing-sja-card .sja-card-date { font-size: 12px; color: #64748B; }
+    .existing-sja-card .sja-card-desc {
+      font-size: 13px; color: #1E293B; font-weight: 500;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .existing-sja-card .sja-card-status {
+      font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+    }
+    .existing-sja-card .sja-card-status.completed { background: #F0FDF4; color: #16A34A; }
+    .existing-sja-card .sja-card-status.draft { background: #F4F7FA; color: #64748B; }
+
+    .sja-view-modal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5); z-index: 1000;
+      align-items: flex-end; justify-content: center;
+    }
+    .sja-view-modal.open { display: flex; }
+    .sja-view-sheet {
+      background: white; border-radius: 16px 16px 0 0;
+      width: 100%; max-width: 480px; max-height: 85vh;
+      overflow-y: auto; padding: 20px 16px 32px;
+    }
+    .sja-view-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px;
+    }
+    .sja-view-sheet h3 { font-size: 16px; font-weight: 700; color: #1B2A4A; margin: 0; }
+    .sja-view-close {
+      background: none; border: none;
+      font-size: 24px; cursor: pointer; color: #64748B; line-height: 1;
+    }
+    .btn-delete-sja {
+      width: 100%; padding: 12px; margin-top: 20px;
+      background: #FEF2F2; color: #DC2626; border: 1.5px solid #FECACA;
+      border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    .sja-view-field { margin-bottom: 12px; }
+    .sja-view-field label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.05em; color: #94A3B8; display: block; margin-bottom: 3px;
+    }
+    .sja-view-field p {
+      font-size: 14px; color: #1E293B; line-height: 1.5;
+      background: #F4F7FA; border-radius: 8px; padding: 8px 10px; white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header" id="app-header"></header>
+    <main class="main-content">
+      <div class="sja-form">
+        <a id="order-badge" style="display:none; text-decoration:none; cursor:pointer;"
+           class="order-badge" href="#"></a>
+
+        <!-- Eksisterende SJA — vises hvis det finnes tidligere analyser -->
+        <div id="existing-sja-section" style="display:none; margin-bottom: 20px;">
+          <div class="section-title">Tidligere SJA</div>
+          <div id="existing-sja-list"></div>
+          <div style="margin: 14px 0 6px;">
+            <button type="button" id="toggle-new-sja-btn" onclick="toggleNewSjaForm()"
+              style="background:none; border: 1.5px solid #0E9CB5; color: #0E9CB5;
+                     border-radius: 8px; padding: 10px 16px; font-size: 13px;
+                     font-weight: 600; cursor: pointer; width: 100%;">
+              + Opprett ny SJA
+            </button>
+          </div>
+          <hr style="border: none; border-top: 1px solid #E2E8F0; margin-bottom: 16px;">
+        </div>
+
+        <!-- Selve skjemaet -->
+        <div id="new-sja-form-wrapper">
+          <form id="sja-form">
+            <div class="section-title">Oppdragsinformasjon (auto-utfylt)</div>
+            <div class="sja-grid">
+              <div class="form-group">
+                <label>Kunde</label>
+                <input type="text" id="sja-customer" readonly>
+              </div>
+              <div class="form-group">
+                <label>Ordrenummer</label>
+                <input type="text" id="sja-order-number" readonly>
+              </div>
+              <div class="form-group">
+                <label>Arbeidssted / adresse</label>
+                <input type="text" id="sja-location" placeholder="Adressen hentes automatisk">
+              </div>
+              <div class="form-group">
+                <label>Servicetype</label>
+                <input type="text" id="sja-service-type" readonly>
+              </div>
+              <div class="form-group">
+                <label>Dato</label>
+                <input type="text" id="sja-date" readonly>
+              </div>
+              <div class="form-group">
+                <label>Tekniker</label>
+                <input type="text" id="sja-technician" readonly>
+              </div>
+            </div>
+
+            <div class="section-title">Risikovurdering <span class="required">*</span></div>
+            <div class="sja-grid">
+              <div class="form-group full">
+                <label>Beskrivelse av arbeidsoperasjon <span class="required">*</span></label>
+                <textarea id="sja-job-description" placeholder="Hva skal utføres?" required></textarea>
+              </div>
+              <div class="form-group">
+                <label>Identifiserte risikoer <span class="required">*</span></label>
+                <textarea id="sja-risks" placeholder="Hva kan gå galt? (Fall, strøm, tunge løft...)" required></textarea>
+              </div>
+              <div class="form-group">
+                <label>Tiltak / vernetiltak <span class="required">*</span></label>
+                <textarea id="sja-measures" placeholder="Hvilke tiltak er iverksatt?" required></textarea>
+              </div>
+            </div>
+
+            <div class="section-title">Godkjenning</div>
+            <div class="sja-grid">
+              <div class="form-group">
+                <label>Godkjent av</label>
+                <input type="text" id="sja-approved-by" placeholder="Navn">
+              </div>
+            </div>
+
+            <button type="submit" class="btn-submit" id="sja-submit">Lagre SJA</button>
+          </form>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div id="toast-container"></div>
+
+  <!-- Visningsmodal for eksisterende SJA -->
+  <div class="sja-view-modal" id="sja-view-modal">
+    <div class="sja-view-sheet">
+      <div class="sja-view-header">
+        <h3>Sikker Jobb Analyse</h3>
+        <button class="sja-view-close" onclick="closeSjaView()">×</button>
+      </div>
+      <div id="sja-view-content"></div>
+      <button class="btn-delete-sja" id="sja-delete-btn" onclick="deleteCurrentSja()">Slett denne SJA</button>
+    </div>
+  </div>
+
+  <script src="assets/js/auth-check.js"></script>
+  <script src="assets/js/header.js"></script>
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderId = urlParams.get('orderId');
+    const orderNumber = urlParams.get('orderNumber');
+    const customerName = urlParams.get('customerName');
+    const address = urlParams.get('address');
+    const serviceType = urlParams.get('serviceType');
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (window.authManager) await window.authManager.waitForInitialization();
+      const user = window.authManager?.getCurrentUser();
+
+      if (user?.technician) {
+        await renderAppHeader({
+          backUrl: orderId ? `orders.html?id=${orderId}` : 'hms.html',
+          subtitle: 'Sikker Jobb Analyse',
+          technician: user.technician
+        });
+        document.getElementById('sja-technician').value =
+          user.technician.name || user.technician.initials || '';
+      }
+
+      // Gjør felt redigerbare hvis frittstående SJA (uten orderId)
+      if (!orderId) {
+        document.getElementById('sja-customer').removeAttribute('readonly');
+        document.getElementById('sja-customer').placeholder = 'Kundenavn';
+        document.getElementById('sja-order-number').removeAttribute('readonly');
+        document.getElementById('sja-order-number').placeholder = 'Ordrenummer (valgfritt)';
+        document.getElementById('sja-service-type').removeAttribute('readonly');
+        document.getElementById('sja-service-type').placeholder = 'Eks: Generell service';
+        document.getElementById('sja-location').placeholder = 'Skriv inn arbeidssted';
+      }
+
+      // Auto-utfyll fra URL-parametere
+      if (orderId && orderNumber) {
+        const badge = document.getElementById('order-badge');
+        badge.textContent = `← Ordre #${orderNumber}`;
+        badge.href = `orders.html?id=${orderId}`;
+        badge.style.display = 'block';
+        document.getElementById('sja-order-number').value = orderNumber;
+      }
+      if (customerName) document.getElementById('sja-customer').value = decodeURIComponent(customerName);
+      if (address) document.getElementById('sja-location').value = decodeURIComponent(address);
+      if (serviceType) document.getElementById('sja-service-type').value = decodeURIComponent(serviceType);
+
+      document.getElementById('sja-date').value = new Date().toLocaleDateString('no-NO', {
+        day: 'numeric', month: 'long', year: 'numeric'
+      });
+
+      // Last eksisterende SJA etter at auth og auto-utfylling er ferdig
+      await loadExistingSja();
+    });
+
+    document.getElementById('sja-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('sja-submit');
+      btn.disabled = true;
+      btn.textContent = 'Lagrer...';
+
+      const payload = {
+        order_id: orderId || null,   // orders.id er VARCHAR — ikke parseInt()
+        job_description: document.getElementById('sja-job-description').value,
+        location: document.getElementById('sja-location').value,
+        identified_risks: document.getElementById('sja-risks').value,
+        safety_measures: document.getElementById('sja-measures').value,
+        approved_by: document.getElementById('sja-approved-by').value,
+        status: 'completed'
+      };
+
+      try {
+        const res = await fetch('/api/hms/sja', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Lagring feilet');
+        setTimeout(() => {
+          window.location.href = orderId ? `orders.html?id=${orderId}` : 'hms.html';
+        }, 600);
+      } catch (err) {
+        console.error(err);
+        btn.disabled = false;
+        btn.textContent = 'Lagre SJA';
+        alert('Kunne ikke lagre SJA. Prøv igjen.');
+      }
+    });
+
+    async function loadExistingSja() {
+      try {
+        const url = orderId
+          ? `/api/hms/sja/order/${orderId}`
+          : `/api/hms/sja`;
+
+        const res = await fetch(url, { credentials: 'include' });
+        if (!res.ok) return;
+        let list = await res.json();
+
+        // Frittstående: vis kun SJA uten ordre
+        if (!orderId) {
+          list = list.filter(s => !s.order_id).slice(0, 5);
+        }
+
+        if (!list.length) {
+          document.getElementById('existing-sja-section').style.display = 'none';
+          document.getElementById('new-sja-form-wrapper').style.display = 'block';
+          return;
+        }
+
+        document.getElementById('existing-sja-section').style.display = 'block';
+        document.getElementById('new-sja-form-wrapper').style.display = 'none';
+
+        const container = document.getElementById('existing-sja-list');
+        container.innerHTML = list.map(sja => `
+          <div class="existing-sja-card" onclick="openSjaView(${sja.id})">
+            <div class="sja-card-top">
+              <span class="sja-card-date">
+                ${new Date(sja.created_at).toLocaleDateString('no-NO', {
+                  day: 'numeric', month: 'short', year: 'numeric'
+                })}
+              </span>
+              <span class="sja-card-status ${sja.status}">
+                ${sja.status === 'completed' ? 'Fullført' : 'Utkast'}
+              </span>
+            </div>
+            <div class="sja-card-desc">
+              ${sja.job_description
+                ? sja.job_description.substring(0, 80) + (sja.job_description.length > 80 ? '...' : '')
+                : 'Ingen beskrivelse'}
+            </div>
+            ${sja.location
+              ? `<div style="font-size:11px; color:#94A3B8; margin-top:2px;">📍 ${sja.location}</div>`
+              : ''}
+          </div>
+        `).join('');
+
+        window._existingSjaList = list;
+      } catch (err) {
+        console.warn('Kunne ikke laste eksisterende SJA:', err);
+      }
+    }
+
+    function toggleNewSjaForm() {
+      const wrapper = document.getElementById('new-sja-form-wrapper');
+      const btn = document.getElementById('toggle-new-sja-btn');
+      const isHidden = wrapper.style.display === 'none';
+      wrapper.style.display = isHidden ? 'block' : 'none';
+      btn.textContent = isHidden ? '− Skjul skjema' : '+ Opprett ny SJA';
+    }
+
+    let _currentSjaId = null;
+
+    function openSjaView(sjaId) {
+      const sja = (window._existingSjaList || []).find(s => s.id === sjaId);
+      if (!sja) return;
+      _currentSjaId = sjaId;
+
+      const e = (str) => str
+        ? String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        : '—';
+
+      document.getElementById('sja-view-content').innerHTML = `
+        ${sja.order_number ? `
+        <div class="sja-view-field">
+          <label>Tilknyttet ordre</label>
+          <p>${e(sja.order_number)}</p>
+        </div>` : ''}
+        <div class="sja-view-field">
+          <label>Dato</label>
+          <p>${new Date(sja.created_at).toLocaleDateString('no-NO', {
+            day: 'numeric', month: 'long', year: 'numeric'
+          })}</p>
+        </div>
+        <div class="sja-view-field">
+          <label>Arbeidssted / adresse</label>
+          <p>${e(sja.location)}</p>
+        </div>
+        <div class="sja-view-field">
+          <label>Beskrivelse av arbeidsoperasjon</label>
+          <p>${e(sja.job_description)}</p>
+        </div>
+        <div class="sja-view-field">
+          <label>Identifiserte risikoer</label>
+          <p>${e(sja.identified_risks)}</p>
+        </div>
+        <div class="sja-view-field">
+          <label>Tiltak / vernetiltak</label>
+          <p>${e(sja.safety_measures)}</p>
+        </div>
+        <div class="sja-view-field">
+          <label>Godkjent av</label>
+          <p>${e(sja.approved_by)}</p>
+        </div>
+      `;
+
+      document.getElementById('sja-view-modal').classList.add('open');
+    }
+
+    function closeSjaView() {
+      document.getElementById('sja-view-modal').classList.remove('open');
+      _currentSjaId = null;
+    }
+
+    async function deleteCurrentSja() {
+      if (!_currentSjaId) return;
+      if (!confirm('Er du sikker på at du vil slette denne SJA? Dette kan ikke angres.')) return;
+      try {
+        const res = await fetch(`/api/hms/sja/${_currentSjaId}`, {
+          method: 'DELETE', credentials: 'include'
+        });
+        if (!res.ok) throw new Error();
+        closeSjaView();
+        await loadExistingSja();
+      } catch {
+        alert('Kunne ikke slette SJA. Prøv igjen.');
+      }
+    }
+  </script>
+</body>
+</html>

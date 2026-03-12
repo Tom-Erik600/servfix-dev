@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>HMS</title>
+  <link rel="stylesheet" href="assets/css/main.css">
+  <style>
+    .hms-container { padding: 16px; max-width: 600px; margin: 0 auto; }
+    .hms-card {
+      display: flex; align-items: center; gap: 16px;
+      background: white; border-radius: 12px; padding: 20px;
+      margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      border: none; width: 100%; text-align: left; cursor: pointer;
+      text-decoration: none; color: inherit;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .hms-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+    .hms-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; flex-shrink: 0;
+    }
+    .hms-icon.teal { background: #E8F6FA; }
+    .hms-icon.orange { background: #FFF7ED; }
+    .hms-card-content h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; color: #1B2A4A; }
+    .hms-card-content p { margin: 0; font-size: 13px; color: #64748B; }
+    .hms-arrow { margin-left: auto; color: #94A3B8; font-size: 20px; }
+    .page-subtitle { color: #64748B; font-size: 14px; margin: 0 0 20px; }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header" id="app-header"></header>
+    <main class="main-content">
+      <div class="hms-container">
+        <p class="page-subtitle">Velg type HMS-analyse</p>
+
+        <a href="sja.html" class="hms-card">
+          <div class="hms-icon teal">🛡️</div>
+          <div class="hms-card-content">
+            <h3>Sikker Jobb Analyse (SJA)</h3>
+            <p>Risikovurdering før arbeidet starter</p>
+          </div>
+          <span class="hms-arrow">›</span>
+        </a>
+
+        <a href="ros.html" class="hms-card">
+          <div class="hms-icon orange">⚠️</div>
+          <div class="hms-card-content">
+            <h3>Risiko- og Sårbarhetsanalyse (ROS)</h3>
+            <p>Les overordnede risikoanalyser</p>
+          </div>
+          <span class="hms-arrow">›</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script src="assets/js/auth-check.js"></script>
+  <script src="assets/js/header.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (window.authManager) await window.authManager.waitForInitialization();
+      const user = window.authManager?.getCurrentUser();
+      if (user?.technician) {
+        await renderAppHeader({
+          backUrl: 'home.html',
+          subtitle: 'HMS',
+          technician: user.technician
+        });
+      }
+    });
+  </script>
+</body>
+</html>

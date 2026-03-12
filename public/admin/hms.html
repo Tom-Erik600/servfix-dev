@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HMS — ServFix Admin</title>
+  <link rel="stylesheet" href="/admin/assets/css/admin.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    .hms-layout { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .page-header h1 { font-size: 22px; font-weight: 700; color: #1B2A4A; margin: 0; }
+
+    /* Faner */
+    .tab-bar { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 2px solid #E2E8F0; }
+    .tab-btn {
+      padding: 10px 20px; border: none; background: none; font-size: 14px;
+      font-weight: 600; color: #64748B; cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;
+    }
+    .tab-btn.active { color: #0E9CB5; border-bottom-color: #0E9CB5; }
+    .tab-btn:hover:not(.active) { color: #1B2A4A; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Knapper */
+    .btn-new { background: #0E9CB5; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .btn-new:hover { background: #0b87a0; }
+
+    /* Tabell */
+    .hms-table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .hms-table th { background: #F4F7FA; padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.04em; }
+    .hms-table td { padding: 14px 16px; font-size: 14px; color: #1E293B; border-top: 1px solid #F1F5F9; vertical-align: top; }
+    .hms-table tr:hover td { background: #F8FAFC; cursor: pointer; }
+    .type-badge { background: #FFF7ED; color: #EA580C; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
+    .status-completed { background: #F0FDF4; color: #16A34A; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
+    .status-draft { background: #F4F7FA; color: #64748B; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
+    .btn-edit { background: #EEF2FF; color: #6366F1; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; margin-right: 6px; }
+    .btn-delete { background: #FEF2F2; color: #DC2626; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .btn-view { background: #E8F6FA; color: #0E9CB5; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .empty-state { text-align: center; padding: 48px; color: #94A3B8; }
+    .filter-bar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .filter-bar input, .filter-bar select {
+      padding: 8px 12px; border: 1.5px solid #D1D5DB; border-radius: 8px;
+      font-size: 13px; font-family: inherit; background: white;
+    }
+    .filter-bar input { flex: 1; min-width: 200px; }
+    .order-link { color: #0E9CB5; font-weight: 600; text-decoration: none; }
+    .order-link:hover { text-decoration: underline; }
+
+    /* Modaler */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; opacity: 1; visibility: visible; }
+    .modal-overlay.open { display: flex; }
+    .modal-box { background: white; border-radius: 16px; width: 92%; max-width: 700px; max-height: 90vh; overflow-y: auto; padding: 28px; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .modal-header h2 { font-size: 18px; font-weight: 700; color: #1B2A4A; margin: 0; }
+    .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #64748B; }
+
+    /* SJA detalj */
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .detail-grid .full { grid-column: 1 / -1; }
+    .detail-box { background: #F4F7FA; border-radius: 10px; padding: 14px; }
+    .detail-box label { display: block; font-size: 11px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .detail-box p { margin: 0; font-size: 14px; color: #1E293B; line-height: 1.5; white-space: pre-wrap; }
+    .detail-box.highlight { background: #E8F6FA; border: 1px solid #0E9CB5; }
+
+    /* ROS form */
+    .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+    .modal-grid .full { grid-column: 1 / -1; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; color: #1B2A4A; margin-bottom: 5px; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; padding: 10px 12px; border: 1.5px solid #D1D5DB;
+      border-radius: 8px; font-size: 14px; font-family: inherit; box-sizing: border-box;
+    }
+    .form-group textarea { min-height: 90px; resize: vertical; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      outline: none; border-color: #0E9CB5; box-shadow: 0 0 0 3px rgba(14,156,181,0.1);
+    }
+    .section-title { font-size: 11px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; margin: 20px 0 10px; border-bottom: 1px solid #E2E8F0; padding-bottom: 4px; }
+    .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid #E2E8F0; }
+    .btn-cancel { background: #F4F7FA; color: #64748B; border: none; padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .btn-save { background: #0E9CB5; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .required { color: #EA580C; }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <header class="app-header">
+      <!-- Content loaded dynamically by main.js -->
+    </header>
+    <main class="main-content">
+      <div class="hms-layout">
+
+        <div class="tab-bar">
+          <button class="tab-btn active" onclick="switchTab('sja')">🛡️ SJA — oversikt</button>
+          <button class="tab-btn" onclick="switchTab('ros')">⚠️ ROS-analyser</button>
+        </div>
+
+        <!-- ─── SJA-FANE ─── -->
+        <div class="tab-panel active" id="tab-sja">
+          <div class="page-header">
+            <h1>Sikker Jobb Analyse — innkommende</h1>
+          </div>
+          <div class="filter-bar">
+            <input type="text" id="sja-search" placeholder="Søk ordre, tekniker, adresse..." oninput="filterSja()">
+            <select id="sja-filter-status" onchange="filterSja()">
+              <option value="">Alle statuser</option>
+              <option value="completed">Fullført</option>
+              <option value="draft">Utkast</option>
+            </select>
+          </div>
+          <div id="sja-container"><p class="empty-state">Laster...</p></div>
+        </div>
+
+        <!-- ─── ROS-FANE ─── -->
+        <div class="tab-panel" id="tab-ros">
+          <div class="page-header">
+            <h1>ROS-analyser</h1>
+            <button class="btn-new" onclick="openRosModal()">+ Ny ROS-analyse</button>
+          </div>
+          <div id="ros-container"><p class="empty-state">Laster...</p></div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- SJA detalj-modal -->
+  <div class="modal-overlay" id="sja-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>🛡️ Sikker Jobb Analyse</h2>
+        <button class="modal-close" onclick="closeSjaModal()">×</button>
+      </div>
+      <div id="sja-detail-content"></div>
+    </div>
+  </div>
+
+  <!-- ROS opprett/rediger modal -->
+  <div class="modal-overlay" id="ros-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 id="ros-modal-title">Ny ROS-analyse</h2>
+        <button class="modal-close" onclick="closeRosModal()">×</button>
+      </div>
+      <form id="ros-form">
+        <input type="hidden" id="ros-id">
+        <div class="section-title">Generelt</div>
+        <div class="modal-grid">
+          <div class="form-group full">
+            <label>Tittel <span class="required">*</span></label>
+            <input type="text" id="ros-title" required placeholder="Eks: Arbeid i høyden — ventilasjonsanlegg">
+          </div>
+          <div class="form-group">
+            <label>Prosjekttype / arbeidstype</label>
+            <select id="ros-project-type">
+              <option value="">Velg type...</option>
+              <option value="Ventilasjon">Ventilasjon</option>
+              <option value="VVS">VVS</option>
+              <option value="Elektro">Elektro</option>
+              <option value="Brannvern">Brannvern</option>
+              <option value="Generell">Generell</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Ansvarlig</label>
+            <input type="text" id="ros-responsible" placeholder="Navn">
+          </div>
+        </div>
+        <div class="section-title">Risikovurdering (jf. BHF §8)</div>
+        <div class="modal-grid">
+          <div class="form-group full">
+            <label>Aktuelle problemstillinger <span class="required">*</span></label>
+            <textarea id="ros-problems" required placeholder="Beskriv problemstillingene..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Mulig risiko — Hva kan gå galt?</label>
+            <textarea id="ros-risks" placeholder="Eks: Fall fra høyde, strømgjennomgang..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Antatt konsekvens</label>
+            <textarea id="ros-consequence" placeholder="Eks: Personskade, stopp i produksjon..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Sannsynlighet (S)</label>
+            <select id="ros-s" onchange="updateRiskScore()">
+              <option value="">Velg...</option>
+              <option value="1">1 — Svært lav</option>
+              <option value="2">2 — Lav</option>
+              <option value="3">3 — Middels</option>
+              <option value="4">4 — Høy</option>
+              <option value="5">5 — Svært høy</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Konsekvens (K)</label>
+            <select id="ros-k" onchange="updateRiskScore()">
+              <option value="">Velg...</option>
+              <option value="1">1 — Ubetydelig</option>
+              <option value="2">2 — Liten</option>
+              <option value="3">3 — Moderat</option>
+              <option value="4">4 — Alvorlig</option>
+              <option value="5">5 — Katastrofal</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>Risikoverdi (S × K)</label>
+            <div id="ros-risk-score-display" style="
+              padding: 12px 14px; border-radius: 8px; font-size: 14px;
+              font-weight: 600; background: #F4F7FA; border: 1.5px solid #E2E8F0;
+              color: #94A3B8; transition: all 0.2s;">
+              Fyll inn S og K for å beregne
+            </div>
+          </div>
+          <div class="form-group full">
+            <label>Tiltak i prosjekteringsfasen</label>
+            <textarea id="ros-measures" placeholder="Hvilke tiltak er planlagt..."></textarea>
+          </div>
+          <div class="form-group full">
+            <label>Mulige tiltak i utførelsesfasen</label>
+            <textarea id="ros-execution-measures" placeholder="Eks: SJA skal utarbeides av entrepenør..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-cancel" onclick="closeRosModal()">Avbryt</button>
+          <button type="submit" class="btn-save">Lagre ROS-analyse</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/admin/assets/js/main.js"></script>
+  <script>
+    let sjaList = [];
+    let rosList = [];
+
+    // ─── FANER ───────────────────────────────────────
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', (i === 0 && tab === 'sja') || (i === 1 && tab === 'ros'));
+      });
+      document.getElementById('tab-sja').classList.toggle('active', tab === 'sja');
+      document.getElementById('tab-ros').classList.toggle('active', tab === 'ros');
+    }
+
+    // ─── SJA ─────────────────────────────────────────
+    async function loadSja() {
+      try {
+        const res = await fetch('/api/hms/sja', { credentials: 'include' });
+        sjaList = await res.json();
+        renderSjaTable(sjaList);
+      } catch (e) {
+        document.getElementById('sja-container').innerHTML =
+          '<p class="empty-state">Kunne ikke laste SJA-data.</p>';
+      }
+    }
+
+    function filterSja() {
+      const search = document.getElementById('sja-search').value.toLowerCase();
+      const status = document.getElementById('sja-filter-status').value;
+      const filtered = sjaList.filter(sja => {
+        const matchSearch = !search ||
+          (sja.order_number || '').toLowerCase().includes(search) ||
+          (sja.technician_id || '').toLowerCase().includes(search) ||
+          (sja.location || '').toLowerCase().includes(search) ||
+          (sja.job_description || '').toLowerCase().includes(search);
+        const matchStatus = !status || sja.status === status;
+        return matchSearch && matchStatus;
+      });
+      renderSjaTable(filtered);
+    }
+
+    function renderSjaTable(list) {
+      const container = document.getElementById('sja-container');
+      if (!list.length) {
+        container.innerHTML = '<p class="empty-state">Ingen SJA registrert ennå.</p>';
+        return;
+      }
+      container.innerHTML = `
+        <table class="hms-table">
+          <thead>
+            <tr>
+              <th>Dato</th>
+              <th>Ordre</th>
+              <th>Tekniker</th>
+              <th>Arbeidssted</th>
+              <th>Arbeidsoperasjon</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map(sja => `
+              <tr onclick="openSjaModal(${sja.id})">
+                <td style="white-space:nowrap">${new Date(sja.created_at).toLocaleDateString('no-NO')}</td>
+                <td>${sja.order_number
+                  ? `<a class="order-link" href="/admin/ordre-detalj.html?id=${sja.order_id}" onclick="event.stopPropagation()">${sja.order_number}</a>`
+                  : '<span style="color:#94A3B8">Frittstående</span>'
+                }</td>
+                <td>${sja.technician_id || '—'}</td>
+                <td>${sja.location || '—'}</td>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sja.job_description || '—'}</td>
+                <td><span class="status-${sja.status}">${sja.status === 'completed' ? 'Fullført' : 'Utkast'}</span></td>
+                <td><button class="btn-view" onclick="event.stopPropagation(); openSjaModal(${sja.id})">Se detaljer</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function openSjaModal(sjaId) {
+      const sja = sjaList.find(s => s.id === sjaId);
+      if (!sja) return;
+      document.getElementById('sja-detail-content').innerHTML = `
+        <div class="section-title">Oppdragsinformasjon</div>
+        <div class="detail-grid">
+          <div class="detail-box">
+            <label>Dato</label>
+            <p>${new Date(sja.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          </div>
+          <div class="detail-box">
+            <label>Tekniker</label>
+            <p>${sja.technician_id || '—'}</p>
+          </div>
+          <div class="detail-box">
+            <label>Ordre</label>
+            <p>${sja.order_number
+              ? `<a class="order-link" href="/admin/ordre-detalj.html?id=${sja.order_id}">${sja.order_number}</a>`
+              : 'Frittstående'
+            }</p>
+          </div>
+          <div class="detail-box">
+            <label>Arbeidssted / adresse</label>
+            <p>${sja.location || '—'}</p>
+          </div>
+          <div class="detail-box full highlight">
+            <label>Beskrivelse av arbeidsoperasjon</label>
+            <p>${sja.job_description || '—'}</p>
+          </div>
+        </div>
+        <div class="section-title">Risikovurdering</div>
+        <div class="detail-grid">
+          <div class="detail-box">
+            <label>Identifiserte risikoer</label>
+            <p>${sja.identified_risks || '—'}</p>
+          </div>
+          <div class="detail-box">
+            <label>Tiltak / vernetiltak</label>
+            <p>${sja.safety_measures || '—'}</p>
+          </div>
+        </div>
+        <div class="section-title">Godkjenning</div>
+        <div class="detail-grid">
+          <div class="detail-box">
+            <label>Godkjent av</label>
+            <p>${sja.approved_by || '—'}</p>
+          </div>
+          <div class="detail-box">
+            <label>Status</label>
+            <p><span class="status-${sja.status}">${sja.status === 'completed' ? 'Fullført' : 'Utkast'}</span></p>
+          </div>
+        </div>
+        <div style="margin-top: 20px; padding-top: 14px; border-top: 1px solid #E2E8F0; display: flex; gap: 10px;">
+          <button class="btn-view" id="pdf-btn-${sja.id}" onclick="generateSjaPdf(${sja.id})">
+            📄 Last ned PDF
+          </button>
+        </div>
+      `;
+      document.getElementById('sja-modal').classList.add('open');
+    }
+
+    function closeSjaModal() {
+      document.getElementById('sja-modal').classList.remove('open');
+    }
+
+    // ─── ROS ─────────────────────────────────────────
+    async function loadRos() {
+      try {
+        const res = await fetch('/api/hms/ros', { credentials: 'include' });
+        rosList = await res.json();
+        renderRosTable();
+      } catch (e) {
+        document.getElementById('ros-container').innerHTML =
+          '<p class="empty-state">Kunne ikke laste ROS-analyser.</p>';
+      }
+    }
+
+    function renderRosTable() {
+      const container = document.getElementById('ros-container');
+      if (!rosList.length) {
+        container.innerHTML = '<p class="empty-state">Ingen ROS-analyser opprettet ennå. Klikk «+ Ny ROS-analyse» for å starte.</p>';
+        return;
+      }
+      container.innerHTML = `
+        <table class="hms-table">
+          <thead>
+            <tr>
+              <th>Tittel</th><th>Type</th><th>Ansvarlig</th><th>Dato</th><th>Handlinger</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rosList.map(ros => {
+              const fd = ros.form_data || {};
+              return `
+                <tr>
+                  <td><strong>${ros.title}</strong></td>
+                  <td>${ros.project_type ? `<span class="type-badge">${ros.project_type}</span>` : '—'}</td>
+                  <td>${fd.responsible || '—'}</td>
+                  <td>${new Date(ros.created_at).toLocaleDateString('no-NO')}</td>
+                  <td>
+                    <button class="btn-edit" onclick="openRosModal(${ros.id})">Rediger</button>
+                    <button class="btn-delete" onclick="deleteRos(${ros.id})">Slett</button>
+                  </td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function openRosModal(rosId = null) {
+      document.getElementById('ros-form').reset();
+      document.getElementById('ros-id').value = '';
+      if (rosId) {
+        const ros = rosList.find(r => r.id === rosId);
+        if (!ros) return;
+        const fd = ros.form_data || {};
+        document.getElementById('ros-modal-title').textContent = 'Rediger ROS-analyse';
+        document.getElementById('ros-id').value = ros.id;
+        document.getElementById('ros-title').value = ros.title || '';
+        document.getElementById('ros-project-type').value = ros.project_type || '';
+        document.getElementById('ros-responsible').value = fd.responsible || '';
+        document.getElementById('ros-problems').value = fd.problems || '';
+        document.getElementById('ros-risks').value = fd.risks || '';
+        document.getElementById('ros-consequence').value = fd.consequence || '';
+        document.getElementById('ros-s').value = fd.s || '';
+        document.getElementById('ros-k').value = fd.k || '';
+        document.getElementById('ros-measures').value = fd.measures || '';
+        document.getElementById('ros-execution-measures').value = fd.executionMeasures || '';
+        updateRiskScore();
+      } else {
+        document.getElementById('ros-modal-title').textContent = 'Ny ROS-analyse';
+      }
+      document.getElementById('ros-modal').classList.add('open');
+    }
+
+    function closeRosModal() {
+      document.getElementById('ros-modal').classList.remove('open');
+      updateRiskScore();
+    }
+
+    function updateRiskScore() {
+      const s = parseInt(document.getElementById('ros-s').value) || 0;
+      const k = parseInt(document.getElementById('ros-k').value) || 0;
+      const display = document.getElementById('ros-risk-score-display');
+      if (!s || !k) {
+        display.style.cssText = 'padding:12px 14px;border-radius:8px;font-size:14px;font-weight:600;background:#F4F7FA;border:1.5px solid #E2E8F0;color:#94A3B8;transition:all 0.2s;';
+        display.textContent = 'Fyll inn S og K for å beregne';
+        return;
+      }
+      const score = s * k;
+      let bg, border, color, label;
+      if (score <= 4)       { bg='#F0FDF4'; border='#BBF7D0'; color='#16A34A'; label='Lav risiko'; }
+      else if (score <= 9)  { bg='#FEFCE8'; border='#FDE68A'; color='#CA8A04'; label='Middels risiko'; }
+      else if (score <= 14) { bg='#FFF7ED'; border='#FED7AA'; color='#EA580C'; label='Høy risiko'; }
+      else                  { bg='#FEF2F2'; border='#FECACA'; color='#DC2626'; label='Svært høy risiko'; }
+      display.style.cssText = `padding:12px 14px;border-radius:8px;font-size:14px;font-weight:600;background:${bg};border:1.5px solid ${border};color:${color};transition:all 0.2s;`;
+      display.textContent = `${score} — ${label} (S=${s} × K=${k})`;
+    }
+
+    document.getElementById('ros-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const rosId = document.getElementById('ros-id').value;
+      const payload = {
+        title: document.getElementById('ros-title').value,
+        project_type: document.getElementById('ros-project-type').value,
+        status: 'completed',
+        form_data: {
+          responsible: document.getElementById('ros-responsible').value,
+          problems: document.getElementById('ros-problems').value,
+          risks: document.getElementById('ros-risks').value,
+          consequence: document.getElementById('ros-consequence').value,
+          s: document.getElementById('ros-s').value,
+          k: document.getElementById('ros-k').value,
+          risk_score: (parseInt(document.getElementById('ros-s').value) || 0) * (parseInt(document.getElementById('ros-k').value) || 0) || null,
+          measures: document.getElementById('ros-measures').value,
+          executionMeasures: document.getElementById('ros-execution-measures').value,
+        }
+      };
+      try {
+        const url = rosId ? `/api/hms/ros/${rosId}` : '/api/hms/ros';
+        const method = rosId ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+          method, credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error();
+        closeRosModal();
+        await loadRos();
+      } catch { alert('Kunne ikke lagre. Prøv igjen.'); }
+    });
+
+    async function deleteRos(id) {
+      if (!confirm('Er du sikker på at du vil slette denne ROS-analysen?')) return;
+      try {
+        await fetch(`/api/hms/ros/${id}`, { method: 'DELETE', credentials: 'include' });
+        await loadRos();
+      } catch { alert('Kunne ikke slette. Prøv igjen.'); }
+    }
+
+    // ─── INIT ─────────────────────────────────────────
+    async function generateSjaPdf(sjaId) {
+      const btn = document.getElementById(`pdf-btn-${sjaId}`);
+      if (btn) { btn.textContent = '⏳ Genererer...'; btn.disabled = true; }
+
+      try {
+        const res = await fetch(`/api/hms/sja/${sjaId}/pdf`, { credentials: 'include' });
+        const data = await res.json();
+
+        if (!data.pdfUrl) throw new Error('Ingen PDF-URL i respons');
+
+        // Open PDF in new tab
+        window.open(data.pdfUrl, '_blank');
+      } catch (err) {
+        console.error('PDF generation failed:', err);
+        alert('Kunne ikke generere PDF. Merk: PDF-generering fungerer kun i GCP, ikke lokalt.');
+      } finally {
+        if (btn) { btn.textContent = '📄 Last ned PDF'; btn.disabled = false; }
+      }
+    }
+
+    loadSja();
+    loadRos();
+  </script>
+</body>
+</html>
