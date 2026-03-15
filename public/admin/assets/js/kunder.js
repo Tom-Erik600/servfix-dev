@@ -992,6 +992,7 @@ window.selectCustomer = async function(customerId) {
                 if (data.is_report_recipient && currentSelectedCustomer) {
                     currentSelectedCustomer.reportEmail = data.email;
                     renderCustomerDetails(currentSelectedCustomer);
+                    renderEquipmentList(currentCustomerEquipment);
                 }
             } else {
                 const err = await response.json().catch(() => ({}));

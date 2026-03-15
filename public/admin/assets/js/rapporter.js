@@ -410,7 +410,7 @@ window.sendOrderToCustomer = async function(orderId) {
         const result = await response.json();
 
         if (!response.ok) {
-            throw new Error(result.error || 'Kunne ikke sende rapporter');
+            throw new Error(result.details || result.error || 'Kunne ikke sende rapporter');
         }
 
         showToast(`✅ ${result.message || 'Rapporter sendt til kunde'}`, 'success');

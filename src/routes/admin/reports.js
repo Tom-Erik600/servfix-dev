@@ -266,10 +266,10 @@ router.post('/order/:orderId/send', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error sending order reports:', error);
-    res.status(500).json({ 
+    console.error('Error sending order reports:', error.message, error.stack);
+    res.status(500).json({
       error: 'Kunne ikke sende rapporter',
-      details: error.message 
+      details: error.message
     });
   }
 });

@@ -76,41 +76,23 @@ class EmailService {
         console.warn('Could not load sender email from settings, using default:', error.message);
       }
       
-      // Hent PDF - eksakt samme tilnærming som admin/reports.js
+      // Hent PDF fra GCS via bucket API
+      const gcsPath = `tenants/${tenantId}/${report.pdf_path}`;
+      console.log(`📥 Fetching PDF from GCS: ${gcsPath} (bucket: ${gcs.bucketName})`);
       let attachmentOptions;
 
-      // F2: Bruk sentralisert bucket-navn
-      const gcsPath = `tenants/${tenantId}/${report.pdf_path}`;
-      const publicUrl = `https://storage.googleapis.com/${gcs.bucketName}/${gcsPath}`;
-      
-      console.log(`📥 Fetching PDF for email attachment:`);
-      console.log(`  Report ID: ${reportId}`);
-      console.log(`  GCS Path: ${gcsPath}`);
-      console.log(`  Public URL: ${publicUrl}`);
-      
       try {
-        // Prøv å laste ned PDF fra GCS
         const file = this.bucket.file(gcsPath);
         const [pdfBuffer] = await file.download();
-        
         console.log(`✅ PDF downloaded from GCS (${Math.round(pdfBuffer.length / 1024)}KB)`);
-        
-        // Bruk buffer for attachment
         attachmentOptions = {
           filename: `servicerapport_${reportId}.pdf`,
           content: pdfBuffer,
           contentType: 'application/pdf'
         };
-        
       } catch (downloadError) {
-        console.warn('⚠️ Could not download PDF from GCS, using public URL:', downloadError.message);
-        
-        // Fallback: Bruk public URL direkte
-        // Nodemailer kan hente fra URL hvis bucket er public
-        attachmentOptions = {
-          filename: `servicerapport_${reportId}.pdf`,
-          path: publicUrl
-        };
+        console.error(`❌ GCS download failed for path: ${gcsPath}`, downloadError.message);
+        throw new Error(`Kunne ikke hente PDF fra GCS: ${downloadError.message}`);
       }
       
       // Send e-post
@@ -296,18 +278,18 @@ async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, orde
       throw new Error('Ingen PDF funnet for denne ordren');
     }
     
-    // F2: Bruk sentralisert bucket-navn
+    // Hent PDF fra GCS via bucket API (autentisert, fungerer uansett om bucket er public eller ikke)
     const gcsPath = `tenants/${tenantId}/${firstReport.pdf_path}`;
-    const publicUrl = `https://storage.googleapis.com/${gcs.bucketName}/${gcsPath}`;
+    console.log(`📥 Fetching PDF from GCS: ${gcsPath} (bucket: ${gcs.bucketName})`);
 
     let pdfBuffer;
     try {
-      const response = await fetch(publicUrl);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      pdfBuffer = Buffer.from(await response.arrayBuffer());
-      console.log(`✅ PDF fetched from GCS: ${Math.round(pdfBuffer.length / 1024)}KB`);
+      const file = gcs.bucket.file(gcsPath);
+      [pdfBuffer] = await file.download();
+      console.log(`✅ PDF downloaded from GCS: ${Math.round(pdfBuffer.length / 1024)}KB`);
     } catch (error) {
-      throw new Error(`Kunne ikke hente PDF: ${error.message}`);
+      console.error(`❌ GCS download failed for path: ${gcsPath}`, error.message);
+      throw new Error(`Kunne ikke hente PDF fra GCS: ${error.message}`);
     }
     
     // Bygg e-post innhold med liste over alle anlegg

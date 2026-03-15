@@ -466,44 +466,41 @@
     <script src="https://unpkg.com/lucide-icons"></script>
     <script src="./assets/js/auth-check.js"></script>
     <script src="./assets/js/header.js"></script>
-    <script src="./assets/js/dashboard.js"></script>
     <script>
-    // Render header med felles funksjon
     document.addEventListener('DOMContentLoaded', async () => {
         // Vent på auth
         if (window.authManager) {
             await window.authManager.waitForInitialization();
         }
-        
+
         // Hent brukerinfo
         const user = window.authManager?.getCurrentUser();
         if (!user || !user.technician) {
             console.warn('Ingen bruker funnet for header');
             return;
         }
-        
-        // Bruk den felles renderAppHeader funksjonen
+
+        // Hent settings én gang
+        let settings = null;
+        try {
+            const res = await fetch('/api/images/settings', { credentials: 'include' });
+            if (res.ok) settings = await res.json();
+        } catch (e) { /* bruker defaults */ }
+
+        // Render header med settings
         await renderAppHeader({
-            backUrl: null,  // Ingen tilbakeknapp på home.html
+            backUrl: null,
             subtitle: 'Hovedmeny',
             technician: user.technician,
-            showDate: true
+            showDate: true,
+            settings
         });
+
+        // Vis HMS-knapp basert på innstillinger
+        if (settings?.hmsSettings?.hmsMenuEnabled !== false) {
+            document.getElementById('hms-menu-card').style.display = '';
+        }
     });
-</script>
-<script>
-  // Vis HMS-knapp basert på innstillinger
-  (async () => {
-    try {
-      const res = await fetch('/api/images/settings', { credentials: 'include' });
-      const settings = await res.json();
-      if (settings?.hmsSettings?.hmsMenuEnabled !== false) {
-        document.getElementById('hms-menu-card').style.display = '';
-      }
-    } catch (e) {
-      document.getElementById('hms-menu-card').style.display = '';
-    }
-  })();
 </script>
 </body>
 </html>
