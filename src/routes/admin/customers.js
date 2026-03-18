@@ -317,18 +317,36 @@ router.get('/:customerId/projects', async (req, res) => {
     const tripletexService = require('../../services/tripletexService');
     const client = await tripletexService.getApiClient();
 
-    const response = await client.get('/project', {
-      params: {
-        customerId: customerId,
-        isClosed: false,
-        from: 0,
-        count: 20,
-        fields: 'id,name,number,displayName,startDate,endDate'
-      }
+    // Hent ALLE prosjekter (inkl. lukkede) for debugging
+    const [openResponse, allResponse] = await Promise.all([
+      client.get('/project', {
+        params: {
+          customerId: customerId,
+          isClosed: false,
+          from: 0,
+          count: 20,
+          fields: 'id,name,number,displayName,startDate,endDate,isClosed'
+        }
+      }),
+      client.get('/project', {
+        params: {
+          customerId: customerId,
+          from: 0,
+          count: 20,
+          fields: 'id,name,number,displayName,startDate,endDate,isClosed'
+        }
+      })
+    ]);
+
+    const openProjects = openResponse.data.values || [];
+    const allProjects = allResponse.data.values || [];
+
+    console.log(`🔍 [PROJECTS DEBUG] Customer ${customerId}: ${openProjects.length} åpne, ${allProjects.length} totalt (fullResultCount=${allResponse.data.fullResultCount})`);
+    allProjects.forEach(p => {
+      console.log(`   📋 Prosjekt #${p.number} "${p.displayName || p.name}" (id=${p.id}, isClosed=${p.isClosed})`, JSON.stringify(p));
     });
 
-    const projects = (response.data.values || [])
-      .sort((a, b) => b.id - a.id); // Nyeste først
+    const projects = openProjects.sort((a, b) => b.id - a.id); // Nyeste først
 
     const result = projects.map(p => ({
       id: p.id,

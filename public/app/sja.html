@@ -15,13 +15,13 @@
       display: block; font-weight: 600; font-size: 13px;
       color: #1B2A4A; margin-bottom: 5px;
     }
-    .form-group textarea, .form-group input {
+    .form-group textarea, .form-group input, .form-group select {
       width: 100%; padding: 10px 12px; border: 1.5px solid #D1D5DB;
       border-radius: 8px; font-size: 14px; font-family: inherit;
       box-sizing: border-box; transition: border-color 0.2s; background: white;
     }
     .form-group textarea { min-height: 90px; resize: vertical; }
-    .form-group textarea:focus, .form-group input:focus {
+    .form-group textarea:focus, .form-group input:focus, .form-group select:focus {
       outline: none; border-color: #0E9CB5;
       box-shadow: 0 0 0 3px rgba(14, 156, 181, 0.1);
     }
@@ -45,6 +45,22 @@
     }
     .btn-submit:disabled { background: #94A3B8; cursor: not-allowed; }
     .required { color: #EA580C; }
+
+    .ros-info-box {
+      display: none;
+      background: #F0FBFF; border: 1.5px solid #BAE6F0;
+      border-radius: 10px; padding: 10px 14px; margin-bottom: 12px;
+    }
+    .ros-info-box__header {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 12px; font-weight: 700; color: #0E9CB5; margin-bottom: 4px;
+    }
+    .ros-info-box__title { font-size: 13px; color: #1E293B; font-weight: 500; }
+    .ros-info-box__btn {
+      background: #0E9CB5; color: white; border: none;
+      border-radius: 6px; padding: 4px 10px; font-size: 11px;
+      font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
 
     .existing-sja-card {
       background: white; border: 1.5px solid #E2E8F0;
@@ -99,6 +115,38 @@
     .sja-view-field p {
       font-size: 14px; color: #1E293B; line-height: 1.5;
       background: #F4F7FA; border-radius: 8px; padding: 8px 10px; white-space: pre-wrap;
+    }
+
+    /* SJA Bilder */
+    .sja-photos-gallery {
+      display: flex; flex-wrap: wrap; gap: 10px;
+      margin: 10px 0; min-height: 20px;
+    }
+    .sja-photo-item {
+      position: relative; width: 90px; height: 90px;
+    }
+    .sja-photo-item img {
+      width: 90px; height: 90px; object-fit: cover;
+      border-radius: 6px; border: 2px solid #e5e7eb;
+    }
+    .sja-photo-delete-btn {
+      position: absolute; top: -6px; right: -6px;
+      background: #ef4444; color: white; border: none;
+      border-radius: 50%; width: 22px; height: 22px;
+      font-size: 14px; line-height: 22px; text-align: center;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .btn-photo-upload {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: none; border: 1.5px dashed #D1D5DB; color: #64748B;
+      border-radius: 8px; padding: 10px 16px; font-size: 13px;
+      font-weight: 600; cursor: pointer; width: 100%;
+      justify-content: center; transition: all 0.2s;
+    }
+    .btn-photo-upload:hover { border-color: #0E9CB5; color: #0E9CB5; }
+    .btn-photo-upload:disabled { opacity: 0.5; cursor: not-allowed; }
+    .sja-photos-status {
+      font-size: 12px; color: #64748B; margin-top: 4px; text-align: center;
     }
   </style>
 </head>
@@ -156,6 +204,35 @@
               </div>
             </div>
 
+            <div class="section-title">Kategori</div>
+            <div class="sja-grid">
+              <div class="form-group">
+                <label for="sja-category">Kategori <span class="required">*</span></label>
+                <select id="sja-category" name="category" required>
+                  <option value="">-- Velg kategori --</option>
+                </select>
+              </div>
+              <div class="form-group" id="sja-subcategory-group" style="display:none;">
+                <label for="sja-subcategory">Underkategori</label>
+                <select id="sja-subcategory" name="subcategory">
+                  <option value="">-- Velg underkategori --</option>
+                </select>
+              </div>
+              <div class="form-group" id="sja-subcategory-freetext-group" style="display:none;">
+                <label for="sja-subcategory-freetext">Beskriv type arbeid <span class="required">*</span></label>
+                <input type="text" id="sja-subcategory-freetext" name="subcategory_freetext"
+                       placeholder="Beskriv type arbeid..." maxlength="200">
+              </div>
+            </div>
+
+            <div id="sja-ros-info" class="ros-info-box">
+              <div class="ros-info-box__header">
+                <span>📋 Relevant risikovurdering (ROS)</span>
+                <button type="button" id="sja-ros-view-btn" class="ros-info-box__btn">Se ROS</button>
+              </div>
+              <div id="sja-ros-title" class="ros-info-box__title"></div>
+            </div>
+
             <div class="section-title">Risikovurdering <span class="required">*</span></div>
             <div class="sja-grid">
               <div class="form-group full">
@@ -180,7 +257,21 @@
               </div>
             </div>
 
+            <!-- Bilder — vises alltid, lastes opp sammen med SJA -->
+            <div id="sja-photos-section">
+              <div class="section-title">Bilder</div>
+              <div id="sja-photos-gallery" class="sja-photos-gallery"></div>
+              <button type="button" id="sja-upload-photo-btn" class="btn-photo-upload">
+                📷 Legg til bilde
+              </button>
+              <input type="file" id="sja-photo-input" accept="image/*" capture="environment" style="display:none;">
+            </div>
+
             <button type="submit" class="btn-submit" id="sja-submit">Lagre SJA</button>
+            <button type="button" id="sja-done-btn" class="btn-submit" style="display:none; background:#16A34A;"
+                    onclick="navigateBack()">
+              Ferdig — gå tilbake
+            </button>
           </form>
         </div>
       </div>
@@ -196,12 +287,24 @@
         <button class="sja-view-close" onclick="closeSjaView()">×</button>
       </div>
       <div id="sja-view-content"></div>
+      <!-- Bilde-opplasting i visningsmodal -->
+      <div id="sja-view-photos-section" style="margin-top:12px;">
+        <div class="sja-view-field">
+          <label>Bilder</label>
+          <div id="sja-view-photos-gallery" class="sja-photos-gallery"></div>
+          <button type="button" id="sja-view-upload-btn" class="btn-photo-upload" style="margin-top:6px;">
+            📷 Legg til bilde
+          </button>
+          <input type="file" id="sja-view-photo-input" accept="image/*" capture="environment" style="display:none;">
+        </div>
+      </div>
       <button class="btn-delete-sja" id="sja-delete-btn" onclick="deleteCurrentSja()">Slett denne SJA</button>
     </div>
   </div>
 
   <script src="assets/js/auth-check.js"></script>
   <script src="assets/js/header.js"></script>
+  <script src="assets/js/sja-categories.js"></script>
   <script>
     const urlParams = new URLSearchParams(window.location.search);
     const orderId = urlParams.get('orderId');
@@ -251,6 +354,13 @@
         day: 'numeric', month: 'long', year: 'numeric'
       });
 
+      // Populer kategori-dropdown
+      populateCategoryDropdown();
+      handleCategoryChange();
+
+      // Init bilde-opplasting for skjema (staged mode)
+      initFormPhotoUpload();
+
       // Last eksisterende SJA etter at auth og auto-utfylling er ferdig
       await loadExistingSja();
     });
@@ -259,8 +369,9 @@
       e.preventDefault();
       const btn = document.getElementById('sja-submit');
       btn.disabled = true;
-      btn.textContent = 'Lagrer...';
+      btn.textContent = _pendingPhotos.length > 0 ? 'Lagrer og laster opp bilder...' : 'Lagrer...';
 
+      const categoryData = collectCategoryData();
       const payload = {
         order_id: orderId || null,   // orders.id er VARCHAR — ikke parseInt()
         job_description: document.getElementById('sja-job-description').value,
@@ -268,6 +379,8 @@
         identified_risks: document.getElementById('sja-risks').value,
         safety_measures: document.getElementById('sja-measures').value,
         approved_by: document.getElementById('sja-approved-by').value,
+        category: categoryData.category,
+        subcategory: categoryData.subcategory,
         status: 'completed'
       };
 
@@ -279,9 +392,25 @@
           body: JSON.stringify(payload)
         });
         if (!res.ok) throw new Error('Lagring feilet');
-        setTimeout(() => {
-          window.location.href = orderId ? `orders.html?id=${orderId}` : 'hms.html';
-        }, 600);
+        const data = await res.json();
+        _savedSjaId = data.sja?.id || null;
+
+        // Last opp alle pending bilder nå som vi har sjaId
+        if (_pendingPhotos.length > 0) {
+          await uploadPendingPhotos(_savedSjaId);
+        }
+
+        // Vis «Ferdig»-knapp, skjul «Lagre»-knappen
+        btn.style.display = 'none';
+        document.getElementById('sja-done-btn').style.display = 'block';
+        document.getElementById('sja-upload-photo-btn').disabled = true;
+
+        // Gjør resten av skjemaet readonly visuelt
+        document.querySelectorAll('#sja-form textarea, #sja-form select').forEach(el => {
+          el.setAttribute('disabled', 'disabled');
+        });
+
+        showToast('SJA lagret!');
       } catch (err) {
         console.error(err);
         btn.disabled = false;
@@ -352,8 +481,6 @@
       btn.textContent = isHidden ? '− Skjul skjema' : '+ Opprett ny SJA';
     }
 
-    let _currentSjaId = null;
-
     function openSjaView(sjaId) {
       const sja = (window._existingSjaList || []).find(s => s.id === sjaId);
       if (!sja) return;
@@ -368,6 +495,11 @@
         <div class="sja-view-field">
           <label>Tilknyttet ordre</label>
           <p>${e(sja.order_number)}</p>
+        </div>` : ''}
+        ${sja.category ? `
+        <div class="sja-view-field">
+          <label>Kategori</label>
+          <p>${e(sja.category)}${sja.subcategory ? ' — ' + e(sja.subcategory) : ''}</p>
         </div>` : ''}
         <div class="sja-view-field">
           <label>Dato</label>
@@ -397,12 +529,298 @@
         </div>
       `;
 
+      // Last inn bilder for denne SJA-en
+      _viewSjaPhotos = (sja.photos && Array.isArray(sja.photos)) ? [...sja.photos] : [];
+      renderViewPhotos();
+      initViewPhotoUpload();
+
       document.getElementById('sja-view-modal').classList.add('open');
     }
 
     function closeSjaView() {
       document.getElementById('sja-view-modal').classList.remove('open');
       _currentSjaId = null;
+      _viewSjaPhotos = [];
+    }
+
+    // ─── Navigasjon ─────────────────────────────────
+    function navigateBack() {
+      window.location.href = orderId ? `orders.html?id=${orderId}` : 'hms.html';
+    }
+
+    // ─── Toast ────────────────────────────────────────
+    function showToast(message) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      toast.style.cssText = 'background:#1B2A4A;color:white;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:500;margin-top:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    // ─── Bilde-logikk ────────────────────────────────
+    let _savedSjaId = null;
+    let _pendingPhotos = []; // {file, previewUrl} — staged lokalt før SJA er lagret
+
+    // Init for skjema-galleriet (staged mode)
+    function initFormPhotoUpload() {
+      const uploadBtn = document.getElementById('sja-upload-photo-btn');
+      const fileInput = document.getElementById('sja-photo-input');
+      if (!uploadBtn || !fileInput) return;
+
+      uploadBtn.addEventListener('click', () => {
+        fileInput.value = '';
+        fileInput.click();
+      });
+
+      fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        _pendingPhotos.push({ file, previewUrl: URL.createObjectURL(file) });
+        renderFormPhotos();
+      });
+    }
+
+    function renderFormPhotos() {
+      const gallery = document.getElementById('sja-photos-gallery');
+      if (!gallery) return;
+      gallery.innerHTML = _pendingPhotos.map((p, i) => `
+        <div class="sja-photo-item">
+          <img src="${p.previewUrl}" alt="Bilde ${i + 1}">
+          <button class="sja-photo-delete-btn" type="button"
+                  onclick="removePendingPhoto(${i})" title="Fjern bilde">×</button>
+        </div>
+      `).join('');
+    }
+
+    function removePendingPhoto(index) {
+      URL.revokeObjectURL(_pendingPhotos[index].previewUrl);
+      _pendingPhotos.splice(index, 1);
+      renderFormPhotos();
+    }
+
+    async function uploadPendingPhotos(sjaId) {
+      let uploaded = 0, failed = 0;
+      for (const pending of _pendingPhotos) {
+        try {
+          const formData = new FormData();
+          formData.append('image', pending.file);
+          formData.append('sjaId', sjaId);
+          const res = await fetch('/api/images/sja', {
+            method: 'POST', body: formData, credentials: 'include'
+          });
+          if (!res.ok) throw new Error();
+          URL.revokeObjectURL(pending.previewUrl);
+          uploaded++;
+        } catch {
+          failed++;
+        }
+      }
+      _pendingPhotos = [];
+      if (failed > 0) showToast(`${uploaded} bilder lastet opp, ${failed} feilet.`);
+      else if (uploaded > 0) showToast(`${uploaded} bilde${uploaded > 1 ? 'r' : ''} lastet opp!`);
+    }
+
+    // Advar om bruker forsøker å forlate siden med ulagrede bilder
+    window.addEventListener('beforeunload', (e) => {
+      if (_pendingPhotos.length > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    // ─── Bilde-logikk for visningsmodal (direkte upload) ───
+    let _currentSjaId = null;
+    let _viewSjaPhotos = [];
+
+    function initViewPhotoUpload() {
+      const uploadBtn = document.getElementById('sja-view-upload-btn');
+      const fileInput = document.getElementById('sja-view-photo-input');
+      if (!uploadBtn || !fileInput) return;
+
+      uploadBtn.addEventListener('click', () => {
+        fileInput.value = '';
+        fileInput.click();
+      });
+
+      fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        await uploadViewPhoto(file);
+      });
+    }
+
+    async function uploadViewPhoto(file) {
+      if (!_currentSjaId) return;
+      try {
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('sjaId', _currentSjaId);
+        const response = await fetch('/api/images/sja', {
+          method: 'POST', body: formData, credentials: 'include'
+        });
+        if (!response.ok) throw new Error('Opplasting feilet');
+        const result = await response.json();
+        _viewSjaPhotos.push(result.url);
+        renderViewPhotos();
+        showToast('Bilde lastet opp!');
+      } catch (error) {
+        showToast('Feil ved opplasting: ' + error.message);
+      }
+    }
+
+    function renderViewPhotos() {
+      const gallery = document.getElementById('sja-view-photos-gallery');
+      if (!gallery) return;
+      if (_viewSjaPhotos.length === 0) {
+        gallery.innerHTML = '<span style="font-size:12px;color:#94A3B8;">Ingen bilder</span>';
+        return;
+      }
+      gallery.innerHTML = _viewSjaPhotos.map((url, i) => `
+        <div class="sja-photo-item">
+          <img src="${url}" alt="SJA bilde ${i + 1}" loading="lazy">
+          <button class="sja-photo-delete-btn" type="button"
+                  onclick="deleteViewPhoto('${url}')" title="Fjern bilde">×</button>
+        </div>
+      `).join('');
+    }
+
+    async function deleteViewPhoto(imageUrl) {
+      if (!_currentSjaId) return;
+      try {
+        const response = await fetch(`/api/images/sja/${_currentSjaId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ imageUrl })
+        });
+        if (!response.ok) throw new Error('Sletting feilet');
+        _viewSjaPhotos = _viewSjaPhotos.filter(url => url !== imageUrl);
+        renderViewPhotos();
+        showToast('Bilde fjernet');
+      } catch (error) {
+        showToast('Kunne ikke fjerne bilde: ' + error.message);
+      }
+    }
+
+    // ─── Kategori-logikk ───────────────────────────
+    function populateCategoryDropdown() {
+      const categorySelect = document.getElementById('sja-category');
+      if (!categorySelect || typeof SJA_CATEGORIES === 'undefined') return;
+      categorySelect.innerHTML = '<option value="">-- Velg kategori --</option>';
+      SJA_CATEGORIES.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.id;
+        option.textContent = cat.label;
+        categorySelect.appendChild(option);
+      });
+    }
+
+    async function fetchRosForCategory(categoryLabel) {
+      const rosInfo = document.getElementById('sja-ros-info');
+      const rosTitle = document.getElementById('sja-ros-title');
+      const rosBtn = document.getElementById('sja-ros-view-btn');
+      if (!rosInfo) return;
+
+      if (!categoryLabel) {
+        rosInfo.style.display = 'none';
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/hms/ros/by-category/${encodeURIComponent(categoryLabel)}`, {
+          credentials: 'include'
+        });
+        if (!res.ok) throw new Error('Feil ved henting');
+        const rosList = await res.json();
+
+        if (rosList.length > 0) {
+          const ros = rosList[0];
+          rosTitle.textContent = ros.title;
+          rosBtn.onclick = () => window.open(`/api/hms/ros/${ros.id}/pdf`, '_blank');
+          rosInfo.style.display = 'block';
+        } else {
+          rosInfo.style.display = 'none';
+        }
+      } catch (err) {
+        console.warn('Kunne ikke hente ROS for kategori:', err);
+        rosInfo.style.display = 'none';
+      }
+    }
+
+    function handleCategoryChange() {
+      const categorySelect = document.getElementById('sja-category');
+      if (!categorySelect) return;
+
+      categorySelect.addEventListener('change', () => {
+        const selectedId = parseInt(categorySelect.value);
+        const selectedCat = SJA_CATEGORIES.find(c => c.id === selectedId);
+        const subcategoryGroup = document.getElementById('sja-subcategory-group');
+        const subcategorySelect = document.getElementById('sja-subcategory');
+        const freetextGroup = document.getElementById('sja-subcategory-freetext-group');
+        const freetextInput = document.getElementById('sja-subcategory-freetext');
+
+        // Reset
+        subcategorySelect.innerHTML = '<option value="">-- Velg underkategori --</option>';
+        subcategoryGroup.style.display = 'none';
+        freetextGroup.style.display = 'none';
+        freetextInput.value = '';
+        freetextInput.removeAttribute('required');
+
+        if (!selectedCat) {
+          fetchRosForCategory(null);
+          return;
+        }
+
+        if (selectedCat.freeText) {
+          freetextGroup.style.display = 'block';
+          freetextInput.setAttribute('required', 'required');
+        } else if (selectedCat.subcategories.length > 0) {
+          selectedCat.subcategories.forEach(sub => {
+            const opt = document.createElement('option');
+            opt.value = sub;
+            opt.textContent = sub;
+            subcategorySelect.appendChild(opt);
+          });
+          subcategoryGroup.style.display = 'block';
+        }
+
+        fetchRosForCategory(selectedCat.label);
+      });
+    }
+
+    function collectCategoryData() {
+      const categorySelect = document.getElementById('sja-category');
+      const selectedId = parseInt(categorySelect?.value);
+      const selectedCat = SJA_CATEGORIES.find(c => c.id === selectedId);
+      if (!selectedCat) return { category: null, subcategory: null };
+
+      const category = selectedCat.label;
+      let subcategory = null;
+      if (selectedCat.freeText) {
+        subcategory = document.getElementById('sja-subcategory-freetext')?.value?.trim() || null;
+      } else {
+        subcategory = document.getElementById('sja-subcategory')?.value || null;
+      }
+      return { category, subcategory };
+    }
+
+    function loadCategoryIntoForm(category, subcategory) {
+      const categorySelect = document.getElementById('sja-category');
+      if (!categorySelect || !category) return;
+      const cat = SJA_CATEGORIES.find(c => c.label === category);
+      if (!cat) return;
+      categorySelect.value = cat.id;
+      categorySelect.dispatchEvent(new Event('change'));
+
+      if (cat.freeText) {
+        const freetextInput = document.getElementById('sja-subcategory-freetext');
+        if (freetextInput) freetextInput.value = subcategory || '';
+      } else {
+        const subcategorySelect = document.getElementById('sja-subcategory');
+        if (subcategorySelect) subcategorySelect.value = subcategory || '';
+      }
     }
 
     async function deleteCurrentSja() {

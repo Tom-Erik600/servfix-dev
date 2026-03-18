@@ -903,6 +903,130 @@ router.get('/general/:reportId', async (req, res) => {
   }
 });
 
+// ─── SJA BILDER ───────────────────────────────────────────
+
+// Helper: Generate image path for SJA images
+function generateSjaImagePath(tenantId, sjaId, fileExtension = 'jpg') {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const timestamp = Date.now();
+  const random = Math.floor(Math.random() * 1000);
+  const filename = `sja_${timestamp}_${random}.${fileExtension}`;
+  return `tenants/${tenantId}/hms/sja/${year}/${month}/sja-${sjaId}/${filename}`;
+}
+
+// POST /api/images/sja - Last opp bilde til en SJA
+router.post('/sja', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Ingen fil lastet opp' });
+    }
+
+    const { sjaId } = req.body;
+    const tenantId = req.session?.tenantId;
+
+    if (!tenantId) {
+      return res.status(401).json({ error: 'Ikke autentisert' });
+    }
+
+    if (!sjaId) {
+      return res.status(400).json({ error: 'sjaId er påkrevd' });
+    }
+
+    console.log(`📸 Laster opp SJA-bilde for SJA ${sjaId}:`, req.file.originalname);
+
+    // Generer GCS-sti
+    const fileExtension = path.extname(req.file.originalname).slice(1) || 'jpg';
+    const filePath = generateSjaImagePath(tenantId, sjaId, fileExtension);
+
+    // Last opp til GCS
+    const imageUrl = await uploadToGCS(req.file.buffer, filePath, req.file.mimetype);
+    console.log('☁️ SJA-bilde lastet opp til GCS:', imageUrl);
+
+    // Legg til URL i hms_sja.photos-arrayet
+    const pool = await db.getTenantConnection(tenantId);
+    const result = await pool.query(
+      `UPDATE hms_sja
+       SET photos = array_append(COALESCE(photos, ARRAY[]::text[]), $1)
+       WHERE id = $2
+       RETURNING photos`,
+      [imageUrl, sjaId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'SJA ikke funnet' });
+    }
+
+    console.log(`✅ SJA-bilde lagret. Totalt ${result.rows[0].photos.length} bilder på SJA ${sjaId}`);
+
+    res.json({
+      success: true,
+      url: imageUrl,
+      totalPhotos: result.rows[0].photos.length,
+      message: 'SJA-bilde lastet opp'
+    });
+
+  } catch (error) {
+    console.error('❌ Feil ved opplasting av SJA-bilde:', error);
+    res.status(500).json({
+      error: 'Kunne ikke laste opp SJA-bilde',
+      details: error.message
+    });
+  }
+});
+
+// DELETE /api/images/sja/:sjaId - Fjern ett bilde fra SJA
+router.delete('/sja/:sjaId', async (req, res) => {
+  try {
+    const { sjaId } = req.params;
+    const { imageUrl } = req.body;
+    const tenantId = req.session?.tenantId;
+
+    if (!tenantId) {
+      return res.status(401).json({ error: 'Ikke autentisert' });
+    }
+
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'imageUrl er påkrevd' });
+    }
+
+    const pool = await db.getTenantConnection(tenantId);
+    const result = await pool.query(
+      `UPDATE hms_sja
+       SET photos = array_remove(COALESCE(photos, ARRAY[]::text[]), $1)
+       WHERE id = $2
+       RETURNING photos`,
+      [imageUrl, sjaId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'SJA ikke funnet' });
+    }
+
+    // Slett fra GCS
+    try {
+      const urlPath = new URL(imageUrl).pathname;
+      const filePath = urlPath.substring(urlPath.indexOf(bucketName) + bucketName.length + 1);
+      const decodedFilePath = decodeURIComponent(filePath);
+      await bucket.file(decodedFilePath).delete();
+      console.log(`✅ SJA-bilde slettet fra GCS: ${decodedFilePath}`);
+    } catch (storageError) {
+      console.warn('⚠️ Kunne ikke slette fra GCS:', storageError.message);
+    }
+
+    res.json({
+      success: true,
+      totalPhotos: result.rows[0].photos.length,
+      message: 'Bilde fjernet fra SJA'
+    });
+
+  } catch (error) {
+    console.error('❌ Feil ved sletting av SJA-bilde:', error);
+    res.status(500).json({ error: 'Kunne ikke slette bilde', details: error.message });
+  }
+});
+
 // POST /api/images/cleanup - Slett foreldreløse bilder
 router.post('/cleanup', async (req, res) => {
   try {

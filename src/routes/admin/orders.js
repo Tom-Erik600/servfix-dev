@@ -127,8 +127,8 @@ router.post('/', async (req, res) => {
     console.log('Type:', typeof includedEquipmentIds);
     console.log('Is Array:', Array.isArray(includedEquipmentIds));
     
-    if (!customerId || !customerName) {
-      return res.status(400).json({ error: 'Customer ID and name are required' });
+    if (!customerId || !customerName || !technicianId) {
+      return res.status(400).json({ error: 'Customer ID, name and technician are required' });
     }
     
     const pool = await db.getTenantConnection(req.session.tenantId);

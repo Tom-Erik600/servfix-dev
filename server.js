@@ -57,8 +57,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 // D7: Request timeout — avbryt forespørsler som henger for lenge
 const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS) || 30000;
 app.use((req, res, next) => {
-  // Ikke timeout på PDF-generering og filopplasting (kan ta lang tid)
-  if (req.path.includes('/pdf') || req.path.includes('/upload')) {
+  // Ikke timeout på PDF-generering, filopplasting og kundeimport (kan ta lang tid)
+  if (req.path.includes('/pdf') || req.path.includes('/upload') || req.path.includes('/import')) {
     return next();
   }
   req.setTimeout(REQUEST_TIMEOUT_MS, () => {

@@ -166,6 +166,34 @@
             </select>
           </div>
           <div class="form-group">
+            <label>Arbeidskategori (SJA-kobling)</label>
+            <select id="ros-category">
+              <option value="">-- Ingen kobling --</option>
+              <option value="Adkomst og arbeidssted">Adkomst og arbeidssted</option>
+              <option value="Arbeid i høyden">Arbeid i høyden</option>
+              <option value="Fallende gjenstander">Fallende gjenstander</option>
+              <option value="Elektrisk arbeid">Elektrisk arbeid</option>
+              <option value="Bruk av maskiner og verktøy">Bruk av maskiner og verktøy</option>
+              <option value="Løft og håndtering av utstyr">Løft og håndtering av utstyr</option>
+              <option value="Ergonomiske belastninger">Ergonomiske belastninger</option>
+              <option value="Støy og vibrasjoner">Støy og vibrasjoner</option>
+              <option value="Støv, gass og ventilasjon">Støv, gass og ventilasjon</option>
+              <option value="Kjemikalier og biologiske stoffer">Kjemikalier og biologiske stoffer</option>
+              <option value="Brann- og eksplosjonsfare">Brann- og eksplosjonsfare</option>
+              <option value="Utslipp og forurensning">Utslipp og forurensning</option>
+              <option value="Arbeid nær trafikk eller maskiner">Arbeid nær trafikk eller maskiner</option>
+              <option value="Arbeid alene">Arbeid alene</option>
+              <option value="Andre personer i området">Andre personer i området</option>
+              <option value="Energifrigjøring / oppstart av utstyr">Energifrigjøring / oppstart av utstyr</option>
+              <option value="Ytre forhold">Ytre forhold</option>
+              <option value="Orden og ryddighet">Orden og ryddighet</option>
+              <option value="Kompetanse og opplæring">Kompetanse og opplæring</option>
+              <option value="Beredskap">Beredskap</option>
+              <option value="Annet">Annet</option>
+            </select>
+            <small style="color:#6b7280;font-size:11px;">Kobler denne ROS til tilsvarende kategori i SJA-skjemaet</small>
+          </div>
+          <div class="form-group">
             <label>Ansvarlig</label>
             <input type="text" id="ros-responsible" placeholder="Navn">
           </div>
@@ -219,6 +247,38 @@
             <label>Tiltak i prosjekteringsfasen</label>
             <textarea id="ros-measures" placeholder="Hvilke tiltak er planlagt..."></textarea>
           </div>
+          <div class="section-title full" style="margin-top:8px;">Restrisiko etter tiltak</div>
+          <div class="form-group">
+            <label>Restrisiko — Sannsynlighet (S)</label>
+            <select id="ros-s-rest" onchange="updateRestRiskScore()">
+              <option value="">Velg...</option>
+              <option value="1">1 — Svært lav</option>
+              <option value="2">2 — Lav</option>
+              <option value="3">3 — Middels</option>
+              <option value="4">4 — Høy</option>
+              <option value="5">5 — Svært høy</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Restrisiko — Konsekvens (K)</label>
+            <select id="ros-k-rest" onchange="updateRestRiskScore()">
+              <option value="">Velg...</option>
+              <option value="1">1 — Ubetydelig</option>
+              <option value="2">2 — Liten</option>
+              <option value="3">3 — Moderat</option>
+              <option value="4">4 — Alvorlig</option>
+              <option value="5">5 — Katastrofal</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>Restrisikoverdi (S × K) etter tiltak</label>
+            <div id="ros-rest-risk-score-display" style="
+              padding: 12px 14px; border-radius: 8px; font-size: 14px;
+              font-weight: 600; background: #F4F7FA; border: 1.5px solid #E2E8F0;
+              color: #94A3B8; transition: all 0.2s;">
+              Fyll inn S og K for å beregne
+            </div>
+          </div>
           <div class="form-group full">
             <label>Mulige tiltak i utførelsesfasen</label>
             <textarea id="ros-execution-measures" placeholder="Eks: SJA skal utarbeides av entrepenør..."></textarea>
@@ -229,6 +289,17 @@
           <button type="submit" class="btn-save">Lagre ROS-analyse</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ROS detalj-modal (les-modus) -->
+  <div class="modal-overlay" id="ros-detail-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>⚠️ ROS-analyse</h2>
+        <button class="modal-close" onclick="closeRosDetailModal()">×</button>
+      </div>
+      <div id="ros-detail-content"></div>
     </div>
   </div>
 
@@ -266,7 +337,8 @@
           (sja.order_number || '').toLowerCase().includes(search) ||
           (sja.technician_id || '').toLowerCase().includes(search) ||
           (sja.location || '').toLowerCase().includes(search) ||
-          (sja.job_description || '').toLowerCase().includes(search);
+          (sja.job_description || '').toLowerCase().includes(search) ||
+          (sja.category || '').toLowerCase().includes(search);
         const matchStatus = !status || sja.status === status;
         return matchSearch && matchStatus;
       });
@@ -285,6 +357,8 @@
             <tr>
               <th>Dato</th>
               <th>Ordre</th>
+              <th>Kunde</th>
+              <th>Kategori</th>
               <th>Tekniker</th>
               <th>Arbeidssted</th>
               <th>Arbeidsoperasjon</th>
@@ -297,9 +371,11 @@
               <tr onclick="openSjaModal(${sja.id})">
                 <td style="white-space:nowrap">${new Date(sja.created_at).toLocaleDateString('no-NO')}</td>
                 <td>${sja.order_number
-                  ? `<a class="order-link" href="/admin/ordre-detalj.html?id=${sja.order_id}" onclick="event.stopPropagation()">${sja.order_number}</a>`
+                  ? `<strong>${sja.order_number}</strong>`
                   : '<span style="color:#94A3B8">Frittstående</span>'
                 }</td>
+                <td>${sja.customer_name || '—'}</td>
+                <td>${sja.category || '—'}</td>
                 <td>${sja.technician_id || '—'}</td>
                 <td>${sja.location || '—'}</td>
                 <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sja.job_description || '—'}</td>
@@ -328,15 +404,25 @@
           </div>
           <div class="detail-box">
             <label>Ordre</label>
-            <p>${sja.order_number
-              ? `<a class="order-link" href="/admin/ordre-detalj.html?id=${sja.order_id}">${sja.order_number}</a>`
-              : 'Frittstående'
-            }</p>
+            <p>${sja.order_number || 'Frittstående'}</p>
+          </div>
+          <div class="detail-box">
+            <label>Kunde</label>
+            <p>${sja.customer_name || '—'}</p>
           </div>
           <div class="detail-box">
             <label>Arbeidssted / adresse</label>
             <p>${sja.location || '—'}</p>
           </div>
+          ${sja.category ? `
+          <div class="detail-box">
+            <label>Kategori</label>
+            <p>${sja.category}</p>
+          </div>
+          <div class="detail-box" ${sja.subcategory ? '' : 'style="display:none"'}>
+            <label>Underkategori</label>
+            <p>${sja.subcategory || ''}</p>
+          </div>` : ''}
           <div class="detail-box full highlight">
             <label>Beskrivelse av arbeidsoperasjon</label>
             <p>${sja.job_description || '—'}</p>
@@ -364,6 +450,16 @@
             <p><span class="status-${sja.status}">${sja.status === 'completed' ? 'Fullført' : 'Utkast'}</span></p>
           </div>
         </div>
+        ${(sja.photos && sja.photos.length > 0) ? `
+        <div class="section-title">Bilder</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          ${sja.photos.map(url => `
+            <a href="${url}" target="_blank" style="display:block;">
+              <img src="${url}" alt="SJA-bilde" loading="lazy"
+                   style="width:100px;height:100px;object-fit:cover;border-radius:6px;border:2px solid #e5e7eb;">
+            </a>
+          `).join('')}
+        </div>` : ''}
         <div style="margin-top: 20px; padding-top: 14px; border-top: 1px solid #E2E8F0; display: flex; gap: 10px;">
           <button class="btn-view" id="pdf-btn-${sja.id}" onclick="generateSjaPdf(${sja.id})">
             📄 Last ned PDF
@@ -399,21 +495,23 @@
         <table class="hms-table">
           <thead>
             <tr>
-              <th>Tittel</th><th>Type</th><th>Ansvarlig</th><th>Dato</th><th>Handlinger</th>
+              <th>Tittel</th><th>Type</th><th>Kategori</th><th>Ansvarlig</th><th>Dato</th><th>Handlinger</th>
             </tr>
           </thead>
           <tbody>
             ${rosList.map(ros => {
               const fd = ros.form_data || {};
               return `
-                <tr>
+                <tr onclick="openRosDetailModal(${ros.id})">
                   <td><strong>${ros.title}</strong></td>
                   <td>${ros.project_type ? `<span class="type-badge">${ros.project_type}</span>` : '—'}</td>
+                  <td>${ros.category || '—'}</td>
                   <td>${fd.responsible || '—'}</td>
                   <td>${new Date(ros.created_at).toLocaleDateString('no-NO')}</td>
                   <td>
-                    <button class="btn-edit" onclick="openRosModal(${ros.id})">Rediger</button>
-                    <button class="btn-delete" onclick="deleteRos(${ros.id})">Slett</button>
+                    <button class="btn-view" onclick="event.stopPropagation(); openRosDetailModal(${ros.id})">Se detaljer</button>
+                    <button class="btn-edit" onclick="event.stopPropagation(); openRosModal(${ros.id})">Rediger</button>
+                    <button class="btn-delete" onclick="event.stopPropagation(); deleteRos(${ros.id})">Slett</button>
                   </td>
                 </tr>`;
             }).join('')}
@@ -433,6 +531,7 @@
         document.getElementById('ros-id').value = ros.id;
         document.getElementById('ros-title').value = ros.title || '';
         document.getElementById('ros-project-type').value = ros.project_type || '';
+        document.getElementById('ros-category').value = ros.category || '';
         document.getElementById('ros-responsible').value = fd.responsible || '';
         document.getElementById('ros-problems').value = fd.problems || '';
         document.getElementById('ros-risks').value = fd.risks || '';
@@ -440,17 +539,127 @@
         document.getElementById('ros-s').value = fd.s || '';
         document.getElementById('ros-k').value = fd.k || '';
         document.getElementById('ros-measures').value = fd.measures || '';
+        document.getElementById('ros-s-rest').value = fd.s_rest || '';
+        document.getElementById('ros-k-rest').value = fd.k_rest || '';
         document.getElementById('ros-execution-measures').value = fd.executionMeasures || '';
         updateRiskScore();
+        updateRestRiskScore();
       } else {
         document.getElementById('ros-modal-title').textContent = 'Ny ROS-analyse';
+        updateRiskScore();
+        updateRestRiskScore();
       }
       document.getElementById('ros-modal').classList.add('open');
+    }
+
+    function openRosDetailModal(rosId) {
+      const ros = rosList.find(r => r.id === rosId);
+      if (!ros) return;
+      const fd = ros.form_data || {};
+      const s = parseInt(fd.s) || 0;
+      const k = parseInt(fd.k) || 0;
+      const score = s && k ? s * k : null;
+      let scoreHtml;
+      if (!score) {
+        scoreHtml = `<div style="padding:12px 14px;border-radius:8px;font-size:14px;font-weight:600;background:#F4F7FA;border:1.5px solid #E2E8F0;color:#94A3B8;">Ikke beregnet</div>`;
+      } else {
+        let bg, border, color, label;
+        if (score <= 4)       { bg='#F0FDF4'; border='#BBF7D0'; color='#16A34A'; label='Lav risiko'; }
+        else if (score <= 9)  { bg='#FEFCE8'; border='#FDE68A'; color='#CA8A04'; label='Middels risiko'; }
+        else if (score <= 14) { bg='#FFF7ED'; border='#FED7AA'; color='#EA580C'; label='Høy risiko'; }
+        else                  { bg='#FEF2F2'; border='#FECACA'; color='#DC2626'; label='Svært høy risiko'; }
+        scoreHtml = `<div style="padding:12px 14px;border-radius:8px;font-size:14px;font-weight:600;background:${bg};border:1.5px solid ${border};color:${color};">${score} — ${label} (S=${s} × K=${k})</div>`;
+      }
+      document.getElementById('ros-detail-content').innerHTML = `
+        <div class="section-title">Generelt</div>
+        <div class="detail-grid">
+          <div class="detail-box">
+            <label>Tittel</label>
+            <p>${ros.title}</p>
+          </div>
+          <div class="detail-box">
+            <label>Prosjekttype</label>
+            <p>${ros.project_type || '—'}</p>
+          </div>
+          ${ros.category ? `
+          <div class="detail-box">
+            <label>Kategori (SJA-kobling)</label>
+            <p>${ros.category}</p>
+          </div>` : ''}
+          <div class="detail-box">
+            <label>Ansvarlig</label>
+            <p>${fd.responsible || '—'}</p>
+          </div>
+          <div class="detail-box">
+            <label>Opprettet</label>
+            <p>${new Date(ros.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          </div>
+        </div>
+        <div class="section-title">Risikovurdering</div>
+        <div class="detail-grid">
+          <div class="detail-box full highlight">
+            <label>Aktuelle problemstillinger</label>
+            <p>${fd.problems || '—'}</p>
+          </div>
+          <div class="detail-box">
+            <label>Mulig risiko — Hva kan gå galt?</label>
+            <p>${fd.risks || '—'}</p>
+          </div>
+          <div class="detail-box">
+            <label>Antatt konsekvens</label>
+            <p>${fd.consequence || '—'}</p>
+          </div>
+          <div class="detail-box full">
+            <label>Risikoverdi (S × K)</label>
+            ${scoreHtml}
+          </div>
+        </div>
+        <div class="section-title">Tiltak</div>
+        <div class="detail-grid">
+          <div class="detail-box">
+            <label>Tiltak i prosjekteringsfasen</label>
+            <p>${fd.measures || '—'}</p>
+          </div>
+          <div class="detail-box">
+            <label>Tiltak i utførelsesfasen</label>
+            <p>${fd.executionMeasures || '—'}</p>
+          </div>
+        </div>
+        ${(() => {
+          const sr = parseInt(fd.s_rest) || 0;
+          const kr = parseInt(fd.k_rest) || 0;
+          const rScore = sr && kr ? sr * kr : null;
+          if (!rScore) return '';
+          let bg, border, color, label;
+          if (rScore <= 4)       { bg='#F0FDF4'; border='#BBF7D0'; color='#16A34A'; label='Lav risiko'; }
+          else if (rScore <= 9)  { bg='#FEFCE8'; border='#FDE68A'; color='#CA8A04'; label='Middels risiko'; }
+          else if (rScore <= 14) { bg='#FFF7ED'; border='#FED7AA'; color='#EA580C'; label='Høy risiko'; }
+          else                   { bg='#FEF2F2'; border='#FECACA'; color='#DC2626'; label='Svært høy risiko'; }
+          return `
+        <div class="section-title">Restrisiko etter tiltak</div>
+        <div class="detail-grid">
+          <div class="detail-box full">
+            <label>Restrisikoverdi (S × K)</label>
+            <div style="padding:12px 14px;border-radius:8px;font-size:14px;font-weight:600;background:${bg};border:1.5px solid ${border};color:${color};">${rScore} — ${label} (S=${sr} × K=${kr})</div>
+          </div>
+        </div>`;
+        })()}
+        <div style="margin-top:20px;padding-top:14px;border-top:1px solid #E2E8F0;display:flex;gap:10px;">
+          <button class="btn-view" onclick="window.open('/api/hms/ros/${ros.id}/pdf', '_blank')">📄 Last ned PDF</button>
+          <button class="btn-edit" onclick="closeRosDetailModal(); openRosModal(${ros.id})">Rediger</button>
+        </div>
+      `;
+      document.getElementById('ros-detail-modal').classList.add('open');
+    }
+
+    function closeRosDetailModal() {
+      document.getElementById('ros-detail-modal').classList.remove('open');
     }
 
     function closeRosModal() {
       document.getElementById('ros-modal').classList.remove('open');
       updateRiskScore();
+      updateRestRiskScore();
     }
 
     function updateRiskScore() {
@@ -472,12 +681,36 @@
       display.textContent = `${score} — ${label} (S=${s} × K=${k})`;
     }
 
+    function updateRestRiskScore() {
+      const s = parseInt(document.getElementById('ros-s-rest').value) || 0;
+      const k = parseInt(document.getElementById('ros-k-rest').value) || 0;
+      const display = document.getElementById('ros-rest-risk-score-display');
+      if (!s || !k) {
+        display.style.cssText = 'padding:12px 14px;border-radius:8px;font-size:14px;font-weight:600;background:#F4F7FA;border:1.5px solid #E2E8F0;color:#94A3B8;transition:all 0.2s;';
+        display.textContent = 'Fyll inn S og K for å beregne';
+        return;
+      }
+      const score = s * k;
+      let bg, border, color, label;
+      if (score <= 4)       { bg='#F0FDF4'; border='#BBF7D0'; color='#16A34A'; label='Lav risiko'; }
+      else if (score <= 9)  { bg='#FEFCE8'; border='#FDE68A'; color='#CA8A04'; label='Middels risiko'; }
+      else if (score <= 14) { bg='#FFF7ED'; border='#FED7AA'; color='#EA580C'; label='Høy risiko'; }
+      else                  { bg='#FEF2F2'; border='#FECACA'; color='#DC2626'; label='Svært høy risiko'; }
+      display.style.cssText = `padding:12px 14px;border-radius:8px;font-size:14px;font-weight:600;background:${bg};border:1.5px solid ${border};color:${color};transition:all 0.2s;`;
+      display.textContent = `${score} — ${label} (S=${s} × K=${k})`;
+    }
+
     document.getElementById('ros-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const rosId = document.getElementById('ros-id').value;
+      const sVal = parseInt(document.getElementById('ros-s').value) || 0;
+      const kVal = parseInt(document.getElementById('ros-k').value) || 0;
+      const sRest = parseInt(document.getElementById('ros-s-rest').value) || null;
+      const kRest = parseInt(document.getElementById('ros-k-rest').value) || null;
       const payload = {
         title: document.getElementById('ros-title').value,
         project_type: document.getElementById('ros-project-type').value,
+        category: document.getElementById('ros-category').value || null,
         status: 'completed',
         form_data: {
           responsible: document.getElementById('ros-responsible').value,
@@ -486,8 +719,11 @@
           consequence: document.getElementById('ros-consequence').value,
           s: document.getElementById('ros-s').value,
           k: document.getElementById('ros-k').value,
-          risk_score: (parseInt(document.getElementById('ros-s').value) || 0) * (parseInt(document.getElementById('ros-k').value) || 0) || null,
+          risk_score: (sVal && kVal) ? sVal * kVal : null,
           measures: document.getElementById('ros-measures').value,
+          s_rest: sRest,
+          k_rest: kRest,
+          risk_score_rest: (sRest && kRest) ? sRest * kRest : null,
           executionMeasures: document.getElementById('ros-execution-measures').value,
         }
       };

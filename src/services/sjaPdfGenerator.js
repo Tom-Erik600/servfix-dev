@@ -155,11 +155,42 @@ class SjaPdfGenerator {
   }
 
   /**
+   * Download photos from GCS and convert to base64 for PDF inlining
+   */
+  async inlinePhotos(photos) {
+    if (!photos || photos.length === 0) return [];
+
+    const inlined = [];
+    for (const url of photos) {
+      try {
+        // Extract GCS path from public URL
+        const gcsPath = url.replace(
+          `https://storage.googleapis.com/${this.bucket.name}/`, ''
+        );
+        const file = this.bucket.file(gcsPath);
+        const [exists] = await file.exists();
+        if (!exists) continue;
+
+        const [buffer] = await file.download();
+        const ext = gcsPath.split('.').pop().toLowerCase();
+        const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+        inlined.push(`data:${mime};base64,${buffer.toString('base64')}`);
+      } catch (err) {
+        console.warn(`⚠️ Could not inline photo: ${err.message}`);
+      }
+    }
+    return inlined;
+  }
+
+  /**
    * Generate HTML string for PDF
    * Includes styling for A4 layout with professional formatting
    */
-  generateHtml(sja, company) {
+  async generateHtml(sja, company) {
     const e = this.escapeHtml.bind(this);
+
+    // Inline photos from GCS
+    const inlinedPhotos = await this.inlinePhotos(sja.photos);
 
     // Format date in Norwegian
     const dato = new Date(sja.created_at).toLocaleDateString('no-NO', {
@@ -441,6 +472,22 @@ class SjaPdfGenerator {
       border: 1px solid #BBF7D0;
     }
 
+    /* Photos */
+    .photos-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .photos-grid img {
+      max-width: 140px;
+      max-height: 105px;
+      object-fit: contain;
+      border: 1px solid #E2E8F0;
+      border-radius: 4px;
+    }
+
     /* Page break handling */
     @page {
       size: A4;
@@ -510,6 +557,24 @@ class SjaPdfGenerator {
   </div>
 </div>
 
+${sja.category ? `
+<!-- Kategori -->
+<div class="section">
+  <div class="section-title">Kategori</div>
+  <div class="info-grid">
+    <div class="field">
+      <label>Kategori</label>
+      <p>${e(sja.category)}</p>
+    </div>
+    ${sja.subcategory ? `
+    <div class="field">
+      <label>Underkategori</label>
+      <p>${e(sja.subcategory)}</p>
+    </div>` : ''}
+  </div>
+</div>
+` : ''}
+
 <!-- Risikovurdering -->
 <div class="section">
   <div class="section-title">Risikovurdering</div>
@@ -524,6 +589,16 @@ class SjaPdfGenerator {
     </div>
   </div>
 </div>
+
+${inlinedPhotos.length > 0 ? `
+<!-- Dokumentasjonsbilder -->
+<div class="section">
+  <div class="section-title">Dokumentasjonsbilder</div>
+  <div class="photos-grid">
+    ${inlinedPhotos.map(src => `<img src="${src}" alt="Dokumentasjonsbilde">`).join('')}
+  </div>
+</div>
+` : ''}
 
 <!-- Godkjenning -->
 <div class="section">
@@ -636,8 +711,8 @@ class SjaPdfGenerator {
       // Load company settings and branding
       const company = await this.loadCompanySettings(tenantId);
 
-      // Generate HTML template
-      const html = this.generateHtml(sja, company);
+      // Generate HTML template (async — inlines photos from GCS)
+      const html = await this.generateHtml(sja, company);
 
       // Convert HTML to PDF
       const buffer = await this.generatePdf(html);

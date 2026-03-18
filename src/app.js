@@ -67,6 +67,7 @@ module.exports = async () => {
   app.use('/api/technicians', require('./routes/technicians'));
   app.use('/api/checklist-templates', require('./routes/checklist-templates'));
   app.use('/api/images', require('./routes/images'));
+  app.use('/api/hms', require('./routes/hms'));
 
   // Error handling
   app.use((error, req, res, next) => {

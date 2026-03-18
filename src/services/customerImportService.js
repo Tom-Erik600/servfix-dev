@@ -45,10 +45,6 @@ class CustomerImportService {
       allCustomers.push(...customers);
       hasMore = customers.length === pageSize;
       currentPage++;
-
-      if (hasMore) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
     }
 
     console.log(`  ✅ Hentet ${allCustomers.length} kunder fra Tripletex`);
@@ -92,18 +88,13 @@ class CustomerImportService {
   async importSingleCustomer(pool, tc, stats) {
     const externalId = String(tc.id);
 
-    // Hent adresser (lazy — krever ekstra API-kall)
-    let physicalAddress = '';
-    let postalAddress = '';
-
-    if (tc.physicalAddress?.id) {
-      const addr = await tripletexService.getAddress(tc.physicalAddress.id);
-      physicalAddress = this.formatAddress(addr);
-    }
-    if (tc.postalAddress?.id) {
-      const addr = await tripletexService.getAddress(tc.postalAddress.id);
-      postalAddress = this.formatAddress(addr);
-    }
+    // Hent begge adresser parallelt (2 API-kall → 1 runde)
+    const [physicalAddr, postalAddr] = await Promise.all([
+      tc.physicalAddress?.id ? tripletexService.getAddress(tc.physicalAddress.id) : null,
+      tc.postalAddress?.id ? tripletexService.getAddress(tc.postalAddress.id) : null
+    ]);
+    const physicalAddress = this.formatAddress(physicalAddr);
+    const postalAddress = this.formatAddress(postalAddr);
 
     // Kontaktperson fra Tripletex-customer-objektet
     const contactName = tc.customerContact
@@ -300,32 +291,37 @@ class CustomerImportService {
 
     const tripletexCustomers = await this.fetchAllCustomersFromTripletex();
 
-    for (const tc of tripletexCustomers) {
+    // Filtrer til kun valgte kunder
+    const selectedCustomers = tripletexCustomers.filter(tc => {
       const externalId = String(tc.id);
-      if (!selectedNew.has(externalId) && !selectedUpdated.has(externalId)) continue;
+      return selectedNew.has(externalId) || selectedUpdated.has(externalId);
+    });
 
-      try {
-        // For oppdateringer: overstyr lokalt-endret-sjekk siden bruker eksplisitt godkjente
-        if (selectedUpdated.has(externalId)) {
-          const existing = await pool.query(
-            `SELECT id FROM customers WHERE external_source = 'tripletex' AND external_id = $1`,
-            [externalId]
-          );
-          if (existing.rows.length > 0) {
-            // Nullstill updated_at slik at importSingleCustomer ikke skipper
-            await pool.query(
-              `UPDATE customers SET updated_at = created_at WHERE id = $1`,
-              [existing.rows[0].id]
-            );
-          }
+    // Nullstill updated_at for oppdateringer (batch-query)
+    if (selectedUpdated.size > 0) {
+      const updatedIds = Array.from(selectedUpdated);
+      await pool.query(
+        `UPDATE customers SET updated_at = created_at
+         WHERE external_source = 'tripletex' AND external_id = ANY($1::text[])`,
+        [updatedIds]
+      );
+    }
+
+    // Prosesser i parallelle batcher (5 om gangen for å unngå API rate-limiting)
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < selectedCustomers.length; i += BATCH_SIZE) {
+      const batch = selectedCustomers.slice(i, i + BATCH_SIZE);
+      console.log(`  📦 Batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(selectedCustomers.length / BATCH_SIZE)} (${batch.length} kunder)`);
+
+      await Promise.all(batch.map(async (tc) => {
+        try {
+          await this.importSingleCustomer(pool, tc, stats);
+        } catch (error) {
+          const msg = `Kunde ${tc.id} (${tc.name}): ${error.message}`;
+          console.error(`  ❌ ${msg}`);
+          stats.errors.push(msg);
         }
-
-        await this.importSingleCustomer(pool, tc, stats);
-      } catch (error) {
-        const msg = `Kunde ${tc.id} (${tc.name}): ${error.message}`;
-        console.error(`  ❌ ${msg}`);
-        stats.errors.push(msg);
-      }
+      }));
     }
 
     console.log(`✅ Selektiv import ferdig:`, stats);

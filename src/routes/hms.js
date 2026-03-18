@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
 const SjaPdfGenerator = require('../services/sjaPdfGenerator');
+const RosPdfGenerator = require('../services/rosPdfGenerator');
 
 // Auth middleware — tekniker eller admin
 router.use((req, res, next) => {
@@ -27,7 +28,9 @@ router.post('/sja', async (req, res) => {
       safety_measures,
       approved_by,
       signature_data,
-      status
+      status,
+      category,
+      subcategory
     } = req.body;
 
     const technicianId = req.session.technicianId || null;
@@ -36,12 +39,12 @@ router.post('/sja', async (req, res) => {
     const result = await pool.query(
       `INSERT INTO hms_sja
         (order_id, technician_id, job_description, location, identified_risks,
-         safety_measures, approved_by, signature_data, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         safety_measures, approved_by, signature_data, status, category, subcategory)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [order_id || null, technicianId, job_description, location,
        identified_risks, safety_measures, approved_by, signature_data,
-       status || 'draft']
+       status || 'draft', category || null, subcategory || null]
     );
 
     res.json({ success: true, sja: result.rows[0] });
@@ -59,7 +62,8 @@ router.get('/sja', async (req, res) => {
     const result = await pool.query(
       `SELECT s.*,
               COALESCE(o.tripletex_order_id::varchar, o.id) AS order_number,
-              o.description AS order_description
+              o.description AS order_description,
+              o.customer_name
        FROM hms_sja s
        LEFT JOIN orders o ON s.order_id = o.id
        ORDER BY s.created_at DESC`
@@ -195,14 +199,14 @@ router.post('/ros', async (req, res) => {
   try {
     const tenantId = req.adminTenantId || req.session.tenantId;
     const pool = await db.getTenantConnection(tenantId);
-    const { title, project_type, form_data, status } = req.body;
+    const { title, project_type, category, form_data, status } = req.body;
     const createdBy = req.session.adminId || req.session.technicianId || 'ukjent';
 
     const result = await pool.query(
-      `INSERT INTO hms_ros (created_by, title, project_type, form_data, status)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO hms_ros (created_by, title, project_type, category, form_data, status)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [createdBy, title, project_type, JSON.stringify(form_data || {}), status || 'draft']
+      [createdBy, title, project_type, category || null, JSON.stringify(form_data || {}), status || 'draft']
     );
     res.json({ success: true, ros: result.rows[0] });
   } catch (error) {
@@ -223,6 +227,35 @@ router.get('/ros', async (req, res) => {
   } catch (error) {
     console.error('Feil ved henting av ROS:', error);
     res.status(500).json({ error: 'Kunne ikke hente ROS' });
+  }
+});
+
+// GET /api/hms/ros/by-category/:category — Hent fullførte ROS for en SJA-kategori
+// NB: må ligge FØR /:id for å unngå routing-konflikt
+router.get('/ros/by-category/:category', async (req, res) => {
+  try {
+    const tenantId = req.session?.tenantId;
+    if (!tenantId) return res.status(401).json({ error: 'Ikke autentisert' });
+
+    const { category } = req.params;
+    const pool = await db.getTenantConnection(tenantId);
+
+    const result = await pool.query(
+      `SELECT id, title, project_type, category, form_data, status, version, created_at
+       FROM hms_ros
+       WHERE category = $1 AND status = 'completed'
+       ORDER BY updated_at DESC`,
+      [category]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    // 42703 = PostgreSQL "undefined_column" — category-migrasjonen er ikke kjørt ennå
+    if (error.code === '42703') {
+      return res.json([]);
+    }
+    console.error('Feil ved henting av ROS for kategori:', error);
+    res.status(500).json({ error: 'Serverfeil' });
   }
 });
 
@@ -250,15 +283,15 @@ router.put('/ros/:id', async (req, res) => {
   try {
     const tenantId = req.adminTenantId || req.session.tenantId;
     const pool = await db.getTenantConnection(tenantId);
-    const { title, project_type, form_data, status } = req.body;
+    const { title, project_type, category, form_data, status } = req.body;
 
     const result = await pool.query(
       `UPDATE hms_ros
-       SET title = $1, project_type = $2, form_data = $3, status = $4,
+       SET title = $1, project_type = $2, category = $3, form_data = $4, status = $5,
            updated_at = NOW(), version = version + 1
-       WHERE id = $5
+       WHERE id = $6
        RETURNING *`,
-      [title, project_type, JSON.stringify(form_data || {}), status || 'draft', parseInt(req.params.id)]
+      [title, project_type, category || null, JSON.stringify(form_data || {}), status || 'draft', parseInt(req.params.id)]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'ROS ikke funnet' });
@@ -286,6 +319,23 @@ router.delete('/ros/:id', async (req, res) => {
   } catch (error) {
     console.error('Feil ved sletting av ROS:', error);
     res.status(500).json({ error: 'Kunne ikke slette ROS' });
+  }
+});
+
+// GET /api/hms/ros/:id/pdf — Generer og stream ROS-PDF
+router.get('/ros/:id/pdf', async (req, res) => {
+  const tenantId = req.adminTenantId || req.session.tenantId;
+  const rosId = parseInt(req.params.id);
+  const generator = new RosPdfGenerator();
+
+  try {
+    const buffer = await generator.generate(rosId, tenantId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="ros_${rosId}.pdf"`);
+    res.send(buffer);
+  } catch (error) {
+    console.error('Feil ved generering av ROS-PDF:', error);
+    res.status(500).json({ error: 'Kunne ikke generere PDF', details: error.message });
   }
 });
 
