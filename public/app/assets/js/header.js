@@ -8,7 +8,8 @@ async function renderAppHeader(options = {}) {
         backUrl = 'index.html',
         subtitle = 'Planlagte service',
         technician = null,
-        showDate = true
+        showDate = true,
+        settings = null
     } = options;
 
     const header = document.getElementById('app-header');
@@ -17,19 +18,21 @@ async function renderAppHeader(options = {}) {
         return;
     }
 
-    // Hent bedriftsnavn fra innstillinger
-    let companyName = 'AIR-TECH AS'; // Fallback
-    try {
-        const response = await fetch('/api/images/settings', { 
-            credentials: 'include' 
-        });
-        if (response.ok) {
-            const settings = await response.json();
-            companyName = settings.companyInfo?.name || 'AIR-TECH AS';
+    // Bruk medsendt settings eller hent fra API
+    let resolvedSettings = settings;
+    if (!resolvedSettings) {
+        try {
+            const response = await fetch('/api/images/settings', {
+                credentials: 'include'
+            });
+            if (response.ok) {
+                resolvedSettings = await response.json();
+            }
+        } catch (error) {
+            console.log('Bruker standard bedriftsnavn:', error.message);
         }
-    } catch (error) {
-        console.log('Bruker standard bedriftsnavn:', error.message);
     }
+    const companyName = resolvedSettings?.companyInfo?.name || 'AIR-TECH AS';
 
     // Formater norsk dato
     const today = new Date();

@@ -260,16 +260,16 @@ router.post('/order/:orderId/send', async (req, res) => {
     
     res.json({
       success: true,
-      message: `${reportsResult.rows.length} rapport(er) sendt til ${servfixContact.email}`,
-      sentTo: servfixContact.email,
+      message: `${reportsResult.rows.length} rapport(er) sendt til ${recipient.email}`,
+      sentTo: recipient.email,
       reportCount: reportsResult.rows.length
     });
     
   } catch (error) {
-    console.error('Error sending order reports:', error);
-    res.status(500).json({ 
+    console.error('Error sending order reports:', error.message, error.stack);
+    res.status(500).json({
       error: 'Kunne ikke sende rapporter',
-      details: error.message 
+      details: error.message
     });
   }
 });
