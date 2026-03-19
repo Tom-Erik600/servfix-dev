@@ -410,6 +410,9 @@
           el.setAttribute('disabled', 'disabled');
         });
 
+        // Oppdater listen slik at bildene er med når man åpner SJA-en igjen
+        await loadExistingSja();
+
         showToast('SJA lagret!');
       } catch (err) {
         console.error(err);
@@ -479,6 +482,32 @@
       const isHidden = wrapper.style.display === 'none';
       wrapper.style.display = isHidden ? 'block' : 'none';
       btn.textContent = isHidden ? '− Skjul skjema' : '+ Opprett ny SJA';
+
+      // Reset skjemaet når man åpner nytt
+      if (isHidden) {
+        _savedSjaId = null;
+        _pendingPhotos = [];
+        renderFormPhotos();
+
+        // Nullstill redigerbare felt
+        document.getElementById('sja-job-description').value = '';
+        document.getElementById('sja-risks').value = '';
+        document.getElementById('sja-measures').value = '';
+        document.getElementById('sja-approved-by').value = '';
+
+        // Fjern disabled fra alle felt
+        document.querySelectorAll('#sja-form textarea, #sja-form select, #sja-form input:not([readonly])').forEach(el => {
+          el.removeAttribute('disabled');
+        });
+
+        // Vis Lagre-knapp, skjul Ferdig-knapp
+        const submitBtn = document.getElementById('sja-submit');
+        submitBtn.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Lagre SJA';
+        document.getElementById('sja-done-btn').style.display = 'none';
+        document.getElementById('sja-upload-photo-btn').disabled = false;
+      }
     }
 
     function openSjaView(sjaId) {
@@ -500,6 +529,11 @@
         <div class="sja-view-field">
           <label>Kategori</label>
           <p>${e(sja.category)}${sja.subcategory ? ' — ' + e(sja.subcategory) : ''}</p>
+        </div>` : ''}
+        ${sja.ros_id && sja.ros_title ? `
+        <div class="sja-view-field">
+          <label>Tilknyttet ROS-analyse</label>
+          <p style="cursor:pointer;color:#0E9CB5;" onclick="window.open('/admin/hms.html', '_blank')">${e(sja.ros_title)}</p>
         </div>` : ''}
         <div class="sja-view-field">
           <label>Dato</label>
@@ -717,11 +751,15 @@
       });
     }
 
+    let _currentRosId = null;
+
     async function fetchRosForCategory(categoryLabel) {
       const rosInfo = document.getElementById('sja-ros-info');
       const rosTitle = document.getElementById('sja-ros-title');
       const rosBtn = document.getElementById('sja-ros-view-btn');
       if (!rosInfo) return;
+
+      _currentRosId = null;
 
       if (!categoryLabel) {
         rosInfo.style.display = 'none';
@@ -737,6 +775,7 @@
 
         if (rosList.length > 0) {
           const ros = rosList[0];
+          _currentRosId = ros.id;
           rosTitle.textContent = ros.title;
           rosBtn.onclick = () => window.open(`/api/hms/ros/${ros.id}/pdf`, '_blank');
           rosInfo.style.display = 'block';

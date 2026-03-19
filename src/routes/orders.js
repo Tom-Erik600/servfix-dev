@@ -263,9 +263,12 @@ router.get('/:id', async (req, res) => {
     
     console.log('📋 Fetching order:', id);
 
-    // 1. Hent ordre
+    // 1. Hent ordre med tekniker-info
     const orderResult = await pool.query(
-      `SELECT * FROM orders WHERE id = $1`,
+      `SELECT o.*, t.name as technician_name, t.id as tech_id
+       FROM orders o
+       LEFT JOIN technicians t ON o.technician_id = t.id
+       WHERE o.id = $1`,
       [id]
     );
     
@@ -327,13 +330,14 @@ router.get('/:id', async (req, res) => {
         }
     }
 
-    // 5. Send final response MED PARSED customer_data
+    // 5. Send final response MED PARSED customer_data og tekniker
     res.json({
         ...order,
         orderNumber: `SO-${order.id.split('-')[1]}-${order.id.split('-')[2].slice(-6)}`,
         equipment: equipment,
         // CRITICAL: Sørg for at customer_data er inkludert og parsed
-        customer_data: order.customer_data || {}
+        customer_data: order.customer_data || {},
+        technician: order.technician_id ? { id: order.tech_id, name: order.technician_name } : null
     });
     
   } catch (error) {

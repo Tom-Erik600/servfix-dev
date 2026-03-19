@@ -16,79 +16,82 @@
             <!-- Content loaded dynamically by main.js -->
         </header>
 
-        <main class="main-content r2">
-            <div class="r2-hero">
-                <div class="r2-hero-top">
-                    <div>
-                        <h1 class="r2-title">Servicerapporter</h1>
-                        <p class="r2-subtitle">Arbeidskø for sending og fakturering</p>
-                    </div>
+        <main class="main-content">
+            <!-- Page header -->
+            <div class="page-header">
+                <h1>📋 Servicerapporter</h1>
+                <p>Administrer og send servicerapporter til kunder</p>
+            </div>
 
-                    <div class="r2-hero-actions">
-                        <div class="r2-search">
-                            <input type="text" id="search-input" placeholder="Søk kunde, ordre, tekniker, anlegg..." autocomplete="off">
-                        </div>
-                        <button class="r2-btn r2-btn-primary" onclick="reloadReports()" type="button" title="Oppdater">
-                            Oppdater
-                        </button>
+            <!-- Filter and search -->
+            <div class="card" style="margin-bottom: 24px;">
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label>Status filter</label>
+                        <select id="status-filter">
+                            <option value="all">Alle rapporter</option>
+                            <option value="pending">Venter sending</option>
+                            <option value="sent">Sendt til kunde</option>
+                            <option value="invoiced">Fakturerte</option>
+                        </select>
                     </div>
-                </div>
-
-                <div class="r2-toolbar">
-                    <div class="r2-tabs" role="tablist" aria-label="Rapportko">
-                        <button class="r2-tab is-active" type="button" data-queue="need_action" role="tab" aria-selected="true">
-                            Trenger handling <span class="r2-pill" id="tab-need-action">0</span>
-                        </button>
-                        <button class="r2-tab" type="button" data-queue="ready_send" role="tab" aria-selected="false">
-                            Klar til sending <span class="r2-pill" id="tab-ready-send">0</span>
-                        </button>
-                        <button class="r2-tab" type="button" data-queue="sent_not_invoiced" role="tab" aria-selected="false">
-                            Sendt, ikke fakturert <span class="r2-pill" id="tab-sent-not-invoiced">0</span>
-                        </button>
-                        <button class="r2-tab" type="button" data-queue="done" role="tab" aria-selected="false">
-                            Ferdige <span class="r2-pill" id="tab-done">0</span>
-                        </button>
-                        <button class="r2-tab" type="button" data-queue="all" role="tab" aria-selected="false">
-                            Alle <span class="r2-pill" id="tab-all">0</span>
-                        </button>
-                    </div>
-
-                    <div class="r2-meta" aria-label="Statistikk">
-                        <div class="r2-meta-item">
-                            <span class="r2-meta-label">Mangler e-post</span>
-                            <span class="r2-meta-value" id="stat-missing-email">0</span>
-                        </div>
-                        <div class="r2-meta-item">
-                            <span class="r2-meta-label">Klar til sending</span>
-                            <span class="r2-meta-value" id="stat-ready-send">0</span>
-                        </div>
-                        <div class="r2-meta-item">
-                            <span class="r2-meta-label">Til fakturering</span>
-                            <span class="r2-meta-value" id="stat-sent-not-invoiced">0</span>
-                        </div>
-                        <div class="r2-meta-item is-quiet">
-                            <span class="r2-meta-label">Totalt</span>
-                            <span class="r2-meta-value" id="stat-total">0</span>
-                        </div>
+                    
+                    <div class="filter-group">
+                        <label>Søk</label>
+                        <input type="text" id="search-input" placeholder="Søk kunde, ordre, tekniker...">
                     </div>
                 </div>
             </div>
 
-            <div class="r2-card">
-                <div class="r2-table-wrap" role="region" aria-label="Servicerapporter">
-                    <table class="r2-table">
+            <!-- Statistics -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-reports">0</div>
+                    <div class="stat-label">Totalt rapporter</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="sent-reports">0</div>
+                    <div class="stat-label">Sendt til kunde</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="pending-reports">0</div>
+                    <div class="stat-label">Venter på sending</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="invoiced-reports">0</div>
+                    <div class="stat-label">Fakturerte</div>
+                </div>
+            </div>
+
+            <!-- Reports Table -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Servicerapporter</h2>
+                    <button onclick="reloadReports()" class="refresh-btn">
+                        🔄 Oppdater
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table class="reports-table">
                         <thead>
                             <tr>
-                                <th>Oppdrag</th>
-                                <th>Service</th>
-                                <th>Tekniker</th>
-                                <th>Steg</th>
-                                <th>Verktøy</th>
+                                <th>ORDRENR</th>
+                                <th>ORDREDATO</th>
+                                <th>SERVICEDATO</th>
+                                <th>KUNDE</th>
+                                <th>TEKNIKER</th>
+                                <th>ANLEGG</th>
+                                <th>STATUS</th>
+                                <th>FAKTURA</th>
+                                <th>E-POST</th>
+                                <th>HANDLING</th>
                             </tr>
                         </thead>
                         <tbody id="reports-table-body">
                             <tr>
-                                <td colspan="5" class="r2-loading">Laster rapporter...</td>
+                                <td colspan="9" class="loading-cell">
+                                    Laster rapporter...
+                                </td>
                             </tr>
                         </tbody>
                     </table>
@@ -97,16 +100,17 @@
         </main>
     </div>
 
-    <!-- Edit Report Modal (shared with original page) -->
+    <!-- Edit Report Modal -->
     <div id="edit-report-modal" class="modal-overlay">
         <div class="modal-content large">
             <div class="modal-header">
                 <h3>✏️ Rediger servicerapport</h3>
                 <button type="button" class="close-btn" onclick="closeEditModal()">×</button>
             </div>
-
+            
             <div class="modal-body" id="edit-modal-body">
                 <div class="edit-form">
+                    <!-- Metadata Section -->
                     <div class="edit-section">
                         <h4>📋 Metadata</h4>
                         <div class="form-row">
@@ -125,62 +129,78 @@
                         </div>
                     </div>
 
+                    <!-- Checklist Comments Section -->
                     <div class="edit-section">
                         <h4>💬 Kommentarer i sjekkliste</h4>
                         <div id="checklist-comments-container">
+                            <!-- Fylles dynamisk av JS -->
                             <p class="placeholder-text">Laster sjekkliste...</p>
                         </div>
                     </div>
 
+                    <!-- Products Section -->
                     <div class="edit-section">
                         <h4>📦 Produkter brukt</h4>
-                        <div id="products-container"></div>
+                        <div id="products-container">
+                            <!-- Fylles dynamisk av JS -->
+                        </div>
                         <button type="button" class="btn btn-sm btn-outline" id="add-product-btn">+ Legg til produkt</button>
                     </div>
 
+                    <!-- Additional Work Section -->
                     <div class="edit-section">
                         <h4>🔧 Tilleggsarbeid</h4>
-                        <div id="work-container"></div>
+                        <div id="work-container">
+                            <!-- Fylles dynamisk av JS -->
+                        </div>
                         <button type="button" class="btn btn-sm btn-outline" id="add-work-btn">+ Legg til arbeid</button>
                     </div>
                 </div>
             </div>
-
+            
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Avbryt</button>
-                <button type="button" class="btn btn-success" id="save-report-btn">💾 Lagre og regenerer PDF</button>
+                <button type="button" class="btn btn-success" id="save-report-btn">
+                    💾 Lagre og regenerer PDF
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- Invoice Modal (shared with original page) -->
+    <!-- Invoice Modal -->
     <div id="invoice-modal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
                 <h3>📄 Registrer faktura</h3>
                 <button type="button" class="close-btn" onclick="closeInvoiceModal()">×</button>
             </div>
-
+            
             <div class="modal-body">
                 <div class="info-box">
                     <strong>Ordre:</strong> <span id="invoice-order-id"></span><br>
                     <strong>Kunde:</strong> <span id="invoice-customer-name"></span>
                 </div>
-
+                
                 <div class="form-group">
                     <label>Fakturanummer *</label>
-                    <input type="text" id="invoice-number-input" placeholder="F.eks: F-2025-001" required>
+                    <input type="text" id="invoice-number-input" 
+                           placeholder="F.eks: F-2025-001" required>
                 </div>
-
+                
                 <div class="form-group">
                     <label>Kommentar (valgfritt)</label>
-                    <textarea id="invoice-comment-input" rows="3" placeholder="Ekstra informasjon..."></textarea>
+                    <textarea id="invoice-comment-input" rows="3" 
+                              placeholder="Ekstra informasjon..."></textarea>
                 </div>
             </div>
-
+            
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeInvoiceModal()">Avbryt</button>
-                <button type="button" class="btn btn-success" onclick="saveInvoice()">💾 Lagre faktura</button>
+                <button type="button" class="btn btn-secondary" onclick="closeInvoiceModal()">
+                    Avbryt
+                </button>
+                <button type="button" class="btn btn-success" onclick="saveInvoice()">
+                    💾 Lagre faktura
+                </button>
             </div>
         </div>
     </div>

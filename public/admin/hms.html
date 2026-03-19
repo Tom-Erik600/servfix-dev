@@ -359,6 +359,7 @@
               <th>Ordre</th>
               <th>Kunde</th>
               <th>Kategori</th>
+              <th>ROS</th>
               <th>Tekniker</th>
               <th>Arbeidssted</th>
               <th>Arbeidsoperasjon</th>
@@ -376,6 +377,7 @@
                 }</td>
                 <td>${sja.customer_name || '—'}</td>
                 <td>${sja.category || '—'}</td>
+                <td>${sja.ros_id ? '<span style="background:#E8F6FA;color:#0E9CB5;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;">Knyttet</span>' : '—'}</td>
                 <td>${sja.technician_id || '—'}</td>
                 <td>${sja.location || '—'}</td>
                 <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sja.job_description || '—'}</td>
@@ -422,6 +424,11 @@
           <div class="detail-box" ${sja.subcategory ? '' : 'style="display:none"'}>
             <label>Underkategori</label>
             <p>${sja.subcategory || ''}</p>
+          </div>` : ''}
+          ${sja.ros_id && sja.ros_title ? `
+          <div class="detail-box">
+            <label>Tilknyttet ROS</label>
+            <p><a href="#" onclick="event.preventDefault(); closeSjaModal(); switchTab('ros'); setTimeout(() => openRosDetailModal(${sja.ros_id}), 200);" style="color:#0E9CB5;font-weight:600;text-decoration:none;">${sja.ros_title}</a></p>
           </div>` : ''}
           <div class="detail-box full highlight">
             <label>Beskrivelse av arbeidsoperasjon</label>
@@ -645,7 +652,7 @@
         </div>`;
         })()}
         <div style="margin-top:20px;padding-top:14px;border-top:1px solid #E2E8F0;display:flex;gap:10px;">
-          <button class="btn-view" onclick="window.open('/api/hms/ros/${ros.id}/pdf', '_blank')">📄 Last ned PDF</button>
+          <button class="btn-view" id="ros-pdf-btn-${ros.id}" onclick="generateRosPdf(${ros.id})">📄 Last ned PDF</button>
           <button class="btn-edit" onclick="closeRosDetailModal(); openRosModal(${ros.id})">Rediger</button>
         </div>
       `;
@@ -747,6 +754,24 @@
         await fetch(`/api/hms/ros/${id}`, { method: 'DELETE', credentials: 'include' });
         await loadRos();
       } catch { alert('Kunne ikke slette. Prøv igjen.'); }
+    }
+
+    async function generateRosPdf(rosId) {
+      const btn = document.getElementById(`ros-pdf-btn-${rosId}`);
+      if (btn) { btn.textContent = '⏳ Genererer...'; btn.disabled = true; }
+
+      try {
+        const res = await fetch(`/api/hms/ros/${rosId}/pdf`, { credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok || !data.pdfUrl) throw new Error(data.error || 'Ingen PDF-URL i respons');
+
+        window.open(data.pdfUrl, '_blank');
+      } catch (err) {
+        console.error('ROS PDF generation failed:', err);
+        alert('Kunne ikke generere PDF. Merk: PDF-generering fungerer kun i GCP, ikke lokalt.');
+      } finally {
+        if (btn) { btn.textContent = '📄 Last ned PDF'; btn.disabled = false; }
+      }
     }
 
     // ─── INIT ─────────────────────────────────────────

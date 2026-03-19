@@ -54,6 +54,50 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET one customer by id — for deep-linking from other pages
+router.get('/:customerId', async (req, res) => {
+  const { customerId } = req.params;
+
+  try {
+    const customerService = require('../../services/customerService');
+    const tenantId = req.session.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant ID mangler i session' });
+    }
+
+    // Allow lookup by internal id OR Tripletex external_id
+    let c = await customerService.getCustomer(tenantId, customerId);
+    if (!c) {
+      c = await customerService.getCustomerByExternalId(tenantId, customerId);
+    }
+    if (!c) {
+      return res.status(404).json({ error: 'Kunde ikke funnet' });
+    }
+
+    return res.json({
+      id: String(c.id),
+      name: c.name || '',
+      customerNumber: c.customer_number || '',
+      organizationNumber: c.organization_number || '',
+      contact: '',
+      email: c.email || '',
+      phone: c.phone || '',
+      physicalAddress: c.physical_address || '',
+      postalAddress: c.postal_address || '',
+      invoiceEmail: c.invoice_email || '',
+      reportEmail: null,
+      externalId: c.external_id || null,
+      notes: c.notes || ''
+    });
+  } catch (error) {
+    console.error('❌ [ADMIN CUSTOMERS] Error fetching customer:', error.message);
+    res.status(500).json({
+      error: 'Failed to fetch customer',
+      details: error.message
+    });
+  }
+});
+
 // POST: Preview import — sammenlign Tripletex med lokal DB uten å skrive
 router.post('/import/preview', async (req, res) => {
   console.log('🔍 [ADMIN CUSTOMERS] POST import preview');

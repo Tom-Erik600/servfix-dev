@@ -35,16 +35,28 @@ router.post('/sja', async (req, res) => {
 
     const technicianId = req.session.technicianId || null;
 
+    // Automatisk ROS-kobling via category
+    let rosId = null;
+    if (category) {
+      try {
+        const rosResult = await pool.query(
+          `SELECT id FROM hms_ros WHERE category = $1 AND status = 'completed' ORDER BY updated_at DESC LIMIT 1`,
+          [category]
+        );
+        if (rosResult.rows.length) rosId = rosResult.rows[0].id;
+      } catch (_) { /* feiler stille */ }
+    }
+
     // orders.id er VARCHAR — send order_id som string, ikke parseInt()
     const result = await pool.query(
       `INSERT INTO hms_sja
         (order_id, technician_id, job_description, location, identified_risks,
-         safety_measures, approved_by, signature_data, status, category, subcategory)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         safety_measures, approved_by, signature_data, status, category, subcategory, ros_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [order_id || null, technicianId, job_description, location,
        identified_risks, safety_measures, approved_by, signature_data,
-       status || 'draft', category || null, subcategory || null]
+       status || 'draft', category || null, subcategory || null, rosId]
     );
 
     res.json({ success: true, sja: result.rows[0] });
@@ -63,9 +75,11 @@ router.get('/sja', async (req, res) => {
       `SELECT s.*,
               COALESCE(o.tripletex_order_id::varchar, o.id) AS order_number,
               o.description AS order_description,
-              o.customer_name
+              o.customer_name,
+              r.title AS ros_title
        FROM hms_sja s
        LEFT JOIN orders o ON s.order_id = o.id
+       LEFT JOIN hms_ros r ON s.ros_id = r.id
        ORDER BY s.created_at DESC`
     );
     res.json(result.rows);
@@ -82,7 +96,11 @@ router.get('/sja/order/:orderId', async (req, res) => {
     const pool = await db.getTenantConnection(tenantId);
     // orders.id er VARCHAR — ikke parseInt()
     const result = await pool.query(
-      `SELECT * FROM hms_sja WHERE order_id = $1 ORDER BY created_at DESC`,
+      `SELECT s.*, r.title AS ros_title
+       FROM hms_sja s
+       LEFT JOIN hms_ros r ON s.ros_id = r.id
+       WHERE s.order_id = $1
+       ORDER BY s.created_at DESC`,
       [req.params.orderId]
     );
     res.json(result.rows);
@@ -98,7 +116,10 @@ router.get('/sja/:id', async (req, res) => {
     const tenantId = req.adminTenantId || req.session.tenantId;
     const pool = await db.getTenantConnection(tenantId);
     const result = await pool.query(
-      `SELECT * FROM hms_sja WHERE id = $1`,
+      `SELECT s.*, r.title AS ros_title
+       FROM hms_sja s
+       LEFT JOIN hms_ros r ON s.ros_id = r.id
+       WHERE s.id = $1`,
       [parseInt(req.params.id)]  // hms_sja.id er SERIAL (integer)
     );
     if (result.rows.length === 0) {
@@ -288,7 +309,7 @@ router.put('/ros/:id', async (req, res) => {
     const result = await pool.query(
       `UPDATE hms_ros
        SET title = $1, project_type = $2, category = $3, form_data = $4, status = $5,
-           updated_at = NOW(), version = version + 1
+           updated_at = NOW(), version = version + 1, pdf_url = NULL
        WHERE id = $6
        RETURNING *`,
       [title, project_type, category || null, JSON.stringify(form_data || {}), status || 'draft', parseInt(req.params.id)]
@@ -322,20 +343,59 @@ router.delete('/ros/:id', async (req, res) => {
   }
 });
 
-// GET /api/hms/ros/:id/pdf — Generer og stream ROS-PDF
+// GET /api/hms/ros/:id/pdf — Generer og hent PDF for en ROS
+// Generering skjer kun i GCP — returnerer feil lokalt (Puppeteer not available on Windows)
 router.get('/ros/:id/pdf', async (req, res) => {
-  const tenantId = req.adminTenantId || req.session.tenantId;
-  const rosId = parseInt(req.params.id);
-  const generator = new RosPdfGenerator();
-
   try {
-    const buffer = await generator.generate(rosId, tenantId);
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="ros_${rosId}.pdf"`);
-    res.send(buffer);
+    const tenantId = req.adminTenantId || req.session.tenantId;
+    const rosId = parseInt(req.params.id);
+
+    // Sjekk om PDF allerede er generert
+    const pool = await db.getTenantConnection(tenantId);
+    const existing = await pool.query(
+      `SELECT pdf_url FROM hms_ros WHERE id = $1`,
+      [rosId]
+    );
+    if (!existing.rows.length) {
+      return res.status(404).json({ error: 'ROS ikke funnet' });
+    }
+
+    // Hvis PDF allerede finnes — returner URL direkte
+    if (existing.rows[0].pdf_url) {
+      return res.json({ success: true, pdfUrl: existing.rows[0].pdf_url });
+    }
+
+    // Generer ny PDF
+    console.log(`📄 Generating ROS PDF for #${rosId}...`);
+    const generator = new RosPdfGenerator();
+    const { pdfUrl } = await generator.generate(rosId, tenantId);
+
+    res.json({ success: true, pdfUrl });
   } catch (error) {
     console.error('Feil ved generering av ROS-PDF:', error);
     res.status(500).json({ error: 'Kunne ikke generere PDF', details: error.message });
+  }
+});
+
+// GET /api/hms/ros/:id/pdf/regenerate — Tving regenerering av PDF
+router.get('/ros/:id/pdf/regenerate', async (req, res) => {
+  try {
+    const tenantId = req.adminTenantId || req.session.tenantId;
+    const rosId = parseInt(req.params.id);
+
+    // Nullstill eksisterende PDF-URL først
+    const pool = await db.getTenantConnection(tenantId);
+    await pool.query(`UPDATE hms_ros SET pdf_url = NULL WHERE id = $1`, [rosId]);
+
+    // Generer på nytt
+    console.log(`📄 Regenerating ROS PDF for #${rosId}...`);
+    const generator = new RosPdfGenerator();
+    const { pdfUrl } = await generator.generate(rosId, tenantId);
+
+    res.json({ success: true, pdfUrl });
+  } catch (error) {
+    console.error('Feil ved regenerering av ROS-PDF:', error);
+    res.status(500).json({ error: 'Kunne ikke regenerere PDF', details: error.message });
   }
 });
 

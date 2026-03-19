@@ -35,7 +35,8 @@ class QuotePDFGenerator {
             };
 
             // I Google Cloud bruker vi Chrome fra container
-            if (process.env.NODE_ENV === 'production') {
+            const fs = require('fs');
+            if (fs.existsSync('/usr/bin/chromium')) {
                 options.executablePath = '/usr/bin/chromium';
                 console.log('🚀 Using Google Cloud Chrome');
             } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {

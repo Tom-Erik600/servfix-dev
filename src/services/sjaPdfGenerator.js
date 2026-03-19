@@ -1,6 +1,7 @@
 'use strict';
 
 const puppeteer = require('puppeteer');
+const fs = require('fs');
 const db = require('../config/database');
 const gcs = require('../config/gcs');
 
@@ -34,7 +35,7 @@ class SjaPdfGenerator {
       ]
     };
 
-    if (process.env.NODE_ENV === 'production') {
+    if (fs.existsSync('/usr/bin/chromium')) {
       opts.executablePath = '/usr/bin/chromium';
     }
 

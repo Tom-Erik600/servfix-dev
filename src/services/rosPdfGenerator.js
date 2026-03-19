@@ -1,6 +1,7 @@
 'use strict';
 
 const puppeteer = require('puppeteer');
+const fs = require('fs');
 const db = require('../config/database');
 const gcs = require('../config/gcs');
 
@@ -30,7 +31,7 @@ class RosPdfGenerator {
       ]
     };
 
-    if (process.env.NODE_ENV === 'production') {
+    if (fs.existsSync('/usr/bin/chromium')) {
       opts.executablePath = '/usr/bin/chromium';
     }
 
@@ -177,22 +178,68 @@ class RosPdfGenerator {
 
   generateHtml(ros, company) {
     const e = this.escapeHtml.bind(this);
-    const fd = ros.form_data || {};
 
-    const s = parseInt(fd.s) || 0;
-    const k = parseInt(fd.k) || 0;
-    const score = s && k ? s * k : null;
+    const fd = (() => {
+      if (!ros.form_data) return {};
+      if (typeof ros.form_data === 'string') {
+        try {
+          return JSON.parse(ros.form_data);
+        } catch (_) {
+          return {};
+        }
+      }
+      return ros.form_data;
+    })();
 
-    let scoreLabel = '—';
-    let scoreBg = '#F4F7FA', scoreBorder = '#E2E8F0', scoreColor = '#64748B';
-    if (score) {
-      if (score <= 4)       { scoreBg='#DCFCE7'; scoreBorder='#86EFAC'; scoreColor='#15803D'; scoreLabel=`${score} — Lav risiko`; }
-      else if (score <= 9)  { scoreBg='#FEF9C3'; scoreBorder='#FDE047'; scoreColor='#A16207'; scoreLabel=`${score} — Middels risiko`; }
-      else if (score <= 14) { scoreBg='#FFEDD5'; scoreBorder='#FDBA74'; scoreColor='#C2410C'; scoreLabel=`${score} — Høy risiko`; }
-      else                  { scoreBg='#FEE2E2'; scoreBorder='#FCA5A5'; scoreColor='#B91C1C'; scoreLabel=`${score} — Svært høy risiko`; }
-    }
+    const toInt = (v) => {
+      const n = parseInt(v);
+      return Number.isFinite(n) ? n : 0;
+    };
 
-    const riskMatrixHtml = (s && k) ? this.buildRiskMatrix(s, k) : '<p style="color:#94A3B8;font-size:11px;">Sannsynlighet (S) og/eller Konsekvens (K) ikke angitt.</p>';
+    const classifyScore = (score) => {
+      if (!score) {
+        return {
+          bg: '#F4F7FA',
+          border: '#E2E8F0',
+          color: '#64748B',
+          label: '—'
+        };
+      }
+      if (score <= 4) {
+        return { bg: '#DCFCE7', border: '#86EFAC', color: '#15803D', label: `${score} — Lav risiko` };
+      }
+      if (score <= 9) {
+        return { bg: '#FEF9C3', border: '#FDE047', color: '#A16207', label: `${score} — Middels risiko` };
+      }
+      if (score <= 14) {
+        return { bg: '#FFEDD5', border: '#FDBA74', color: '#C2410C', label: `${score} — Høy risiko` };
+      }
+      return { bg: '#FEE2E2', border: '#FCA5A5', color: '#B91C1C', label: `${score} — Svært høy risiko` };
+    };
+
+    const s = toInt(fd.s);
+    const k = toInt(fd.k);
+    const score = (s && k) ? s * k : null;
+    const scoreStyle = classifyScore(score);
+
+    const sr = toInt(fd.s_rest);
+    const kr = toInt(fd.k_rest);
+    const rScore = (sr && kr) ? sr * kr : null;
+    const rStyle = classifyScore(rScore);
+
+    const reduction = (score && rScore) ? (score - rScore) : null;
+    const reductionPct = (score && rScore) ? Math.round(((score - rScore) / score) * 100) : null;
+    const reductionText = (reduction !== null)
+      ? (reduction > 0 ? `↓ ${reduction} poeng (${reductionPct}%)` : `0 poeng (0%)`)
+      : '—';
+
+    const riskMatrixBeforeHtml = (score)
+      ? this.buildRiskMatrix(s, k)
+      : '<p style="color:#94A3B8;font-size:11px;">Fyll inn S og K for å beregne.</p>';
+
+    const riskMatrixAfterHtml = (rScore)
+      ? this.buildRiskMatrix(sr, kr)
+      : '<p style="color:#94A3B8;font-size:11px;">Fyll inn restrisiko S og K for å beregne.</p>';
 
     const dato = new Date(ros.created_at).toLocaleDateString('no-NO', {
       day: 'numeric', month: 'long', year: 'numeric'
@@ -216,6 +263,8 @@ class RosPdfGenerator {
       padding: 12mm 15mm;
       line-height: 1.4;
     }
+
+    .muted { color: #64748B; }
 
     /* Header */
     .header {
@@ -335,6 +384,41 @@ class RosPdfGenerator {
       font-size: 13px;
       font-weight: 700;
       border: 1.5px solid;
+    }
+
+    .summary-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .summary-card {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .summary-card label {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748B;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .summary-value {
+      font-size: 12px;
+      font-weight: 800;
+      color: #0F172A;
+      line-height: 1.25;
+    }
+    .summary-value small {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      color: #64748B;
+      margin-top: 2px;
     }
 
     /* Risk matrix */
@@ -469,30 +553,62 @@ class RosPdfGenerator {
     <span>${oppdatert}</span>
   </div>
   <div class="meta-item">
+    <label>Status</label>
+    <span>${ros.status === 'completed' ? '✓ Fullført' : 'Utkast'}</span>
+  </div>
+  <div class="meta-item">
     <label>Versjon</label>
     <span>v${ros.version || 1}</span>
   </div>
 </div>
 
-<!-- Generell informasjon -->
+<!-- Summary -->
+<div class="summary-row">
+  <div class="summary-card">
+    <label>Risikoverdi (S × K)</label>
+    <div class="summary-value">${scoreStyle.label}<small>${score ? `S=${s} · K=${k}` : 'Fyll inn S og K'}</small></div>
+  </div>
+  <div class="summary-card">
+    <label>Restrisikoverdi etter tiltak</label>
+    <div class="summary-value">${rStyle.label}<small>${rScore ? `S=${sr} · K=${kr}` : 'Fyll inn restrisiko S og K'}</small></div>
+  </div>
+  <div class="summary-card">
+    <label>Risikoreduksjon</label>
+    <div class="summary-value">${reductionText}<small>${(score && rScore) ? `${score} → ${rScore}` : '—'}</small></div>
+  </div>
+</div>
+
+<!-- Generelt -->
 <div class="section">
-  <div class="section-title">Generell informasjon</div>
+  <div class="section-title">Generelt</div>
   <div class="info-grid">
     <div class="field">
       <label>Ansvarlig</label>
       <p>${e(fd.responsible)}</p>
     </div>
     <div class="field highlighted">
-      <label>Aktuelle problemstillinger</label>
-      <p>${e(fd.problems)}</p>
+      <label>Tittel</label>
+      <p>${e(ros.title)}</p>
+    </div>
+    <div class="field">
+      <label>Prosjekttype / arbeidstype</label>
+      <p>${e(ros.project_type)}</p>
+    </div>
+    <div class="field">
+      <label>Arbeidskategori (SJA-kobling)</label>
+      <p>${ros.category ? e(ros.category) : '—'}</p>
     </div>
   </div>
 </div>
 
 <!-- Risikovurdering -->
 <div class="section">
-  <div class="section-title">Risikovurdering</div>
+  <div class="section-title">Risikovurdering (jf. BHF §8)</div>
   <div class="info-grid">
+    <div class="field highlighted">
+      <label>Aktuelle problemstillinger</label>
+      <p>${e(fd.problems)}</p>
+    </div>
     <div class="field risk-field">
       <label>⚠ Mulig risiko — Hva kan gå galt?</label>
       <p>${e(fd.risks)}</p>
@@ -501,68 +617,114 @@ class RosPdfGenerator {
       <label>⚠ Antatt konsekvens</label>
       <p>${e(fd.consequence)}</p>
     </div>
+    <div class="field">
+      <label>Sannsynlighet (S)</label>
+      <p>${s ? String(s) : '—'}</p>
+    </div>
+    <div class="field">
+      <label>Konsekvens (K)</label>
+      <p>${k ? String(k) : '—'}</p>
+    </div>
   </div>
 </div>
 
-<!-- Risikomatrise -->
+<!-- Risikomatrise (før tiltak) -->
 <div class="section">
-  <div class="section-title">Risikomatrise</div>
+  <div class="section-title">Risikomatrise og risikoverdi (før tiltak)</div>
   <div class="matrix-wrap">
     <div>
       <div class="matrix-axis-title">S = Sannsynlighet &nbsp;·&nbsp; K = Konsekvens</div>
-      ${riskMatrixHtml}
+      ${riskMatrixBeforeHtml}
     </div>
     <div class="matrix-right">
       <div class="field" style="margin-bottom:8px;">
-        <label>Beregnet risikoverdi (S × K)</label>
+        <label>Risikoverdi (S × K)</label>
         <p>
           ${score
-            ? `<span class="score-badge" style="background:${scoreBg};border-color:${scoreBorder};color:${scoreColor};">${scoreLabel}&nbsp;&nbsp;(S=${s} × K=${k})</span>`
-            : '<span style="color:#94A3B8;">Ikke beregnet</span>'
+            ? `<span class="score-badge" style="background:${scoreStyle.bg};border-color:${scoreStyle.border};color:${scoreStyle.color};">${scoreStyle.label}&nbsp;&nbsp;(S=${s} × K=${k})</span>`
+            : '<span style="color:#94A3B8;">Fyll inn S og K</span>'
           }
         </p>
+        <p class="muted" style="margin-top:6px;font-size:10px;">Skala: 1–5. Verdien beregnes som S × K.</p>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Tiltak -->
+<!-- Tiltak i prosjekteringsfasen -->
 <div class="section">
-  <div class="section-title">Tiltak</div>
+  <div class="section-title">Tiltak i prosjekteringsfasen</div>
   <div class="info-grid">
-    <div class="field measure-field">
-      <label>✓ Tiltak i prosjekteringsfasen</label>
+    <div class="field measure-field highlighted">
+      <label>Hvilke tiltak er planlagt?</label>
       <p>${e(fd.measures)}</p>
     </div>
-    <div class="field measure-field">
-      <label>✓ Tiltak i utførelsesfasen</label>
+  </div>
+</div>
+
+<!-- Restrisiko etter tiltak -->
+<div class="section">
+  <div class="section-title">Restrisiko etter tiltak</div>
+  <div class="info-grid">
+    <div class="field">
+      <label>Restrisiko — Sannsynlighet (S)</label>
+      <p>${sr ? String(sr) : '—'}</p>
+    </div>
+    <div class="field">
+      <label>Restrisiko — Konsekvens (K)</label>
+      <p>${kr ? String(kr) : '—'}</p>
+    </div>
+  </div>
+
+  <div class="matrix-wrap" style="margin-top:10px;">
+    <div>
+      <div class="matrix-axis-title">S = Sannsynlighet &nbsp;·&nbsp; K = Konsekvens</div>
+      ${riskMatrixAfterHtml}
+    </div>
+    <div class="matrix-right">
+      <div class="field" style="margin-bottom:8px;">
+        <label>Restrisikoverdi (S × K) etter tiltak</label>
+        <p>
+          ${rScore
+            ? `<span class="score-badge" style="background:${rStyle.bg};border-color:${rStyle.border};color:${rStyle.color};">${rStyle.label}&nbsp;&nbsp;(S=${sr} × K=${kr})</span>`
+            : '<span style="color:#94A3B8;">Fyll inn restrisiko S og K</span>'
+          }
+        </p>
+        <p class="muted" style="margin-top:6px;font-size:10px;">Risikoreduksjon: <strong>${reductionText}</strong></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Mulige tiltak i utførelsesfasen -->
+<div class="section">
+  <div class="section-title">Mulige tiltak i utførelsesfasen</div>
+  <div class="info-grid">
+    <div class="field measure-field highlighted">
+      <label>Mulige tiltak i utførelsesfasen</label>
       <p>${e(fd.executionMeasures)}</p>
     </div>
   </div>
 </div>
 
-${(() => {
-  const sr = parseInt(fd.s_rest) || 0;
-  const kr = parseInt(fd.k_rest) || 0;
-  const rScore = sr && kr ? sr * kr : null;
-  if (!rScore) return '';
-  let rBg, rBorder, rColor, rLabel;
-  if (rScore <= 4)       { rBg='#DCFCE7'; rBorder='#86EFAC'; rColor='#15803D'; rLabel='Lav risiko'; }
-  else if (rScore <= 9)  { rBg='#FEF9C3'; rBorder='#FDE047'; rColor='#A16207'; rLabel='Middels risiko'; }
-  else if (rScore <= 14) { rBg='#FFEDD5'; rBorder='#FDBA74'; rColor='#C2410C'; rLabel='Høy risiko'; }
-  else                   { rBg='#FEE2E2'; rBorder='#FCA5A5'; rColor='#B91C1C'; rLabel='Svært høy risiko'; }
-  return `
-<!-- Restrisiko -->
+<!-- Signatur -->
 <div class="section">
-  <div class="section-title">Restrisiko etter tiltak</div>
+  <div class="section-title">Signatur (ved utskrift)</div>
   <div class="info-grid">
     <div class="field">
-      <label>Restrisikoverdi (S × K) etter tiltak</label>
-      <p><span class="score-badge" style="background:${rBg};border-color:${rBorder};color:${rColor};">${rScore} — ${rLabel}&nbsp;&nbsp;(S=${sr} × K=${kr})</span></p>
+      <label>Ansvarlig</label>
+      <p>${e(fd.responsible)}</p>
+      <div style="margin-top:10px;border-top:1px solid #CBD5E1;"></div>
+      <div class="muted" style="font-size:9px;margin-top:4px;">Signatur</div>
+    </div>
+    <div class="field">
+      <label>Dato</label>
+      <p>—</p>
+      <div style="margin-top:10px;border-top:1px solid #CBD5E1;"></div>
+      <div class="muted" style="font-size:9px;margin-top:4px;">Dato og sted</div>
     </div>
   </div>
-</div>`;
-})()}
+</div>
 
 <!-- Footer -->
 <div class="footer">
@@ -594,8 +756,35 @@ ${(() => {
   }
 
   /**
-   * Fetches ROS data and returns a PDF buffer.
-   * Does not upload to GCS — caller streams buffer directly to client.
+   * Upload PDF buffer to GCS and return public URL
+   */
+  async uploadToGcs(tenantId, rosId, buffer) {
+    if (!this.bucket) {
+      throw new Error('GCS bucket not configured');
+    }
+
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const fileName = `ros_${rosId}_${Date.now()}.pdf`;
+    const gcsPath = `tenants/${tenantId}/hms/ros/${yyyy}/${mm}/${fileName}`;
+
+    try {
+      const file = this.bucket.file(gcsPath);
+      await file.save(buffer, { metadata: { contentType: 'application/pdf' } });
+
+      const url = `https://storage.googleapis.com/${this.bucket.name}/${gcsPath}`;
+      console.log(`✅ ROS PDF uploaded to GCS: ${url}`);
+      return url;
+    } catch (err) {
+      console.error('❌ GCS upload failed:', err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * Main orchestrator method
+   * Generates PDF from ROS data and stores URL in database
    */
   async generate(rosId, tenantId) {
     await this.init();
@@ -610,9 +799,24 @@ ${(() => {
       if (!result.rows.length) throw new Error(`ROS #${rosId} ikke funnet`);
 
       const ros = result.rows[0];
+      console.log(`📄 Generating PDF for ROS #${rosId}...`);
       const company = await this.loadCompanySettings(tenantId);
       const html = this.generateHtml(ros, company);
-      return await this.generatePdf(html);
+      const buffer = await this.generatePdf(html);
+      console.log(`✅ PDF generated (${buffer.length} bytes)`);
+
+      const pdfUrl = await this.uploadToGcs(tenantId, rosId, buffer);
+
+      await pool.query(
+        `UPDATE hms_ros SET pdf_url = $1 WHERE id = $2`,
+        [pdfUrl, rosId]
+      );
+      console.log('✅ Database updated with PDF URL');
+
+      return { pdfUrl, buffer };
+    } catch (err) {
+      console.error('❌ ROS PDF generation failed:', err.message);
+      throw err;
     } finally {
       await this.close();
     }

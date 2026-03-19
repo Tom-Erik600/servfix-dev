@@ -18,14 +18,48 @@ document.addEventListener('DOMContentLoaded', function() {
     const equipmentConfirmModal = document.getElementById('equipment-confirm-modal');
     let currentCustomerEquipment = [];
 
+    // Optional deep-linking from other admin pages
+    const urlParams = new URLSearchParams(window.location.search);
+    const preselectCustomerId = urlParams.get('customerId');
+    const prefillQuery = urlParams.get('q');
+    let didInitialDeepLink = false;
+    let resolvedDeepLinkCustomerId = null;
+
     /**
      * Laster inn alle data
      */
     async function loadData() {
         try {
             showLoadingState();
-            
-            // Last inn kunder fra Tripletex
+
+            // Deep-link fast-path: show the target customer ASAP (before loading full list)
+            if (preselectCustomerId && !didInitialDeepLink) {
+                try {
+                    console.log(`⚡ Deep-link: henter kunde ${preselectCustomerId}...`);
+                    const singleResponse = await fetch(`/api/admin/customers/${encodeURIComponent(preselectCustomerId)}`);
+                    if (singleResponse.ok) {
+                        const singleCustomer = await singleResponse.json();
+                        resolvedDeepLinkCustomerId = singleCustomer?.id || null;
+                        allCustomers = [singleCustomer];
+                        renderCustomerList(allCustomers);
+                        hideLoadingState();
+
+                        didInitialDeepLink = true;
+                        if (searchInput) searchInput.value = '';
+                        const idToSelect = resolvedDeepLinkCustomerId || preselectCustomerId;
+                        Promise.resolve(window.selectCustomer(idToSelect)).then(() => {
+                            const row = customerTableBody.querySelector(`[data-customer-id="${String(idToSelect)}"]`);
+                            if (row && typeof row.scrollIntoView === 'function') {
+                                row.scrollIntoView({ block: 'center' });
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Deep-link single customer fetch failed:', e);
+                }
+            }
+
+            // Load full customer list
             console.log('📡 Laster kunder fra API...');
             const customersResponse = await fetch('/api/admin/customers');
             if (!customersResponse.ok) {
@@ -33,11 +67,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('API-feil:', customersResponse.status, errorText);
                 throw new Error(`API-feil ${customersResponse.status}: ${errorText}`);
             }
-            
+
             const customersData = await customersResponse.json();
             console.log('✅ Mottatt kundedata:', customersData);
-            
-            // Håndter både ny struktur (med wrapper) og gammel struktur (direkte array)
+
             if (customersData.customers) {
                 allCustomers = customersData.customers;
             } else if (Array.isArray(customersData)) {
@@ -45,27 +78,55 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 throw new Error('Ugyldig dataformat fra API');
             }
-            
-            // Last inn servicehistorikk (lokalt)
-            try {
-                console.log('📡 Laster servicehistorikk...');
-                const historyResponse = await fetch('/api/admin/orders');
-                if (historyResponse.ok) {
-                    customerHistory = await historyResponse.json();
-                    console.log(`✅ Lastet ${customerHistory.length} ordre`);
-                } else {
-                    console.warn('Kunne ikke laste servicehistorikk:', historyResponse.status);
-                }
-            } catch (historyError) {
-                console.warn('Kunne ikke laste servicehistorikk:', historyError);
-                customerHistory = [];
-            }
 
             console.log(`✅ Lastet ${allCustomers.length} kunder totalt`);
-            
-            // Vis kundene
             renderCustomerList(allCustomers);
             hideLoadingState();
+
+            // Deep-link: preselect customer or prefill search
+            if (!didInitialDeepLink) {
+                didInitialDeepLink = true;
+                if (preselectCustomerId) {
+                    if (searchInput) searchInput.value = '';
+                    const match = allCustomers.find(c => String(c.id) === String(preselectCustomerId) || String(c.externalId) === String(preselectCustomerId));
+                    const idToSelect = match?.id || resolvedDeepLinkCustomerId || preselectCustomerId;
+                    Promise.resolve(window.selectCustomer(idToSelect)).then(() => {
+                        const row = customerTableBody.querySelector(`[data-customer-id="${String(idToSelect)}"]`);
+                        if (row && typeof row.scrollIntoView === 'function') {
+                            row.scrollIntoView({ block: 'center' });
+                        }
+                    });
+                } else if (prefillQuery && searchInput) {
+                    searchInput.value = prefillQuery;
+                    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            } else if (preselectCustomerId) {
+                // Ensure selection persists after list refresh
+                const match = allCustomers.find(c => String(c.id) === String(preselectCustomerId) || String(c.externalId) === String(preselectCustomerId));
+                const idToSelect = match?.id || resolvedDeepLinkCustomerId || preselectCustomerId;
+                Promise.resolve(window.selectCustomer(idToSelect));
+            }
+
+            // Load service history in the background (can be slow)
+            try {
+                console.log('📡 Laster servicehistorikk...');
+                fetch('/api/admin/orders')
+                    .then((historyResponse) => historyResponse.ok ? historyResponse.json() : [])
+                    .then((history) => {
+                        customerHistory = Array.isArray(history) ? history : [];
+                        console.log(`✅ Lastet ${customerHistory.length} ordre`);
+                        if (currentSelectedCustomer) {
+                            renderServiceHistory(currentSelectedCustomer);
+                        }
+                    })
+                    .catch((historyError) => {
+                        console.warn('Kunne ikke laste servicehistorikk:', historyError);
+                        customerHistory = [];
+                    });
+            } catch (historyError) {
+                console.warn('Kunne ikke starte lasting av servicehistorikk:', historyError);
+                customerHistory = [];
+            }
             
         } catch (error) {
             console.error('❌ Feil ved lasting av data:', error);
