@@ -9,7 +9,10 @@
       "Bash(cat migrations/*.sql)",
       "Bash(gcloud run:*)",
       "Bash(git stash:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(while read:*)",
+      "Bash(do grep:*)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []
