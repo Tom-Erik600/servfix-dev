@@ -8,7 +8,7 @@ const router = express.Router();
 
 // Middleware for å sikre tenantId er satt
 router.use((req, res, next) => {
-    const tenantId = req.session?.tenantId;
+    const tenantId = req.session?.tenantId || req.session?.selectedTenantId || req.tenantId;
     if (!tenantId) {
         console.error('❌ Missing tenantId:', req.path);
         return res.status(401).json({ error: 'Ikke autentisert' });

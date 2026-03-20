@@ -1,5 +1,12 @@
 // air-tech-app/assets/js/app.js - Hovedapplikasjon for tekniker-app
 (function() {
+    function isDashboardPage(pathname = window.location.pathname) {
+        return pathname.endsWith('index.html') ||
+               pathname.endsWith('index2.html') ||
+               pathname === '/' ||
+               pathname.endsWith('/app/');
+    }
+
     // STOPP app.js fra å kjøre på andre sider enn index.html
     if (window.location.pathname.includes('service.html') || 
         window.location.pathname.includes('orders.html') ||
@@ -95,9 +102,7 @@ const AirTechAPI = {
 document.addEventListener('DOMContentLoaded', async () => {
     // SJEKK 1: Er vi på riktig side?
     const currentPath = window.location.pathname;
-    const isIndexPage = currentPath.endsWith('index.html') || 
-                       currentPath === '/' || 
-                       currentPath.endsWith('/app/');
+    const isIndexPage = isDashboardPage(currentPath);
     
     if (!isIndexPage) {
         console.log('app.js skal kun kjøre på index.html');
@@ -204,9 +209,7 @@ window.addEventListener('pageshow', async (event) => {
         
         // Sjekk at vi er på index.html
         const currentPath = window.location.pathname;
-        const isIndexPage = currentPath.endsWith('index.html') || 
-                           currentPath === '/' || 
-                           currentPath.endsWith('/app/');
+        const isIndexPage = isDashboardPage(currentPath);
         
         if (!isIndexPage) return;
         

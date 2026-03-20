@@ -50,6 +50,10 @@ module.exports = async () => {
       }
     }
     req.tenantId = tenantId;
+    // Synk tenantId til session hvis den mangler (f.eks. admin-login setter selectedTenantId)
+    if (req.session && !req.session.tenantId) {
+      req.session.tenantId = req.session.selectedTenantId || tenantId;
+    }
     next();
   });
 

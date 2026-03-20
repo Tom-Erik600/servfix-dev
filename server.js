@@ -138,9 +138,12 @@ async function setupSession() {
     const techSession = session(makeSessionOpts('tech.sid'));
 
     // Én middleware som velger riktig session basert på URL-path.
+    // Admin-panelet bruker også noen ikke-admin API-er (images/settings, hms, quotes)
+    // Sjekk admin.sid-cookie for å avgjøre om dette er en admin-request
     app.use((req, res, next) => {
       const isAdminRoute = req.path.startsWith('/api/admin/') || req.path === '/api/admin';
-      const mw = isAdminRoute ? adminSession : techSession;
+      const hasAdminCookie = req.headers.cookie && req.headers.cookie.includes('admin.sid');
+      const mw = (isAdminRoute || hasAdminCookie) ? adminSession : techSession;
       mw(req, res, next);
     });
 
@@ -168,7 +171,8 @@ async function setupSession() {
 
     app.use((req, res, next) => {
       const isAdmin = req.path.startsWith('/api/admin/') || req.path === '/api/admin';
-      const mw = isAdmin ? adminSessionFallback : techSessionFallback;
+      const hasAdminCookie = req.headers.cookie && req.headers.cookie.includes('admin.sid');
+      const mw = (isAdmin || hasAdminCookie) ? adminSessionFallback : techSessionFallback;
       mw(req, res, next);
     });
   }
