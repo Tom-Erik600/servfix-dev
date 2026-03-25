@@ -137,13 +137,33 @@ async function setupSession() {
     const adminSession = session(makeSessionOpts('admin.sid'));
     const techSession = session(makeSessionOpts('tech.sid'));
 
-    // Én middleware som velger riktig session basert på URL-path.
-    // Admin-panelet bruker også noen ikke-admin API-er (images/settings, hms, quotes)
-    // Sjekk admin.sid-cookie for å avgjøre om dette er en admin-request
+    function isAdminRequestContext(req) {
+      if (req.get('x-servfix-app') === 'admin') {
+        return true;
+      }
+
+      if (req.path.startsWith('/api/admin/') || req.path === '/api/admin') {
+        return true;
+      }
+
+      const referer = req.get('referer');
+      if (!referer) {
+        return false;
+      }
+
+      try {
+        const refererPath = new URL(referer).pathname || '';
+        return refererPath.startsWith('/admin');
+      } catch (_) {
+        return false;
+      }
+    }
+
+    // Én middleware som velger riktig session basert på request-kontekst.
+    // Viktig: admin.sid-cookie alene skal IKKE gjøre vanlige /api-kall til admin-kall,
+    // ellers kan tekniker bli "utlogget" når admin logger inn i samme nettleser.
     app.use((req, res, next) => {
-      const isAdminRoute = req.path.startsWith('/api/admin/') || req.path === '/api/admin';
-      const hasAdminCookie = req.headers.cookie && req.headers.cookie.includes('admin.sid');
-      const mw = (isAdminRoute || hasAdminCookie) ? adminSession : techSession;
+      const mw = isAdminRequestContext(req) ? adminSession : techSession;
       mw(req, res, next);
     });
 
@@ -169,10 +189,30 @@ async function setupSession() {
     const adminSessionFallback = session(makeFallbackOpts('admin.sid'));
     const techSessionFallback = session(makeFallbackOpts('tech.sid'));
 
+    function isAdminRequestContext(req) {
+      if (req.get('x-servfix-app') === 'admin') {
+        return true;
+      }
+
+      if (req.path.startsWith('/api/admin/') || req.path === '/api/admin') {
+        return true;
+      }
+
+      const referer = req.get('referer');
+      if (!referer) {
+        return false;
+      }
+
+      try {
+        const refererPath = new URL(referer).pathname || '';
+        return refererPath.startsWith('/admin');
+      } catch (_) {
+        return false;
+      }
+    }
+
     app.use((req, res, next) => {
-      const isAdmin = req.path.startsWith('/api/admin/') || req.path === '/api/admin';
-      const hasAdminCookie = req.headers.cookie && req.headers.cookie.includes('admin.sid');
-      const mw = (isAdmin || hasAdminCookie) ? adminSessionFallback : techSessionFallback;
+      const mw = isAdminRequestContext(req) ? adminSessionFallback : techSessionFallback;
       mw(req, res, next);
     });
   }
@@ -203,24 +243,26 @@ setupSession().then(() => {
       if (req.session?.tenantId) {
         req.tenantId = req.session.tenantId;
       } else {
-        // 2. Hvis ikke session, resolve fra subdomain eller header
+        // 2. Resolve fra subdomain eller header — ingen hardkodet fallback
         const host = req.get('host');
-        let tenantId = process.env.DEFAULT_TENANT_ID || 'airtech'; // Default
+        let tenantId = null;
 
         if (host.startsWith('localhost') || host.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/)) {
-          // Localhost: bruk x-tenant-id header eller default
-          tenantId = req.headers['x-tenant-id'] || tenantId;
+          // Localhost/dev: bruk x-tenant-id header eller DEFAULT_TENANT_ID fra env
+          tenantId = req.headers['x-tenant-id'] || process.env.DEFAULT_TENANT_ID || null;
         } else {
           // Production: bruk subdomain
           const subdomain = host.split('.')[0];
           if (subdomain && subdomain !== 'www') {
             tenantId = subdomain;
           } else {
-            tenantId = req.headers['x-tenant-id'] || tenantId;
+            tenantId = req.headers['x-tenant-id'] || null;
           }
         }
 
-        // Sett req.tenantId (for pre-auth routes som /api/auth/login, /api/technicians)
+        // Sett req.tenantId (for pre-auth routes som /api/auth/login)
+        // Kan være null for uautentiserte requests — routes som trenger tenant
+        // vil feile trygt når getTenantConnection() kalles uten gyldig tenantId.
         req.tenantId = tenantId;
 
         // VIKTIG: Ikke auto-populer req.session.tenantId!
@@ -274,6 +316,7 @@ setupSession().then(() => {
     try {
       // Tekniker app routes
       app.use('/api/auth', require('./src/routes/auth'));
+      app.use('/api/dashboard-v2', require('./src/routes/dashboard-v2'));
       app.use('/api/orders', require('./src/routes/orders'));
       app.use('/api/equipment', require('./src/routes/equipment'));
       app.use('/api/reports', require('./src/routes/reports'));

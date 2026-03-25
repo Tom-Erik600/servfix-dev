@@ -8,6 +8,42 @@ const db = require('../config/database');
 
 const router = express.Router();
 
+async function resolveTemplateAliases(pool, templateIdentifier) {
+  const aliases = new Set([templateIdentifier]);
+
+  const templateResult = await pool.query(
+    `SELECT name, equipment_type
+     FROM checklist_templates
+     WHERE LOWER(name) = LOWER($1) OR LOWER(equipment_type) = LOWER($1)
+     LIMIT 1`,
+    [templateIdentifier]
+  );
+
+  if (templateResult.rows.length > 0) {
+    const row = templateResult.rows[0];
+    if (row.name) aliases.add(row.name);
+    if (row.equipment_type) aliases.add(row.equipment_type);
+  }
+
+  return Array.from(aliases);
+}
+
+async function resolveCanonicalTemplateName(pool, templateIdentifier) {
+  const templateResult = await pool.query(
+    `SELECT name
+     FROM checklist_templates
+     WHERE LOWER(name) = LOWER($1) OR LOWER(equipment_type) = LOWER($1)
+     LIMIT 1`,
+    [templateIdentifier]
+  );
+
+  if (templateResult.rows.length > 0 && templateResult.rows[0].name) {
+    return templateResult.rows[0].name;
+  }
+
+  return templateIdentifier;
+}
+
 // Debugging middleware - logger ALL requests til denne route
 router.use((req, res, next) => {
   console.log('📋 [INSTRUCTIONS] Request:', {
@@ -59,9 +95,15 @@ router.get('/:templateName/:itemId', async (req, res) => {
     
     const pool = await db.getTenantConnection(tenantId);
     
+    const templateAliases = await resolveTemplateAliases(pool, templateName);
+
     const result = await pool.query(
-      'SELECT instruction_text FROM checklist_instructions WHERE checklist_item_id = $1 AND template_name = $2',
-      [itemId, templateName]
+      `SELECT instruction_text, template_name
+       FROM checklist_instructions
+       WHERE checklist_item_id = $1 AND template_name = ANY($2::text[])
+       ORDER BY CASE WHEN template_name = $3 THEN 0 ELSE 1 END
+       LIMIT 1`,
+      [itemId, templateAliases, templateName]
     );
     
     console.log('📊 [INSTRUCTIONS] Query result:', {
@@ -107,9 +149,14 @@ router.get('/:templateName', async (req, res) => {
     
     const pool = await db.getTenantConnection(tenantId);
     
+    const templateAliases = await resolveTemplateAliases(pool, templateName);
+
     const result = await pool.query(
-      'SELECT checklist_item_id, instruction_text, created_at, updated_at FROM checklist_instructions WHERE template_name = $1 ORDER BY checklist_item_id',
-      [templateName]
+      `SELECT checklist_item_id, instruction_text, created_at, updated_at, template_name
+       FROM checklist_instructions
+       WHERE template_name = ANY($1::text[])
+       ORDER BY checklist_item_id`,
+      [templateAliases]
     );
 
     // Konverter til object med checklist_item_id som key (for rask frontend lookup)
@@ -182,6 +229,8 @@ router.post('/:templateName/:itemId', async (req, res) => {
     console.log('✅ [INSTRUCTIONS] Table exists, proceeding with upsert');
     
     // Bruk ON CONFLICT for å håndtere både INSERT og UPDATE
+    const canonicalTemplateName = await resolveCanonicalTemplateName(pool, templateName);
+
     const result = await pool.query(`
       INSERT INTO checklist_instructions (checklist_item_id, template_name, instruction_text, created_at, updated_at)
       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -190,11 +239,11 @@ router.post('/:templateName/:itemId', async (req, res) => {
         instruction_text = EXCLUDED.instruction_text,
         updated_at = CURRENT_TIMESTAMP
       RETURNING *
-    `, [itemId, templateName, instructionText.trim()]);
+    `, [itemId, canonicalTemplateName, instructionText.trim()]);
     
     console.log('✅ [INSTRUCTIONS] Instruction saved:', {
       id: result.rows[0].id,
-      templateName,
+      templateName: canonicalTemplateName,
       itemId,
       wasUpdate: result.rows[0].created_at !== result.rows[0].updated_at
     });
@@ -240,9 +289,11 @@ router.delete('/:templateName/:itemId', async (req, res) => {
     
     const pool = await db.getTenantConnection(tenantId);
     
+    const templateAliases = await resolveTemplateAliases(pool, templateName);
+
     const result = await pool.query(
-      'DELETE FROM checklist_instructions WHERE checklist_item_id = $1 AND template_name = $2',
-      [itemId, templateName]
+      'DELETE FROM checklist_instructions WHERE checklist_item_id = $1 AND template_name = ANY($2::text[])',
+      [itemId, templateAliases]
     );
     
     console.log('📊 [INSTRUCTIONS] Delete result:', {

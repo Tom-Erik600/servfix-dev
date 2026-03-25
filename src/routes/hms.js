@@ -6,10 +6,21 @@ const SjaPdfGenerator = require('../services/sjaPdfGenerator');
 const RosPdfGenerator = require('../services/rosPdfGenerator');
 
 // Auth middleware — tekniker eller admin
+// Setter req.resolvedTenantId én gang for hele modulen:
+//   - Admin: bruker req.adminTenantId (satt av admin-tenant middleware)
+//   - Tekniker: bruker req.session.tenantId
 router.use((req, res, next) => {
   if (!req.session?.technicianId && !req.session?.isAdmin) {
     return res.status(401).json({ error: 'Ikke autentisert' });
   }
+
+  const resolvedTenantId = req.adminTenantId || req.session?.tenantId;
+  if (!resolvedTenantId) {
+    console.error(`[hms] Mangler tenantId — path: ${req.path}`);
+    return res.status(401).json({ error: 'Ikke autentisert — mangler tenant' });
+  }
+
+  req.resolvedTenantId = resolvedTenantId;
   next();
 });
 
@@ -18,7 +29,7 @@ router.use((req, res, next) => {
 // POST /api/hms/sja — Opprett SJA
 router.post('/sja', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const pool = await db.getTenantConnection(tenantId);
     const {
       order_id,
@@ -69,7 +80,7 @@ router.post('/sja', async (req, res) => {
 // GET /api/hms/sja — Hent alle SJA (admin/oversikt)
 router.get('/sja', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const pool = await db.getTenantConnection(tenantId);
     const result = await pool.query(
       `SELECT s.*,
@@ -92,7 +103,7 @@ router.get('/sja', async (req, res) => {
 // GET /api/hms/sja/order/:orderId — Hent SJA for en spesifikk ordre
 router.get('/sja/order/:orderId', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const pool = await db.getTenantConnection(tenantId);
     // orders.id er VARCHAR — ikke parseInt()
     const result = await pool.query(
@@ -113,7 +124,7 @@ router.get('/sja/order/:orderId', async (req, res) => {
 // GET /api/hms/sja/:id — Hent enkelt SJA
 router.get('/sja/:id', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const pool = await db.getTenantConnection(tenantId);
     const result = await pool.query(
       `SELECT s.*, r.title AS ros_title
@@ -135,7 +146,7 @@ router.get('/sja/:id', async (req, res) => {
 // DELETE /api/hms/sja/:id — Slett SJA
 router.delete('/sja/:id', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const pool = await db.getTenantConnection(tenantId);
     const result = await pool.query(
       `DELETE FROM hms_sja WHERE id = $1 RETURNING id`,
@@ -155,7 +166,7 @@ router.delete('/sja/:id', async (req, res) => {
 // Generering skjer kun i GCP — returnerer feil lokalt (Puppeteer not available on Windows)
 router.get('/sja/:id/pdf', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const sjaId = parseInt(req.params.id);
 
     // Sjekk om PDF allerede er generert
@@ -191,7 +202,7 @@ router.get('/sja/:id/pdf', async (req, res) => {
 // GET /api/hms/sja/:id/pdf/regenerate — Tving regenerering av PDF
 router.get('/sja/:id/pdf/regenerate', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const sjaId = parseInt(req.params.id);
 
     // Nullstill eksisterende PDF-URL først
@@ -218,7 +229,7 @@ router.get('/sja/:id/pdf/regenerate', async (req, res) => {
 // POST /api/hms/ros — Opprett ROS
 router.post('/ros', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const pool = await db.getTenantConnection(tenantId);
     const { title, project_type, category, form_data, status } = req.body;
     const createdBy = req.session.adminId || req.session.technicianId || 'ukjent';
@@ -239,7 +250,7 @@ router.post('/ros', async (req, res) => {
 // GET /api/hms/ros — Hent alle ROS
 router.get('/ros', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const pool = await db.getTenantConnection(tenantId);
     const result = await pool.query(
       `SELECT * FROM hms_ros ORDER BY updated_at DESC`
@@ -283,7 +294,7 @@ router.get('/ros/by-category/:category', async (req, res) => {
 // GET /api/hms/ros/:id — Hent enkelt ROS
 router.get('/ros/:id', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const pool = await db.getTenantConnection(tenantId);
     const result = await pool.query(
       `SELECT * FROM hms_ros WHERE id = $1`,
@@ -302,7 +313,7 @@ router.get('/ros/:id', async (req, res) => {
 // PUT /api/hms/ros/:id — Oppdater ROS
 router.put('/ros/:id', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const pool = await db.getTenantConnection(tenantId);
     const { title, project_type, category, form_data, status } = req.body;
 
@@ -327,7 +338,7 @@ router.put('/ros/:id', async (req, res) => {
 // DELETE /api/hms/ros/:id — Slett ROS
 router.delete('/ros/:id', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const pool = await db.getTenantConnection(tenantId);
     const result = await pool.query(
       `DELETE FROM hms_ros WHERE id = $1 RETURNING id`,
@@ -347,7 +358,7 @@ router.delete('/ros/:id', async (req, res) => {
 // Generering skjer kun i GCP — returnerer feil lokalt (Puppeteer not available on Windows)
 router.get('/ros/:id/pdf', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const rosId = parseInt(req.params.id);
 
     // Sjekk om PDF allerede er generert
@@ -380,7 +391,7 @@ router.get('/ros/:id/pdf', async (req, res) => {
 // GET /api/hms/ros/:id/pdf/regenerate — Tving regenerering av PDF
 router.get('/ros/:id/pdf/regenerate', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session.tenantId;
+    const tenantId = req.resolvedTenantId;
     const rosId = parseInt(req.params.id);
 
     // Nullstill eksisterende PDF-URL først

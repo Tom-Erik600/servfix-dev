@@ -598,17 +598,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function loadInstructionStates() {
         if (!currentFacilityType) return;
 
-        try {
-            const response = await fetch(`/api/checklist-instructions/${currentFacilityType.name}`);
-            if (response.ok) {
+        document.querySelectorAll('.instruction-btn').forEach((btn) => {
+            btn.classList.remove('has-instruction');
+            btn.title = 'Ingen instruksjon';
+        });
+
+        const templateCandidates = [currentFacilityType.id, currentFacilityType.name].filter(Boolean);
+        const matchedKeys = new Set();
+
+        for (const templateName of templateCandidates) {
+            try {
+                const response = await fetch(`/api/checklist-instructions/${encodeURIComponent(templateName)}`);
+                if (!response.ok) continue;
+
                 const data = await response.json();
-                (data.instructions || []).forEach(instruction => {
-                    const btn = document.querySelector(`.instruction-btn[data-item-id="${instruction.checklist_item_id}"]`);
-                    if (btn) btn.classList.add('has-instruction');
+                const instructions = data.instructions || {};
+                const keys = Array.isArray(instructions)
+                    ? instructions.map(instruction => instruction.checklist_item_id)
+                    : Object.keys(instructions);
+
+                keys.forEach((itemId) => {
+                    const btn = document.querySelector(`.instruction-btn[data-item-id="${itemId}"]`);
+                    if (btn) {
+                        btn.classList.add('has-instruction');
+                        btn.title = 'Instruksjon registrert';
+                        matchedKeys.add(itemId);
+                    }
                 });
+
+                if (matchedKeys.size > 0) {
+                    return;
+                }
+            } catch (error) {
+                console.error(`Error loading instruction states for ${templateName}:`, error);
             }
-        } catch (error) {
-            console.error('Error loading instruction states:', error);
         }
     }
 
@@ -619,7 +642,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         deleteInstructionBtn.style.display = 'none';
 
         try {
-            const response = await fetch(`/api/checklist-instructions/${currentFacilityType.name}/${item.id}`);
+            const response = await fetch(`/api/checklist-instructions/${encodeURIComponent(currentFacilityType.id || currentFacilityType.name)}/${item.id}`);
             if (response.ok) {
                 const data = await response.json();
                 instructionTextarea.value = data.instruction || '';
@@ -647,7 +670,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         try {
-            const response = await fetch(`/api/checklist-instructions/${currentFacilityType.name}/${currentInstructionItem.id}`, {
+            const response = await fetch(`/api/checklist-instructions/${encodeURIComponent(currentFacilityType.id || currentFacilityType.name)}/${currentInstructionItem.id}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ instructionText })
@@ -672,7 +695,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!confirm('Er du sikker på at du vil slette denne instruksjonen?')) return;
 
         try {
-            const response = await fetch(`/api/checklist-instructions/${currentFacilityType.name}/${currentInstructionItem.id}`, {
+            const response = await fetch(`/api/checklist-instructions/${encodeURIComponent(currentFacilityType.id || currentFacilityType.name)}/${currentInstructionItem.id}`, {
                 method: 'DELETE'
             });
 

@@ -148,6 +148,10 @@ describe('HMS routes — SJA med kategori', () => {
   });
 
   test('POST /api/hms/sja lagrer category og subcategory', async () => {
+    // Kall 1: SELECT på hms_ros for automatisk ROS-kobling (category er satt)
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    // Kall 2: INSERT i hms_sja — returnerer den lagrede raden
     mockQuery.mockResolvedValueOnce({
       rows: [{
         id: 42,
@@ -177,12 +181,12 @@ describe('HMS routes — SJA med kategori', () => {
     expect(res.body.sja.category).toBe('Arbeid i høyden');
     expect(res.body.sja.subcategory).toBe('Risiko for fall');
 
-    // Verify SQL includes category and subcategory ($10, $11)
-    const sql = mockQuery.mock.calls[0][0];
-    expect(sql).toContain('category');
-    expect(sql).toContain('subcategory');
-    expect(sql).toContain('$10');
-    expect(sql).toContain('$11');
+    // Kall [0] er ROS-SELECT, kall [1] er SJA-INSERT
+    const insertSql = mockQuery.mock.calls[1][0];
+    expect(insertSql).toContain('category');
+    expect(insertSql).toContain('subcategory');
+    expect(insertSql).toContain('$10');
+    expect(insertSql).toContain('$11');
   });
 
   test('POST /api/hms/sja fungerer uten category (bakoverkompatibel)', async () => {
@@ -434,7 +438,7 @@ describe('Frontend — sja.html', () => {
 
   test('har foto-opplasting UI', () => {
     expect(html).toContain('sja-photos-gallery');
-    expect(html).toContain('handleSjaPhotoUpload');
+    expect(html).toContain('initFormPhotoUpload');
   });
 
   test('har navigateBack-funksjon', () => {

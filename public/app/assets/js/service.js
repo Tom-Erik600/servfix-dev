@@ -8,6 +8,8 @@ const changeTracker = {
 function markFormAsDirty() {
     changeTracker.hasUnsavedChanges = true;
     console.log('📝 Form marked as dirty');
+    updateSaveButtonState();
+    updateServiceWorkspaceSummary();
 }
 
 // Auto-detect changes in overall comment
@@ -23,6 +25,7 @@ function markFormAsClean() {
     changeTracker.hasUnsavedChanges = false;
     changeTracker.uploadedImages = [];
     updateSaveButtonState();
+    updateServiceWorkspaceSummary();
 }
 
 // Update save button to show unsaved state
@@ -31,12 +34,14 @@ function updateSaveButtonState() {
     if (saveBtn) {
         if (changeTracker.hasUnsavedChanges) {
             saveBtn.style.background = '#ff6b35'; // Orange for unsaved
-            saveBtn.textContent = '💾 Lagre endringer *';
+            saveBtn.textContent = 'Lagre endringer *';
         } else {
             saveBtn.style.background = '#28a745'; // Green for saved
-            saveBtn.textContent = '💾 Lagre sjekkliste';
+            saveBtn.textContent = 'Lagre sjekkliste';
         }
     }
+
+    updateServiceWorkspaceSummary();
 }
 
 // Navigation guard
@@ -391,6 +396,94 @@ const state = {
     editingComponentIndex: null
 };
 
+function isServiceV2Page() {
+    return window.location.pathname.endsWith('service2.html');
+}
+
+function countRenderedServiceImages() {
+    return document.querySelectorAll(
+        '#general-images-gallery img, [id^="avvik-images-container-"] img, [id^="byttet-images-container-"] img'
+    ).length;
+}
+
+function getServiceWorkspaceSummary() {
+    const components = state.serviceReport?.reportData?.components || [];
+    const completedComponents = components.filter((component) => isChecklistComplete(component)).length;
+    const totalComponents = components.length;
+    const imageCount = countRenderedServiceImages();
+    const hasReport = !!state.serviceReport?.reportId;
+
+    let nextStep = 'Last inn sjekklisten og start kontrollen.';
+    if (!hasReport) {
+        nextStep = 'Lagre sjekklisten for a opprette rapportgrunnlag.';
+    } else if (changeTracker.hasUnsavedChanges) {
+        nextStep = 'Du har ulagrede endringer. Lagre for du gar videre.';
+    } else if (totalComponents === 0) {
+        nextStep = 'Opprett eller fyll ut forste sjekkliste.';
+    } else if (completedComponents < totalComponents) {
+        nextStep = 'Fortsett gjennom sjekklistene til alle komponenter er fullfort.';
+    } else {
+        nextStep = 'Dokumentasjonen ser klar ut. Kontroller kommentarer og ferdigstill.';
+    }
+
+    return {
+        totalComponents,
+        completedComponents,
+        imageCount,
+        hasReport,
+        saveState: changeTracker.hasUnsavedChanges ? 'Ulagret' : 'Lagret',
+        nextStep,
+        finalizeState: hasReport
+            ? 'Klar for ferdigstilling.'
+            : 'Lagre for a aktivere knappen.'
+    };
+}
+
+function updateServiceWorkspaceSummary() {
+    if (!isServiceV2Page()) {
+        return;
+    }
+
+    const summary = getServiceWorkspaceSummary();
+
+    const componentEl = document.getElementById('service2-component-progress');
+    const saveEl = document.getElementById('service2-save-state');
+    const photoEl = document.getElementById('service2-photo-count');
+    const nextEl = document.getElementById('service2-next-step');
+    const finalizeEl = document.getElementById('service2-finalize-state');
+
+    if (componentEl) componentEl.textContent = `${summary.completedComponents} / ${summary.totalComponents}`;
+    if (saveEl) saveEl.textContent = summary.saveState;
+    if (photoEl) photoEl.textContent = String(summary.imageCount);
+    if (nextEl) nextEl.textContent = summary.nextStep;
+    if (finalizeEl) finalizeEl.textContent = summary.finalizeState;
+}
+
+function refreshChecklistVisualState() {
+    if (!isServiceV2Page()) {
+        return;
+    }
+
+    document.querySelectorAll('#checklist-items-container .checklist-item, #checklist-items-container .checklist-item-fullwidth').forEach((item) => {
+        item.classList.remove('is-empty', 'is-ok', 'is-avvik', 'is-byttet');
+
+        const activeButton = item.querySelector('.status-btn.active');
+        if (!activeButton) {
+            item.classList.add('is-empty');
+            return;
+        }
+
+        const status = activeButton.dataset.status;
+        if (status === 'ok' || status === 'rengjort') {
+            item.classList.add('is-ok');
+        } else if (status === 'avvik' || status === 'ikke_rengjort') {
+            item.classList.add('is-avvik');
+        } else if (status === 'byttet') {
+            item.classList.add('is-byttet');
+        }
+    });
+}
+
 // DEBUG: Test instruksjonsikonet
 window.testInstructionIcon = function() {
     console.log('🧪 Testing instruction icon...');
@@ -556,6 +649,8 @@ document.addEventListener('click', function(e) {
 function markFormAsDirty() {
     changeTracker.hasUnsavedChanges = true;
     console.log('📝 Form marked as dirty');
+    updateSaveButtonState();
+    updateServiceWorkspaceSummary();
 }
 
 // Mark form as clean after successful save
@@ -567,10 +662,11 @@ function markFormAsClean() {
     const saveBtn = document.getElementById('save-component-btn');
     if (saveBtn) {
         saveBtn.style.background = '#28a745'; // Grønn for lagret
-        saveBtn.textContent = '💾 Lagre sjekkliste';
+        saveBtn.textContent = 'Lagre sjekkliste';
     }
     
     console.log('📝 Form marked as clean');
+    updateServiceWorkspaceSummary();
 }
 
 // DEBUGGING: Test backend endepunkter direkte
@@ -1111,6 +1207,8 @@ function renderAll() {
         attachmentsSection.style.display = 'block';
         console.log('✅ Attachments section made visible');
     }
+
+    updateServiceWorkspaceSummary();
 }
 
 async function renderHeader() {
@@ -1157,6 +1255,57 @@ function renderAnleggInfo() {
     const placement = state.equipment?.plassering || 'Ikke angitt';
     const operator = state.equipment?.betjener || 'Ikke angitt';
     const internalNotes = state.equipment?.notater || state.equipment?.internalNotes || '';
+    const orderDescription = state.order?.description || state.order?.service_type || 'Service';
+
+    if (isServiceV2Page()) {
+        const phoneHref = phone && phone !== 'Ikke registrert' ? `tel:${phone}` : null;
+        const contactText = contact || 'Ikke registrert';
+
+        container.innerHTML = `
+            <div class="service-overview-card">
+                <div class="service-overview-topline">
+                    <div class="service-overview-title">
+                        <div class="service-overview-description">${orderDescription}</div>
+                        <h3>${systemName}</h3>
+                        <p>${systemType} <span class="service-meta-separator">•</span> ${customerName} <span class="service-meta-separator">•</span> ${orderNumber}</p>
+                    </div>
+                </div>
+
+                <div class="service-contact-actions">
+                    ${phoneHref ? `<a class="service-contact-pill" href="${phoneHref}"><span class="service-contact-pill-icon">T</span>${phone}</a>` : `<span class="service-contact-pill secondary"><span class="service-contact-pill-icon">T</span>${phone}</span>`}
+                    <span class="service-contact-inline"><span class="service-contact-pill-icon">K</span>${contactText}</span>
+                </div>
+
+                <div class="service-overview-grid">
+                    <div class="service-field-card">
+                        <span>Systemnummer</span>
+                        <strong>${systemNumber}</strong>
+                    </div>
+                    <div class="service-field-card">
+                        <span>Plassering</span>
+                        <strong>${placement}</strong>
+                    </div>
+                    <div class="service-field-card full-width">
+                        <span>Betjener</span>
+                        <strong>${operator}</strong>
+                    </div>
+                    <div class="service-field-card full-width">
+                        <span>Besoksadresse</span>
+                        <strong>${visitAddress}</strong>
+                    </div>
+                    ${internalNotes ? `
+                        <div class="service-note-card">
+                            <span>Intern kommentar</span>
+                            <p>${internalNotes}</p>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+
+        console.log('✅ Anleggsinformasjon rendered');
+        return;
+    }
 
     // JUSTERT LAYOUT - HEADING OG ORDRENUMMER SIDE BY SIDE
     container.innerHTML = `
@@ -1300,6 +1449,7 @@ function updatePageFooterVisibility() {
     
     // Always update button state
     updateFinalizeButtonState();
+    updateServiceWorkspaceSummary();
 }
 
 function getComponentTitle(details) {
@@ -1439,6 +1589,9 @@ function renderChecklist() {
                 console.log('📥 Loading saved checklist data...');
                 loadExistingReportData();
             }
+
+            refreshChecklistVisualState();
+            updateServiceWorkspaceSummary();
         }, 100);
     }, 100);
 }
@@ -1472,39 +1625,66 @@ function reinitializePhotoHandlers() {
  * Hent alle instruksjoner for aktiv template
  */
 async function fetchInstructions() {
-    if (!state.checklistTemplate?.name) {
-        console.log('⚠️ No template name, skipping instructions');
+    const templateCandidates = [
+        state.checklistTemplate?.id,
+        state.checklistTemplate?.name
+    ].filter(Boolean);
+
+    if (templateCandidates.length === 0) {
+        console.log('⚠️ No template identifier, skipping instructions');
         return;
     }
 
-    try {
-        const templateName = state.checklistTemplate.name;
-        console.log(`📚 Fetching instructions for: ${templateName}`);
+    state.instructions = {};
 
-        const response = await api.get(`/checklist-instructions/${templateName}`);
-        
-        if (response?.instructions) {
-            // Backend returnerer array, vi må transformere til object
-            if (Array.isArray(response.instructions)) {
-                const instructionsObj = {};
-                response.instructions.forEach(item => {
-                    instructionsObj[item.checklist_item_id] = item.instruction_text;
-                });
-                state.instructions = instructionsObj;
-                console.log(`✅ Loaded ${Object.keys(instructionsObj).length} instructions (transformed from array)`);
-            } else {
-                // Hvis backend allerede returnerer object format
-                state.instructions = response.instructions;
-                console.log(`✅ Loaded ${Object.keys(response.instructions).length} instructions`);
+    for (const templateName of templateCandidates) {
+        try {
+            console.log(`📚 Fetching instructions for: ${templateName}`);
+
+            const response = await api.get(`/checklist-instructions/${encodeURIComponent(templateName)}`);
+
+            if (response?.instructions) {
+                if (Array.isArray(response.instructions)) {
+                    const instructionsObj = {};
+                    response.instructions.forEach(item => {
+                        instructionsObj[item.checklist_item_id] = item.instruction_text;
+                    });
+                    state.instructions = instructionsObj;
+                } else {
+                    state.instructions = response.instructions;
+                }
+
+                console.log(`✅ Loaded ${Object.keys(state.instructions).length} instructions for ${templateName}`);
+                if (Object.keys(state.instructions).length > 0) {
+                    return;
+                }
             }
-        } else {
-            state.instructions = {};
-            console.log('ℹ️ No instructions found');
+        } catch (error) {
+            console.error(`❌ Error fetching instructions for ${templateName}:`, error);
         }
-    } catch (error) {
-        console.error('❌ Error fetching instructions:', error);
-        state.instructions = {};
     }
+
+    const checklistItems = state.checklistTemplate?.checklistItems || [];
+    for (const item of checklistItems) {
+        for (const templateName of templateCandidates) {
+            try {
+                const response = await api.get(`/checklist-instructions/${encodeURIComponent(templateName)}/${encodeURIComponent(item.id)}`);
+                if (response?.instruction) {
+                    state.instructions[item.id] = response.instruction;
+                    break;
+                }
+            } catch (error) {
+                // Ignore 404-style misses and continue checking aliases/items.
+            }
+        }
+    }
+
+    if (Object.keys(state.instructions).length > 0) {
+        console.log(`✅ Loaded ${Object.keys(state.instructions).length} instructions via per-item fallback`);
+        return;
+    }
+
+    console.log('ℹ️ No instructions found');
 }
 
 function addInstructionIcons() {
@@ -1521,14 +1701,17 @@ function addInstructionIcons() {
         const checklistItem = document.querySelector(`[data-item-id="${itemId}"]`);
         
         if (checklistItem) {
+            checklistItem.classList.add('has-instruction');
             const label = checklistItem.querySelector('.item-label');
             
             if (label && !label.querySelector('.instruction-icon')) {
                 const icon = document.createElement('span');
                 icon.className = 'instruction-icon';
-                icon.textContent = 'i';
+                icon.innerHTML = '<span class="instruction-icon-dot">i</span>';
                 icon.dataset.itemId = itemId;
                 icon.title = 'Klikk for å se instruksjon';
+                icon.setAttribute('role', 'button');
+                icon.setAttribute('tabindex', '0');
                 
                 label.appendChild(icon);
                 iconsAdded++;
@@ -1575,6 +1758,13 @@ function setupInstructionClickHandlers() {
             } else {
                 console.error(`  ❌ No instruction found for: "${itemId}"`);
                 console.log(`  📦 Available instructions:`, Object.keys(state.instructions));
+            }
+        };
+
+        icon.onkeydown = function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                this.click();
             }
         };
         
@@ -1650,28 +1840,36 @@ function closeInstructionModal() {
 // ==================== INSTRUKSJONER ====================
 
 async function fetchInstructions() {
-    if (!state.checklistTemplate?.name) {
-        console.log('⚠️ No template name, skipping instructions');
+    const templateCandidates = [
+        state.checklistTemplate?.name,
+        state.checklistTemplate?.id
+    ].filter(Boolean);
+
+    if (templateCandidates.length === 0) {
+        console.log('⚠️ No template identifier, skipping instructions');
         return;
     }
 
-    try {
-        const templateName = state.checklistTemplate.name;
-        console.log(`📚 Fetching instructions for: ${templateName}`);
+    state.instructions = {};
 
-        const response = await api.get(`/checklist-instructions/${templateName}`);
-        
-        if (response?.instructions) {
-            state.instructions = response.instructions;
-            console.log(`✅ Loaded ${Object.keys(response.instructions).length} instructions`);
-        } else {
-            state.instructions = {};
-            console.log('ℹ️ No instructions found');
+    for (const templateName of templateCandidates) {
+        try {
+            console.log(`📚 Fetching instructions for: ${templateName}`);
+
+            const response = await api.get(`/checklist-instructions/${encodeURIComponent(templateName)}`);
+            if (response?.instructions) {
+                state.instructions = response.instructions;
+                console.log(`✅ Loaded ${Object.keys(response.instructions).length} instructions for ${templateName}`);
+                if (Object.keys(state.instructions).length > 0) {
+                    return;
+                }
+            }
+        } catch (error) {
+            console.error(`❌ Error fetching instructions for ${templateName}:`, error);
         }
-    } catch (error) {
-        console.error('❌ Error fetching instructions:', error);
-        state.instructions = {};
     }
+
+    console.log('ℹ️ No instructions found');
 }
 
 function addInstructionIcons() {
@@ -1720,28 +1918,36 @@ window.closeInstructionModal = closeInstructionModal;
 // ==================== INSTRUKSJONER ====================
 
 async function fetchInstructions() {
-    if (!state.checklistTemplate?.name) {
-        console.log('⚠️ No template name, skipping instructions');
+    const templateCandidates = [
+        state.checklistTemplate?.name,
+        state.checklistTemplate?.id
+    ].filter(Boolean);
+
+    if (templateCandidates.length === 0) {
+        console.log('⚠️ No template identifier, skipping instructions');
         return;
     }
 
-    try {
-        const templateName = state.checklistTemplate.name;
-        console.log(`📚 Fetching instructions for: ${templateName}`);
+    state.instructions = {};
 
-        const response = await api.get(`/checklist-instructions/${templateName}`);
-        
-        if (response?.instructions) {
-            state.instructions = response.instructions;
-            console.log(`✅ Loaded ${Object.keys(response.instructions).length} instructions`);
-        } else {
-            state.instructions = {};
-            console.log('ℹ️ No instructions found');
+    for (const templateName of templateCandidates) {
+        try {
+            console.log(`📚 Fetching instructions for: ${templateName}`);
+
+            const response = await api.get(`/checklist-instructions/${encodeURIComponent(templateName)}`);
+            if (response?.instructions) {
+                state.instructions = response.instructions;
+                console.log(`✅ Loaded ${Object.keys(response.instructions).length} instructions for ${templateName}`);
+                if (Object.keys(state.instructions).length > 0) {
+                    return;
+                }
+            }
+        } catch (error) {
+            console.error(`❌ Error fetching instructions for ${templateName}:`, error);
         }
-    } catch (error) {
-        console.error('❌ Error fetching instructions:', error);
-        state.instructions = {};
     }
+
+    console.log('ℹ️ No instructions found');
 }
 
 function addInstructionIcons() {
@@ -1758,14 +1964,17 @@ function addInstructionIcons() {
         const checklistItem = document.querySelector(`[data-item-id="${itemId}"]`);
         
         if (checklistItem) {
+            checklistItem.classList.add('has-instruction');
             const label = checklistItem.querySelector('.item-label');
             
             if (label && !label.querySelector('.instruction-icon')) {
                 const icon = document.createElement('span');
                 icon.className = 'instruction-icon';
-                icon.textContent = 'i';
+                icon.innerHTML = '<span class="instruction-icon-dot">i</span><span class="instruction-icon-label">Instruksjon</span>';
                 icon.dataset.itemId = itemId;
                 icon.title = 'Klikk for å se instruksjon';
+                icon.setAttribute('role', 'button');
+                icon.setAttribute('tabindex', '0');
                 
                 label.appendChild(icon);
                 iconsAdded++;
@@ -2691,6 +2900,7 @@ function loadExistingReportData() {
     if (reportData.checklist && state.checklistTemplate?.checklistItems) {
         console.log('📋 Loading checklist items...');
         populateChecklistItems(state.checklistTemplate.checklistItems, reportData.checklist);
+        refreshChecklistVisualState();
     } else {
         console.log('⚠️ Missing checklist data or template');
     }
@@ -3122,6 +3332,25 @@ case 'konsekvensgrad_dropdown':
 }
 
 function setupEventListeners() {
+    document.querySelectorAll('.quick-nav-btn[data-scroll-target]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const target = document.getElementById(button.dataset.scrollTarget);
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    });
+
+    if (isServiceV2Page() && typeof MutationObserver !== 'undefined') {
+        const imageObserver = new MutationObserver(() => updateServiceWorkspaceSummary());
+        ['general-images-gallery', 'checklist-items-container'].forEach((id) => {
+            const node = document.getElementById(id);
+            if (node) {
+                imageObserver.observe(node, { childList: true, subtree: true });
+            }
+        });
+    }
+
     // Form submission
     const form = document.getElementById('component-form');
     if (form) {
@@ -3201,6 +3430,36 @@ function setupEventListeners() {
     }
 }
 
+function scrollToNextIncompleteChecklistItem(currentItemId) {
+    if (!isServiceV2Page()) {
+        return;
+    }
+
+    const items = Array.from(document.querySelectorAll('#checklist-items-container .checklist-item, #checklist-items-container .checklist-item-fullwidth'));
+    if (items.length === 0) {
+        return;
+    }
+
+    const currentIndex = items.findIndex((item) => item.dataset.itemId === String(currentItemId));
+    const remaining = currentIndex >= 0 ? items.slice(currentIndex + 1) : items;
+    const nextIncomplete = remaining.find((item) => !item.querySelector('.status-btn.active'));
+
+    if (nextIncomplete) {
+        nextIncomplete.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+function focusContainerInput(container) {
+    if (!container) {
+        return;
+    }
+
+    const input = container.querySelector('textarea, input[type="text"], input[type="number"], select');
+    if (input) {
+        setTimeout(() => input.focus(), 120);
+    }
+}
+
 function handleStatusClick(e) {
     const button = e.target.closest('.status-btn');
     if (!button) return;
@@ -3240,12 +3499,25 @@ function handleStatusClick(e) {
         if (button.dataset.status === 'avvik' && avvikContainer) {
             avvikContainer.classList.add('show');
             avvikContainer.style.display = 'block';
+            if (isServiceV2Page()) {
+                avvikContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                focusContainerInput(avvikContainer);
+            }
         } else if (button.dataset.status === 'byttet' && byttetContainer) {
             byttetContainer.classList.add('show');
             byttetContainer.style.display = 'block';
             syncByttetImages(itemId);
+            if (isServiceV2Page()) {
+                byttetContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                focusContainerInput(byttetContainer);
+            }
+        } else if (button.dataset.status === 'ok') {
+            scrollToNextIncompleteChecklistItem(itemId);
         }
     }
+
+    refreshChecklistVisualState();
+    updateServiceWorkspaceSummary();
     
     console.log(`Status ${button.dataset.status} for item ${itemId} is now ${button.classList.contains('active') ? 'active' : 'inactive'}`);
 }
@@ -4144,6 +4416,7 @@ function updateFinalizeButtonState() {
     
     btn.disabled = !hasReport;
     btn.textContent = hasReport ? 'Ferdigstill anlegg' : 'Lagre først';
+    updateServiceWorkspaceSummary();
 }
 
 async function finalizeAnlegg() {
@@ -4184,7 +4457,7 @@ async function finalizeAnlegg() {
 }
 
 function setLoading(isLoading) {
-    const loader = document.getElementById('loader');
+    const loader = document.getElementById('loader') || document.getElementById('loading-indicator');
     if (loader) {
         loader.style.display = isLoading ? 'flex' : 'none';
     }

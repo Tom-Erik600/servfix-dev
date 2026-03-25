@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air-Tech Tekniker App - UI Forslag</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="./assets/css/main.css">
+    <link rel="stylesheet" href="./assets/css/index2.css">
+</head>
+<body class="dashboard-v2">
+    <div id="toast-container"></div>
+
+    <div id="loading-indicator" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>Laster app...</p>
+        </div>
+    </div>
+
+    <div class="app-container app-container-v2">
+        <div class="shell-glow"></div>
+
+        <header class="app-header app-header-v2" id="app-header"></header>
+
+        <main class="main-content main-content-v2">
+            <section class="hero-panel">
+                <div class="hero-copy">
+                    <span class="eyebrow">Service cockpit</span>
+                    <h1>Dagens plan og ordreoversikt</h1>
+                    <p>Et oppgradert UI med tydeligere status, bedre lesbarhet og sterkere visuelt hierarki.</p>
+                </div>
+                <div class="hero-badges">
+                    <div class="hero-badge">
+                        <span class="hero-badge-icon" aria-hidden="true">O</span>
+                        <span>Uke og maned</span>
+                    </div>
+                    <div class="hero-badge">
+                        <span class="hero-badge-icon" aria-hidden="true">+</span>
+                        <span>Status i ett blikk</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="calendar-section calendar-section-v2">
+                <div class="section-topline">
+                    <span class="section-kicker">Planlegging</span>
+                    <span class="section-caption">Velg dag for a se detaljer</span>
+                </div>
+
+                <div class="calendar-controls">
+                    <div class="calendar-toggle">
+                        <button class="toggle-btn active" id="week-view-btn" data-action="set-view" data-view="week">Uke</button>
+                        <button class="toggle-btn" id="month-view-btn" data-action="set-view" data-view="month">Maned</button>
+                    </div>
+
+                    <div class="calendar-header">
+                        <button class="nav-btn" data-action="prev-period" aria-label="Forrige periode">&#8249;</button>
+                        <h2 id="calendar-title">Laster...</h2>
+                        <button class="nav-btn" data-action="next-period" aria-label="Neste periode">&#8250;</button>
+                    </div>
+                </div>
+
+                <div class="calendar-grid week-view" id="week-calendar">
+                    <div class="calendar-weekdays">
+                        <div class="weekday">Man</div><div class="weekday">Tir</div><div class="weekday">Ons</div>
+                        <div class="weekday">Tor</div><div class="weekday">Fre</div><div class="weekday">Lor</div>
+                        <div class="weekday">Son</div>
+                    </div>
+                    <div id="calendar-days" class="calendar-days"></div>
+                </div>
+
+                <div class="calendar-grid month-view hidden" id="month-calendar">
+                    <div class="month-weekdays">
+                        <div class="month-weekday">Man</div><div class="month-weekday">Tir</div><div class="month-weekday">Ons</div>
+                        <div class="month-weekday">Tor</div><div class="month-weekday">Fre</div><div class="month-weekday">Lor</div>
+                        <div class="month-weekday">Son</div>
+                    </div>
+                    <div id="month-days" class="month-days"></div>
+                </div>
+            </section>
+
+            <div id="status-cards-container" class="status-cards status-cards-v2">
+                <section class="status-card orders-card featured-card">
+                    <div class="card-header">
+                        <div>
+                            <span class="card-kicker">Fokus</span>
+                            <h4 id="selected-date-header">Ordre for valgt dag</h4>
+                        </div>
+                        <span class="order-count" id="selected-date-count">0</span>
+                    </div>
+                    <div class="card-content" id="selected-date-orders">
+                        <div class="placeholder-text">Velg en dato i kalenderen</div>
+                    </div>
+                </section>
+
+                <section class="status-card upcoming-card">
+                    <div class="card-header">
+                        <div>
+                            <span class="card-kicker">Neste opp</span>
+                            <h4>Kommende denne uken</h4>
+                        </div>
+                        <span class="order-count" id="upcoming-count">0</span>
+                    </div>
+                    <div class="card-content" id="upcoming-orders">
+                        <div class="placeholder-text">Ingen kommende ordre</div>
+                    </div>
+                </section>
+
+                <section class="status-card ongoing-card warning-card">
+                    <div class="card-header">
+                        <div>
+                            <span class="card-kicker">Oppfolging</span>
+                            <h4>Uferdige ordre</h4>
+                        </div>
+                        <span class="order-count" id="unfinished-count">0</span>
+                    </div>
+                    <div class="card-content" id="unfinished-orders">
+                        <div class="placeholder-text">Ingen uferdige ordre</div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <script src="./assets/js/auth-check.js"></script>
+    <script src="./assets/js/header.js"></script>
+    <script src="./assets/js/app-v2.js"></script>
+</body>
+</html>

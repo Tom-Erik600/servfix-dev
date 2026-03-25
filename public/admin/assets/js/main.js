@@ -4,10 +4,29 @@
 // Kun redirect for /api/admin/-kall — andre API-er bruker en annen session-cookie
 (function() {
     const originalFetch = window.fetch;
+
+    function withAdminContextHeader(input, init = {}) {
+        const url = typeof input === 'string' ? input : input?.url || '';
+        if (!url.startsWith('/api/')) {
+            return [input, init];
+        }
+
+        if (input instanceof Request) {
+            const headers = new Headers(input.headers || {});
+            headers.set('x-servfix-app', 'admin');
+            return [new Request(input, { headers }), init];
+        }
+
+        const headers = new Headers(init.headers || {});
+        headers.set('x-servfix-app', 'admin');
+        return [input, { ...init, headers }];
+    }
+
     window.fetch = async function(...args) {
-        const response = await originalFetch.apply(this, args);
+        const [input, init] = withAdminContextHeader(args[0], args[1]);
+        const response = await originalFetch.call(this, input, init);
         if (response.status === 401 && window.location.pathname !== '/admin/login.html') {
-            const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+            const url = typeof input === 'string' ? input : input?.url || '';
             if (url.startsWith('/api/admin/')) {
                 console.warn('Admin-session utløpt — redirecter til login');
                 window.location.href = '/admin/login.html';

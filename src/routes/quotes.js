@@ -6,17 +6,19 @@ const QuotePDFGenerator = require('../services/quotePDFGenerator');
 
 const router = express.Router();
 
-// Middleware for å sikre tenantId er satt
+// Middleware for å sikre auth + tenant
 router.use((req, res, next) => {
-    const tenantId = req.session?.tenantId || req.session?.selectedTenantId || req.tenantId;
-    if (!tenantId) {
-        console.error('❌ Missing tenantId:', req.path);
+    if (!req.session?.technicianId && !req.session?.isAdmin) {
         return res.status(401).json({ error: 'Ikke autentisert' });
     }
-    req.tenantId = tenantId;
-    if (req.session) {
-        req.session.tenantId = tenantId;
+
+    const tenantId = req.adminTenantId || req.session?.tenantId || req.session?.selectedTenantId || req.tenantId;
+    if (!tenantId) {
+        console.error('❌ Missing tenantId:', req.path);
+        return res.status(401).json({ error: 'Ikke autentisert - mangler tenant' });
     }
+
+    req.tenantId = tenantId;
 
     console.log(`🏢 Quotes API - Tenant: ${tenantId}, Session: ${req.sessionID?.substring(0,8)}...`);
     next();

@@ -59,27 +59,48 @@ class Database {
   }
 
   async getTenantConnection(tenantId) {
+    if (!tenantId) {
+      throw Object.assign(new Error('Tenant ID mangler'), { statusCode: 400 });
+    }
+
     console.log(`🔍 Henter tenant: ${tenantId}`);
+
+    let adminPool;
     try {
-      const adminPool = await this.getPool('servfix_admin');
-      const result = await adminPool.query(
+      adminPool = await this.getPool('servfix_admin');
+    } catch (error) {
+      console.error(`❌ Kunne ikke koble til admin-database:`, error.message);
+      throw Object.assign(
+        new Error('Intern databasefeil — prøv igjen senere'),
+        { statusCode: 503 }
+      );
+    }
+
+    let result;
+    try {
+      result = await adminPool.query(
         'SELECT database_name FROM tenants WHERE id = $1 AND is_active = true',
         [tenantId]
       );
-      let dbName;
-      if (result.rows.length === 0) {
-        console.warn(`⚠️ Tenant ${tenantId} ikke funnet, bruker airtech_db`);
-        dbName = 'airtech_db';
-      } else {
-        dbName = result.rows[0].database_name;
-      }
-      console.log(`✅ Bruker database: ${dbName}`);
-      return this.getPool(dbName);
     } catch (error) {
-      console.error(`❌ DB-feil for tenant ${tenantId}:`, error);
-      console.log(`🔄 Fallback til airtech_db`);
-      return this.getPool('airtech_db');
+      console.error(`❌ Feil ved tenant-oppslag for '${tenantId}':`, error.message);
+      throw Object.assign(
+        new Error('Intern databasefeil — prøv igjen senere'),
+        { statusCode: 503 }
+      );
     }
+
+    if (result.rows.length === 0) {
+      console.warn(`🔒 Tenant '${tenantId}' ikke funnet eller inaktiv — nekter tilgang`);
+      throw Object.assign(
+        new Error(`Ukjent eller inaktiv tenant: ${tenantId}`),
+        { statusCode: 403 }
+      );
+    }
+
+    const dbName = result.rows[0].database_name;
+    console.log(`✅ Bruker database: ${dbName}`);
+    return this.getPool(dbName);
   }
   /** D3: Drain alle DB-tilkoblinger ved shutdown */
   async closeAll() {

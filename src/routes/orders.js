@@ -4,16 +4,18 @@ const path = require('path');
 const fs = require('fs').promises;
 
 const customerService = require('../services/customerService');
+const { requireTenant } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Middleware - sjekk auth
+// Middleware - sjekk auth og tenant
 router.use((req, res, next) => {
   if (!req.session.technicianId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
   next();
 });
+router.use(requireTenant);
 
 /**
  * Berik ordrer med kontaktperson fra lokal customer_contacts-tabell.
@@ -363,20 +365,40 @@ router.put('/:id', async (req, res) => {
     
     // TEKNIKER-OVERTAGELSE: Hvis technicianId er sendt
     if (technicianId) {
+      if (technicianId !== req.session.technicianId) {
+        return res.status(403).json({
+          error: 'Tekniker kan kun overta ordre til seg selv'
+        });
+      }
+
       console.log(`🔄 Order ${id}: Tekniker ${req.session.technicianId} overtaking order`);
       
-      // FIKSET: Oppdater KUN technician_id (uten updated_at som ikke eksisterer)
+      // Tillat takeover kun for ikke-fullførte ordre, og kun til innlogget tekniker
       const result = await pool.query(
         `UPDATE orders 
          SET technician_id = $1
-         WHERE id = $2 
-         RETURNING id, technician_id, scheduled_date, customer_name`,
+         WHERE id = $2
+           AND status != 'completed'
+         RETURNING id, technician_id, scheduled_date, customer_name, status`,
         [technicianId, id]
       );
       
       if (result.rows.length === 0) {
-        console.log(`❌ Order ${id} not found for takeover`);
-        return res.status(404).json({ error: 'Ordre ikke funnet' });
+        const existingOrder = await pool.query(
+          'SELECT id, status FROM orders WHERE id = $1',
+          [id]
+        );
+
+        if (existingOrder.rows.length === 0) {
+          console.log(`❌ Order ${id} not found for takeover`);
+          return res.status(404).json({ error: 'Ordre ikke funnet' });
+        }
+
+        if (existingOrder.rows[0].status === 'completed') {
+          return res.status(409).json({ error: 'Fullførte ordre kan ikke overtas' });
+        }
+
+        return res.status(400).json({ error: 'Ordre kunne ikke overtas' });
       }
       
       const updatedOrder = result.rows[0];

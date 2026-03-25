@@ -157,10 +157,55 @@ router.use((req, res, next) => {
   next();
 });
 
+function requireAdmin(req, res, next) {
+  if (!req.session?.isAdmin) {
+    return res.status(403).json({ error: 'Kun admin har tilgang' });
+  }
+  next();
+}
+
+function getResolvedTenantId(req) {
+  return req.adminTenantId || req.session?.tenantId;
+}
+
+async function getAccessibleReport(pool, reportId, req) {
+  const result = await pool.query(
+    `SELECT sr.id, sr.order_id, sr.equipment_id, o.technician_id
+     FROM service_reports sr
+     JOIN orders o ON sr.order_id = o.id
+     WHERE sr.id = $1`,
+    [reportId]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const report = result.rows[0];
+  if (!req.session?.isAdmin && report.technician_id !== req.session?.technicianId) {
+    return false;
+  }
+
+  return report;
+}
+
+function ensureTenantFilePath(imageUrl, tenantId) {
+  const urlPath = new URL(imageUrl).pathname;
+  const filePath = urlPath.substring(urlPath.indexOf(bucketName) + bucketName.length + 1);
+  const decodedFilePath = decodeURIComponent(filePath);
+  const tenantPrefix = `tenants/${tenantId}/`;
+
+  if (!decodedFilePath.startsWith(tenantPrefix)) {
+    throw new Error('Ugyldig bildefilsti for tenant');
+  }
+
+  return decodedFilePath;
+}
+
 // GET /api/images/settings - Hent alle innstillinger fra JSON-fil
-router.get('/settings', async (req, res) => {
+router.get('/settings', requireAdmin, async (req, res) => {
   try {
-    const tenantId = req.session?.tenantId;
+    const tenantId = req.adminTenantId || req.session?.tenantId;
     if (!tenantId) {
       console.error('❌ Missing tenantId in session:', req.path);
       return res.status(401).json({ error: 'Not authenticated - missing tenant' });
@@ -187,9 +232,9 @@ router.get('/settings', async (req, res) => {
 });
 
 // POST /api/images/save-settings - Lagre innstillinger til JSON-fil
-router.post('/save-settings', async (req, res) => {
+router.post('/save-settings', requireAdmin, async (req, res) => {
   try {
-    const tenantId = req.session?.tenantId;
+    const tenantId = req.adminTenantId || req.session?.tenantId;
     if (!tenantId) {
       console.error('❌ Missing tenantId in session:', req.path);
       return res.status(401).json({ error: 'Not authenticated - missing tenant' });
@@ -263,7 +308,7 @@ router.post('/save-settings', async (req, res) => {
 });
 
 // POST /api/images/upload-logo - Last opp bedriftslogo
-router.post('/upload-logo', upload.single('logo'), async (req, res) => {
+router.post('/upload-logo', requireAdmin, upload.single('logo'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Ingen fil lastet opp' });
@@ -275,7 +320,7 @@ router.post('/upload-logo', upload.single('logo'), async (req, res) => {
       mimetype: req.file.mimetype
     });
 
-    const tenantId = req.session?.tenantId;
+    const tenantId = req.adminTenantId || req.session?.tenantId;
     if (!tenantId) {
       console.error('❌ Missing tenantId in session:', req.path);
       return res.status(401).json({ error: 'Not authenticated - missing tenant' });
@@ -331,9 +376,9 @@ router.post('/upload-logo', upload.single('logo'), async (req, res) => {
 });
 
 // GET /api/images/logo - Hent logo-info (manglende endepunkt)
-router.get('/logo', async (req, res) => {
+router.get('/logo', requireAdmin, async (req, res) => {
   try {
-    const tenantId = req.session?.tenantId;
+    const tenantId = req.adminTenantId || req.session?.tenantId;
     if (!tenantId) {
       console.error('❌ Missing tenantId in session:', req.path);
       return res.status(401).json({ error: 'Not authenticated - missing tenant' });
@@ -367,9 +412,9 @@ router.get('/logo', async (req, res) => {
 });
 
 // DELETE /api/images/logo - Fjern logo
-router.delete('/logo', async (req, res) => {
+router.delete('/logo', requireAdmin, async (req, res) => {
   try {
-    const tenantId = req.session?.tenantId;
+    const tenantId = req.adminTenantId || req.session?.tenantId;
     if (!tenantId) {
       console.error('❌ Missing tenantId in session:', req.path);
       return res.status(401).json({ error: 'Not authenticated - missing tenant' });
@@ -416,7 +461,7 @@ router.delete('/logo', async (req, res) => {
 router.delete('/avvik/:imageId', async (req, res) => {
   try {
     const { imageId } = req.params;
-    const tenantId = req.session?.tenantId;
+    const tenantId = getResolvedTenantId(req);
     if (!tenantId) {
       console.error('❌ Missing tenantId in session:', req.path);
       return res.status(401).json({ error: 'Not authenticated - missing tenant' });
@@ -428,8 +473,13 @@ router.delete('/avvik/:imageId', async (req, res) => {
     
     // Hent bilde-info før sletting
     const imageResult = await pool.query(
-      'SELECT image_url FROM avvik_images WHERE id = $1',
-      [imageId]
+      `SELECT ai.image_url
+       FROM avvik_images ai
+       JOIN service_reports sr ON ai.service_report_id = sr.id
+       JOIN orders o ON sr.order_id = o.id
+       WHERE ai.id = $1
+         AND ($2::boolean = true OR o.technician_id = $3)`,
+      [imageId, !!req.session?.isAdmin, req.session?.technicianId || null]
     );
     
     if (imageResult.rows.length === 0) {
@@ -443,9 +493,7 @@ router.delete('/avvik/:imageId', async (req, res) => {
     
     // Slett fra GCS
     try {
-      const urlPath = new URL(imageUrl).pathname;
-      const filePath = urlPath.substring(urlPath.indexOf(bucketName) + bucketName.length + 1);
-      const decodedFilePath = decodeURIComponent(filePath);
+      const decodedFilePath = ensureTenantFilePath(imageUrl, tenantId);
       
       await bucket.file(decodedFilePath).delete();
       console.log(`✅ Fil slettet fra GCS: ${decodedFilePath}`);
@@ -469,9 +517,9 @@ router.delete('/avvik/:imageId', async (req, res) => {
 });
 
 // GET /api/images/logo - Hent bare logo-info
-router.get('/logo', async (req, res) => {
+router.get('/logo', requireAdmin, async (req, res) => {
   try {
-    const tenantId = req.session?.tenantId;
+    const tenantId = req.adminTenantId || req.session?.tenantId;
     if (!tenantId) {
       console.error('❌ Missing tenantId in session:', req.path);
       return res.status(401).json({ error: 'Not authenticated - missing tenant' });
@@ -529,16 +577,17 @@ router.post('/upload', upload.array('images', 10), async (req, res) => {
 
     // Get order and equipment info for folder structure
     const pool = await db.getTenantConnection(tenantId);
-    const reportResult = await pool.query(
-      'SELECT order_id, equipment_id FROM service_reports WHERE id = $1',
-      [serviceReportId]
-    );
-    
-    if (reportResult.rows.length === 0) {
+    const accessibleReport = await getAccessibleReport(pool, serviceReportId, req);
+
+    if (accessibleReport === null) {
       return res.status(404).json({ error: 'Service report ikke funnet' });
     }
-    
-    const { order_id, equipment_id } = reportResult.rows[0];
+
+    if (accessibleReport === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til service report' });
+    }
+
+    const { order_id, equipment_id } = accessibleReport;
     const uploadedImages = [];
     
     // Upload each file
@@ -604,7 +653,7 @@ router.post('/general', upload.single('image'), async (req, res) => {
     console.log('📸 Laster opp rapport-bilde:', req.file.originalname);
 
     const { orderId, equipmentId, reportId } = req.body;
-    const tenantId = req.session?.tenantId;
+    const tenantId = getResolvedTenantId(req);
     if (!tenantId) {
       console.error('❌ Missing tenantId in session:', req.path);
       return res.status(401).json({ error: 'Not authenticated - missing tenant' });
@@ -612,6 +661,21 @@ router.post('/general', upload.single('image'), async (req, res) => {
 
     if (!reportId || !orderId || !equipmentId) {
       return res.status(400).json({ error: 'reportId, orderId og equipmentId er påkrevd' });
+    }
+
+    const pool = await db.getTenantConnection(tenantId);
+    const accessibleReport = await getAccessibleReport(pool, reportId, req);
+
+    if (accessibleReport === null) {
+      return res.status(404).json({ error: 'Service report ikke funnet' });
+    }
+
+    if (accessibleReport === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til service report' });
+    }
+
+    if (String(accessibleReport.order_id) !== String(orderId) || String(accessibleReport.equipment_id) !== String(equipmentId)) {
+      return res.status(400).json({ error: 'Rapport matcher ikke ordre/equipment' });
     }
 
     // Generate file path
@@ -623,8 +687,6 @@ router.post('/general', upload.single('image'), async (req, res) => {
     console.log('✅ Bilde lastet opp til GCS:', imageUrl);
     
     // KRITISK ENDRING: Mer robust array-håndtering for Cloud SQL
-    const pool = await db.getTenantConnection(tenantId);
-    
     try {
       // Metode 1: Prøv først med array_append (fungerer i de fleste tilfeller)
       const result = await pool.query(
@@ -741,7 +803,7 @@ router.post('/avvik', upload.single('image'), async (req, res) => {
     console.log('📸 Laster opp avvik-bilde:', req.file.originalname);
 
     const { orderId, equipmentId, reportId, avvikId } = req.body;
-    const tenantId = req.session?.tenantId;
+    const tenantId = getResolvedTenantId(req);
     if (!tenantId) {
       console.error('❌ Missing tenantId in session:', req.path);
       return res.status(401).json({ error: 'Not authenticated - missing tenant' });
@@ -752,6 +814,19 @@ router.post('/avvik', upload.single('image'), async (req, res) => {
     }
 
     const pool = await db.getTenantConnection(tenantId);
+    const accessibleReport = await getAccessibleReport(pool, reportId, req);
+
+    if (accessibleReport === null) {
+      return res.status(404).json({ error: 'Service report ikke funnet' });
+    }
+
+    if (accessibleReport === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til service report' });
+    }
+
+    if (String(accessibleReport.order_id) !== String(orderId) || String(accessibleReport.equipment_id) !== String(equipmentId)) {
+      return res.status(400).json({ error: 'Rapport matcher ikke ordre/equipment' });
+    }
     
     // KORREKT: Bruk auto-increment funksjon for å få neste avvik-nummer
     const avvikNumberResult = await pool.query(
@@ -844,8 +919,21 @@ function generateImagePath(tenantId, orderId, equipmentId, imageType, avvikNumbe
 router.get('/avvik/:reportId', async (req, res) => {
   try {
     const { reportId } = req.params;
-    
-    const pool = await db.getTenantConnection(req.session.tenantId);
+    const tenantId = getResolvedTenantId(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: 'Ikke autentisert — mangler tenant' });
+    }
+
+    const pool = await db.getTenantConnection(tenantId);
+    const accessibleReport = await getAccessibleReport(pool, reportId, req);
+
+    if (accessibleReport === null) {
+      return res.status(404).json({ error: 'Service report ikke funnet' });
+    }
+
+    if (accessibleReport === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til service report' });
+    }
     
     const result = await pool.query(
       `SELECT id, service_report_id, avvik_number, image_url, uploaded_at, metadata, checklist_item_id
@@ -873,8 +961,21 @@ router.get('/avvik/:reportId', async (req, res) => {
 router.get('/general/:reportId', async (req, res) => {
   try {
     const { reportId } = req.params;
-    
-    const pool = await db.getTenantConnection(req.session.tenantId);
+    const tenantId = getResolvedTenantId(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: 'Ikke autentisert — mangler tenant' });
+    }
+
+    const pool = await db.getTenantConnection(tenantId);
+    const accessibleReport = await getAccessibleReport(pool, reportId, req);
+
+    if (accessibleReport === null) {
+      return res.status(404).json({ error: 'Service report ikke funnet' });
+    }
+
+    if (accessibleReport === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til service report' });
+    }
     
     const result = await pool.query(
       `SELECT photos FROM service_reports WHERE id = $1`,
@@ -924,7 +1025,7 @@ router.post('/sja', upload.single('image'), async (req, res) => {
     }
 
     const { sjaId } = req.body;
-    const tenantId = req.session?.tenantId;
+    const tenantId = getResolvedTenantId(req);
 
     if (!tenantId) {
       return res.status(401).json({ error: 'Ikke autentisert' });
@@ -950,8 +1051,9 @@ router.post('/sja', upload.single('image'), async (req, res) => {
       `UPDATE hms_sja
        SET photos = array_append(COALESCE(photos, ARRAY[]::text[]), $1)
        WHERE id = $2
+         AND ($3::boolean = true OR technician_id = $4)
        RETURNING photos`,
-      [imageUrl, sjaId]
+      [imageUrl, sjaId, !!req.session?.isAdmin, req.session?.technicianId || null]
     );
 
     if (result.rows.length === 0) {
@@ -981,7 +1083,7 @@ router.delete('/sja/:sjaId', async (req, res) => {
   try {
     const { sjaId } = req.params;
     const { imageUrl } = req.body;
-    const tenantId = req.session?.tenantId;
+    const tenantId = getResolvedTenantId(req);
 
     if (!tenantId) {
       return res.status(401).json({ error: 'Ikke autentisert' });
@@ -996,8 +1098,9 @@ router.delete('/sja/:sjaId', async (req, res) => {
       `UPDATE hms_sja
        SET photos = array_remove(COALESCE(photos, ARRAY[]::text[]), $1)
        WHERE id = $2
+         AND ($3::boolean = true OR technician_id = $4)
        RETURNING photos`,
-      [imageUrl, sjaId]
+      [imageUrl, sjaId, !!req.session?.isAdmin, req.session?.technicianId || null]
     );
 
     if (result.rows.length === 0) {
@@ -1006,9 +1109,7 @@ router.delete('/sja/:sjaId', async (req, res) => {
 
     // Slett fra GCS
     try {
-      const urlPath = new URL(imageUrl).pathname;
-      const filePath = urlPath.substring(urlPath.indexOf(bucketName) + bucketName.length + 1);
-      const decodedFilePath = decodeURIComponent(filePath);
+      const decodedFilePath = ensureTenantFilePath(imageUrl, tenantId);
       await bucket.file(decodedFilePath).delete();
       console.log(`✅ SJA-bilde slettet fra GCS: ${decodedFilePath}`);
     } catch (storageError) {
@@ -1031,7 +1132,7 @@ router.delete('/sja/:sjaId', async (req, res) => {
 router.post('/cleanup', async (req, res) => {
   try {
     const { imageUrls } = req.body;
-    const tenantId = req.session?.tenantId;
+    const tenantId = getResolvedTenantId(req);
     if (!tenantId) {
       console.error('❌ Missing tenantId in session:', req.path);
       return res.status(401).json({ error: 'Not authenticated - missing tenant' });
@@ -1046,10 +1147,7 @@ router.post('/cleanup', async (req, res) => {
     const deletePromises = imageUrls.map(async (url) => {
       try {
         // Hent filsti fra URL
-        const urlPath = new URL(url).pathname;
-        const filePath = urlPath.substring(urlPath.indexOf(bucketName) + bucketName.length + 1);
-        
-        const decodedFilePath = decodeURIComponent(filePath);
+        const decodedFilePath = ensureTenantFilePath(url, tenantId);
 
         console.log(`   - Sletter fil: ${decodedFilePath}`)
 

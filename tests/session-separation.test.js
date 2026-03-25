@@ -30,10 +30,22 @@ function createTestApp() {
   const adminSession = session(makeSessionOpts('admin.sid'));
   const techSession = session(makeSessionOpts('tech.sid'));
 
-  app.use('/api/admin', adminSession);
   app.use((req, res, next) => {
-    if (req.path.startsWith('/api/admin')) return next();
-    techSession(req, res, next);
+    const isAdminRoute = req.path.startsWith('/api/admin') || req.path === '/api/admin';
+    const referer = req.get('referer');
+    const explicitAdminContext = req.get('x-servfix-app') === 'admin';
+
+    let isAdminContext = explicitAdminContext || isAdminRoute;
+    if (!isAdminContext && referer) {
+      try {
+        isAdminContext = new URL(referer, 'http://localhost').pathname.startsWith('/admin');
+      } catch (_) {
+        isAdminContext = false;
+      }
+    }
+
+    const mw = isAdminContext ? adminSession : techSession;
+    mw(req, res, next);
   });
 
   // Simulert tech-login
@@ -197,6 +209,113 @@ describe('Session-separasjon: admin og tekniker', () => {
       .set('Cookie', cookieHeader(allCookies));
     expect(techMe.status).toBe(200);
     expect(techMe.body.technicianId).toBe('tech-1');
+  });
+
+  test('admin-cookie kaprer IKKE tekniker-kall i samme nettleser', async () => {
+    const allCookies = {};
+
+    const techLogin = await request(app)
+      .post('/api/auth/login')
+      .send({});
+    Object.assign(allCookies, extractCookies(techLogin));
+
+    const adminLogin = await request(app)
+      .post('/api/admin/auth/login')
+      .set('Cookie', cookieHeader(allCookies))
+      .set('Referer', 'http://localhost/admin/index.html')
+      .send({});
+    Object.assign(allCookies, extractCookies(adminLogin));
+
+    const techMe = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', cookieHeader(allCookies))
+      .set('Referer', 'http://localhost/app/orders.html');
+
+    expect(techMe.status).toBe(200);
+    expect(techMe.body.technicianId).toBe('tech-1');
+
+    const adminMe = await request(app)
+      .get('/api/admin/auth/me')
+      .set('Cookie', cookieHeader(allCookies))
+      .set('Referer', 'http://localhost/admin/index.html');
+
+    expect(adminMe.status).toBe(200);
+    expect(adminMe.body.adminId).toBe('admin-1');
+  });
+
+  test('admin-side kan bruke delt API med admin-session uten å påvirke tekniker-session', async () => {
+    const allCookies = {};
+
+    const techLogin = await request(app)
+      .post('/api/auth/login')
+      .send({});
+    Object.assign(allCookies, extractCookies(techLogin));
+
+    const adminLogin = await request(app)
+      .post('/api/admin/auth/login')
+      .set('Cookie', cookieHeader(allCookies))
+      .set('Referer', 'http://localhost/admin/index.html')
+      .send({});
+    Object.assign(allCookies, extractCookies(adminLogin));
+
+    app.get('/api/shared/me', (req, res) => {
+      res.json({
+        isAdmin: !!req.session.isAdmin,
+        adminId: req.session.adminId || null,
+        technicianId: req.session.technicianId || null
+      });
+    });
+
+    const sharedFromAdmin = await request(app)
+      .get('/api/shared/me')
+      .set('Cookie', cookieHeader(allCookies))
+      .set('Referer', 'http://localhost/admin/dashboard.html');
+
+    expect(sharedFromAdmin.status).toBe(200);
+    expect(sharedFromAdmin.body.isAdmin).toBe(true);
+    expect(sharedFromAdmin.body.adminId).toBe('admin-1');
+    expect(sharedFromAdmin.body.technicianId).toBeNull();
+
+    const techMe = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', cookieHeader(allCookies))
+      .set('Referer', 'http://localhost/app/orders.html');
+
+    expect(techMe.status).toBe(200);
+    expect(techMe.body.technicianId).toBe('tech-1');
+  });
+
+  test('eksplisitt admin-header velger admin-session for delt API', async () => {
+    const allCookies = {};
+
+    const techLogin = await request(app)
+      .post('/api/auth/login')
+      .send({});
+    Object.assign(allCookies, extractCookies(techLogin));
+
+    const adminLogin = await request(app)
+      .post('/api/admin/auth/login')
+      .set('Cookie', cookieHeader(allCookies))
+      .send({});
+    Object.assign(allCookies, extractCookies(adminLogin));
+
+    app.get('/api/shared/me', (req, res) => {
+      res.json({
+        isAdmin: !!req.session.isAdmin,
+        adminId: req.session.adminId || null,
+        technicianId: req.session.technicianId || null
+      });
+    });
+
+    const sharedFromAdmin = await request(app)
+      .get('/api/shared/me')
+      .set('Cookie', cookieHeader(allCookies))
+      .set('x-servfix-app', 'admin');
+
+    expect(sharedFromAdmin.status).toBe(200);
+    expect(sharedFromAdmin.body.isAdmin).toBe(true);
+    expect(sharedFromAdmin.body.adminId).toBe('admin-1');
+    expect(sharedFromAdmin.body.technicianId).toBeNull();
   });
 
   test('uten cookie gir 401 på begge /me-endepunkt', async () => {

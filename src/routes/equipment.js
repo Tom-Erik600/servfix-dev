@@ -1,22 +1,24 @@
 // src/routes/equipment.js - KOMPLETT OPPDATERT VERSJON
 const express = require('express');
 const db = require('../config/database');
+const { requireTenant } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Middleware - sjekk auth
+// Middleware - sjekk auth og tenant
 router.use((req, res, next) => {
   console.log('Equipment route - Session check:', {
     sessionId: req.sessionID,
     technicianId: req.session?.technicianId,
     tenantId: req.session?.tenantId
   });
-  
+
   if (!req.session.technicianId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
   next();
 });
+router.use(requireTenant);
 
 // DENNE MÅ KOMME FØRST:
 router.get('/:id', async (req, res) => {

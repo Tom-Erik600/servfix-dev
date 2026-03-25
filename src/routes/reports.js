@@ -16,6 +16,49 @@ router.use((req, res, next) => {
 });
 const db = require('../config/database');
 
+function getResolvedTenantId(req) {
+  return req.adminTenantId || req.session?.tenantId || req.tenantId;
+}
+
+async function getAccessibleOrder(pool, orderId, req) {
+  const result = await pool.query(
+    'SELECT id, technician_id, status FROM orders WHERE id = $1',
+    [orderId]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const order = result.rows[0];
+  if (!req.session?.isAdmin && order.technician_id !== req.session?.technicianId) {
+    return false;
+  }
+
+  return order;
+}
+
+async function getAccessibleReport(pool, reportId, req) {
+  const result = await pool.query(
+    `SELECT sr.*, o.technician_id AS order_technician_id, o.status AS order_status
+     FROM service_reports sr
+     JOIN orders o ON sr.order_id = o.id
+     WHERE sr.id = $1`,
+    [reportId]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const report = result.rows[0];
+  if (!req.session?.isAdmin && report.order_technician_id !== req.session?.technicianId) {
+    return false;
+  }
+
+  return report;
+}
+
 /**
  * Service Reports Router
  * Håndterer servicerapporter med korrekt database-struktur
@@ -124,10 +167,20 @@ function transformDbRowToFrontend(row) {
 // Hent alle servicerapporter for en gitt ordre
 router.get('/:orderId', async (req, res) => {
   const { orderId } = req.params;
-  const tenantId = req.tenantId;
+  const tenantId = getResolvedTenantId(req);
   
   try {
     const pool = await db.getTenantConnection(tenantId);
+    const accessibleOrder = await getAccessibleOrder(pool, orderId, req);
+
+    if (accessibleOrder === null) {
+      return res.status(404).json({ error: 'Ordre ikke funnet' });
+    }
+
+    if (accessibleOrder === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til ordre' });
+    }
+
     const result = await pool.query('SELECT * FROM service_reports WHERE order_id = $1', [orderId]);
     res.json(result.rows.map(transformDbRowToFrontend));
   } catch (error) {
@@ -141,7 +194,7 @@ router.get('/equipment/:equipmentId', async (req, res) => {
   const { equipmentId } = req.params;
   const { orderId } = req.query;
   
-  const tenantId = req.session.tenantId;
+  const tenantId = getResolvedTenantId(req);
   
   console.log('=== GET REPORT BY EQUIPMENT ===');
   console.log('Equipment ID:', equipmentId);
@@ -161,6 +214,15 @@ router.get('/equipment/:equipmentId', async (req, res) => {
   
   try {
     const pool = await db.getTenantConnection(tenantId);
+    const accessibleOrder = await getAccessibleOrder(pool, orderId, req);
+
+    if (accessibleOrder === null) {
+      return res.status(404).json({ error: 'Ordre ikke funnet' });
+    }
+
+    if (accessibleOrder === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til ordre' });
+    }
     
     // ✅ FIX: Cast både sr.equipment_id og parameter til VARCHAR
     const result = await pool.query(`
@@ -214,7 +276,17 @@ router.post('/', async (req, res) => {
   }
   
   try {
-    const pool = await db.getTenantConnection(req.session.tenantId);
+    const tenantId = getResolvedTenantId(req);
+    const pool = await db.getTenantConnection(tenantId);
+    const accessibleOrder = await getAccessibleOrder(pool, orderId, req);
+
+    if (accessibleOrder === null) {
+      return res.status(404).json({ error: 'Ordre ikke funnet' });
+    }
+
+    if (accessibleOrder === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til ordre' });
+    }
     
     // Splitt reportData til passende kolonner
     const dbData = splitReportDataForDB(reportData);
@@ -299,7 +371,7 @@ router.put('/:reportId', async (req, res) => {
   }
 
   try {
-    const tenantId = req.session?.tenantId;
+    const tenantId = getResolvedTenantId(req);
     if (!tenantId) {
       console.error('❌ Missing tenantId in session:', req.path);
       return res.status(401).json({ error: 'Not authenticated - missing tenant' });
@@ -309,20 +381,21 @@ router.put('/:reportId', async (req, res) => {
     const pool = await db.getTenantConnection(tenantId);
     
     // Sjekk om rapporten eksisterer
-    const checkResult = await pool.query(
-      'SELECT * FROM service_reports WHERE id = $1',
-      [reportId]
-    );
+    const checkResult = await getAccessibleReport(pool, reportId, req);
     
-    if (checkResult.rows.length === 0) {
+    if (checkResult === null) {
       return res.status(404).json({ error: 'Rapport ikke funnet' });
+    }
+
+    if (checkResult === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til rapport' });
     }
     
     // Oppdater eksisterende rapport
     console.log('Oppdaterer eksisterende rapport...');
     
     // KRITISK: Hent eksisterende photos array FØR oppdatering
-    const existingPhotos = checkResult.rows[0].photos || [];
+    const existingPhotos = checkResult.photos || [];
     console.log(`📸 Eksisterende bilder i DB: ${existingPhotos.length}`);
     
     // Splitt reportData til passende kolonner
@@ -339,12 +412,7 @@ router.put('/:reportId', async (req, res) => {
     }
     
     // Sjekk om dette er første gang en sjekkliste lagres
-    const currentStatusResult = await pool.query(
-      'SELECT status FROM service_reports WHERE id = $1',
-      [reportId]
-    );
-
-    const currentStatus = currentStatusResult.rows[0]?.status || 'draft';
+    const currentStatus = checkResult.status || 'draft';
 // Automatisk sett status til 'in_progress' hvis data lagres første gang
 const hasChecklistData = reportData.checklist && Object.keys(reportData.checklist).length > 0;
 const hasSystemFieldData = reportData.systemFields && Object.keys(reportData.systemFields).length > 0;
@@ -401,7 +469,17 @@ router.post('/:reportId/complete', async (req, res) => {
   }
   
   try {
-    const pool = await db.getTenantConnection(req.session.tenantId);
+    const tenantId = getResolvedTenantId(req);
+    const pool = await db.getTenantConnection(tenantId);
+    const accessibleReport = await getAccessibleReport(pool, reportId, req);
+
+    if (accessibleReport === null) {
+      return res.status(404).json({ error: 'Rapport ikke funnet' });
+    }
+
+    if (accessibleReport === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til rapport' });
+    }
     
     const updateData = {
       status: 'completed',
@@ -436,21 +514,22 @@ router.post('/:reportId/complete', async (req, res) => {
 // Hent en enkelt rapport basert på ID
 router.get('/report/:reportId', async (req, res) => {
   const { reportId } = req.params;
-  const tenantId = req.tenantId || req.session?.tenantId;
+  const tenantId = getResolvedTenantId(req);
   
   try {
     const pool = await db.getTenantConnection(tenantId);
-    
-    const result = await pool.query(
-      'SELECT * FROM service_reports WHERE id = $1',
-      [reportId]
-    );
-    
-    if (result.rows.length === 0) {
+
+    const result = await getAccessibleReport(pool, reportId, req);
+
+    if (result === null) {
       return res.status(404).json({ error: 'Rapport ikke funnet' });
     }
+
+    if (result === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til rapport' });
+    }
     
-    res.json(transformDbRowToFrontend(result.rows[0]));
+    res.json(transformDbRowToFrontend(result));
   } catch (error) {
     console.error(`Feil ved henting av rapport ${reportId}:`, error);
     res.status(500).json({ error: 'Intern serverfeil' });
@@ -465,7 +544,7 @@ router.post('/:reportId/send-til-fakturering', async (req, res) => {
     return res.status(401).json({ error: 'Ikke autentisert' });
   }
 
-  const tenantId = req.session?.tenantId;
+  const tenantId = getResolvedTenantId(req);
   if (!tenantId) {
     console.error('❌ Missing tenantId in session:', req.path);
     return res.status(401).json({ error: 'Not authenticated - missing tenant' });
@@ -473,6 +552,15 @@ router.post('/:reportId/send-til-fakturering', async (req, res) => {
 
   try {
     const pool = await db.getTenantConnection(tenantId);
+    const accessibleReport = await getAccessibleReport(pool, reportId, req);
+
+    if (accessibleReport === null) {
+      return res.status(404).json({ error: 'Rapport ikke funnet' });
+    }
+
+    if (accessibleReport === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til rapport' });
+    }
     
     const result = await pool.query(
       `UPDATE service_reports 
@@ -503,7 +591,17 @@ router.post('/:reportId/photos', async (req, res) => {
   }
   
   try {
-    const pool = await db.getTenantConnection(req.session.tenantId);
+    const tenantId = getResolvedTenantId(req);
+    const pool = await db.getTenantConnection(tenantId);
+    const accessibleReport = await getAccessibleReport(pool, reportId, req);
+
+    if (accessibleReport === null) {
+      return res.status(404).json({ error: 'Rapport ikke funnet' });
+    }
+
+    if (accessibleReport === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til rapport' });
+    }
     
     // Hent eksisterende bilder
     const existingResult = await pool.query(
