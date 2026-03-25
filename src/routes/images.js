@@ -203,9 +203,9 @@ function ensureTenantFilePath(imageUrl, tenantId) {
 }
 
 // GET /api/images/settings - Hent alle innstillinger fra JSON-fil
-router.get('/settings', requireAdmin, async (req, res) => {
+router.get('/settings', async (req, res) => {
   try {
-    const tenantId = req.adminTenantId || req.session?.tenantId;
+    const tenantId = req.session?.tenantId;
     if (!tenantId) {
       console.error('❌ Missing tenantId in session:', req.path);
       return res.status(401).json({ error: 'Not authenticated - missing tenant' });

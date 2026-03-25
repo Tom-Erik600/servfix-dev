@@ -12,6 +12,9 @@
     "express-session": "^1.17.3",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.5",
+    "oh-my-openagent": "^3.13.1",
+    "oh-my-openagent-windows-x64": "^3.13.1",
+    "oh-my-opencode-windows-x64": "^3.13.1",
     "pg": "^8.11.0",
     "puppeteer": "^24.15.0"
   },

@@ -701,18 +701,18 @@ function showEquipmentForm(customer, equipmentType) {
     formModal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 10000;';
     
     formModal.innerHTML = `
-        <div class="modal-content" style="background: white; padding: 20px; border-radius: 8px; max-width: 500px; width: 90%;">
-            <div class="modal-header">
-                <h3>Legg til ${typeName}</h3>
-                <button type="button" class="close-btn" style="float: right; background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+        <div class="modal-content" style="background: white; border-radius: 8px; max-width: 500px; width: 90%; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;">
+            <div class="modal-header" style="padding: 20px 20px 16px; border-bottom: 1px solid #e5e7eb; flex-shrink: 0;">
+                <h3 style="margin: 0;">Legg til ${typeName}</h3>
+                <button type="button" class="close-btn" style="float: right; background: none; border: none; font-size: 24px; cursor: pointer; margin-top: -28px;">&times;</button>
             </div>
-            
-            <form id="equipment-form">
-                <div class="modal-body">
+
+            <form id="equipment-form" style="display: flex; flex-direction: column; overflow: hidden; flex: 1;">
+                <div class="modal-body" style="padding: 20px; overflow-y: auto; flex: 1;">
                     ${formFields}
                 </div>
-                
-                <div class="modal-footer" style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+
+                <div class="modal-footer" style="padding: 16px 20px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid #e5e7eb; flex-shrink: 0; background: white;">
                     <button type="button" class="btn btn-secondary cancel-btn">Avbryt</button>
                     <button type="submit" class="btn btn-primary">Lagre anlegg</button>
                 </div>
