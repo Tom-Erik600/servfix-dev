@@ -150,6 +150,7 @@ pending ──────→ scheduled ──────→ completed
 - Customer data snapshot in `customer_data` JSONB must not be modified after order creation.
 - All external communication (PDF, email, billing) must use the stored `customer_data` snapshot, not live customer data.
 - The `included_equipment_ids` array must be the single source of truth for which equipment belongs to an order. Service reports generated for an order must correspond only to equipment in this array.
+- Technician order detail (`orders.html`) must, when `included_equipment_ids` is present, show only the selected equipment for that order rather than all customer equipment.
 - Service report status must be independent of order status — a report can be `completed` before the order is.
 - Order status transitions are one-way: `pending` → `scheduled` → `completed`. No reversals.
 - Completing the same order multiple times must be idempotent — it must not duplicate side effects or corrupt state.

@@ -4,6 +4,7 @@ let pageState = {
     order: null,
     customer: null,
     equipment: [],
+    totalEquipmentCount: 0,
     technician: null,
     quotes: [],
     selectedEquipmentIds: [] // For equipment selection
@@ -34,6 +35,7 @@ function resetPageState() {
         order: null, 
         customer: null, 
         equipment: [],  // TØM array
+        totalEquipmentCount: 0,
         technician: null,
         quotes: [],
         selectedEquipmentIds: []
@@ -176,6 +178,8 @@ async function initializePage() {
 
         console.log(`✅ Filtered equipment: ${data.equipment?.length || 0} -> ${activeEquipment.length} active`);
 
+        pageState.totalEquipmentCount = activeEquipment.length;
+
         // Map equipment med korrekt struktur
         pageState.equipment = activeEquipment.map(eq => ({
             ...eq,
@@ -205,6 +209,11 @@ async function initializePage() {
             // Konverter til integers for sammenligning
             pageState.selectedEquipmentIds = pageState.order.included_equipment_ids.map(id => parseInt(id));
             console.log('Loaded selected equipment from order:', pageState.selectedEquipmentIds);
+
+            pageState.equipment = pageState.equipment.filter(eq =>
+                pageState.selectedEquipmentIds.includes(parseInt(eq.id))
+            );
+            console.log('Showing only included equipment on order page:', pageState.equipment.map(eq => eq.id));
         } else {
             // Bakoverkompatibel: NULL eller tom = alle anlegg inkludert
             pageState.selectedEquipmentIds = pageState.equipment.map(eq => parseInt(eq.id));
@@ -356,6 +365,10 @@ function renderEquipmentList() {
     }
     
     let equipmentHTML = `<button class="add-system-btn" data-action="add-equipment">+ Legg til Anlegg</button>`;
+
+    if (pageState.order?.included_equipment_ids && pageState.order.included_equipment_ids.length > 0) {
+        equipmentHTML += `<p class="placeholder-text" style="margin-top: 12px; margin-bottom: 16px; text-align: left;">Viser ${pageState.equipment.length} valgte anlegg for dette oppdraget.</p>`;
+    }
     
     if (pageState.equipment.length > 0) {
         equipmentHTML += pageState.equipment.map(createEquipmentCard).join('');
@@ -613,11 +626,15 @@ async function handleEquipmentSelectionChange(equipmentId, isChecked) {
     
     // Lagre valget til backend
     await saveSelectedEquipment();
-    
-    // Oppdater visning av equipment cards
-    updateEquipmentCardStyles();
-    
-    // Oppdater action buttons (ferdigstill-knappen)
+
+    if (pageState.order?.included_equipment_ids && pageState.order.included_equipment_ids.length > 0) {
+        pageState.equipment = pageState.equipment.filter(eq => pageState.selectedEquipmentIds.includes(parseInt(eq.id)));
+        renderEquipmentList();
+        setupEventListeners();
+    } else {
+        updateEquipmentCardStyles();
+    }
+
     renderActionButtons();
 }
 

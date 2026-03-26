@@ -12,13 +12,13 @@ ServFix har to planlegger-grensesnitt: ett for admin og ett for teknikere. Begge
 - `public/admin/assets/js/planlegger.js`
 - `public/admin/assets/css/planlegger.css`
 
-### Konsept: Drag & Drop
+### Konsept: Drag & Drop + prosjektoppslag
 
 Admin-planleggeren har et to-kolonners oppsett:
 
 | Venstre kolonne | Høyre kolonne |
 |---|---|
-| **Teknikere** (draggbare kort) | **Kunder** (drop-targets) |
+| **Teknikere** (draggbare kort) | **Kunder / Prosjekter** (drop-targets) |
 
 **Arbeidsflyt:**
 1. Admin drar et teknikerkort og slipper det på et kundekort
@@ -27,15 +27,29 @@ Admin-planleggeren har et to-kolonners oppsett:
    - Datovalg (minimumsdato = i dag)
    - Beskrivelse (dropdown med prosjektforslag fra Tripletex, eller fritekst)
    - Anleggsliste (checkbox-liste, alle forhåndsvalgt)
+   - Cluster-gruppering av anlegg per kunde
+   - Batch-knapper for `+ Legg til alle`, `- Fjern alle`, `+ Nytt cluster`, `Flytt til cluster`
    - Mulighet til å opprette nytt anlegg
    - Kundenotat-felt
 3. Admin bekrefter, og oppdraget opprettes via `POST /api/admin/orders`
 
-### Kundefiltrering
+### Kunder og prosjekter
 
-- **Standard:** Viser kun kunder uten aktive oppdrag (maks 1 aktivt oppdrag per kunde)
-- **Checkbox "Vis alle":** Viser også kunder som allerede har oppdrag
+- **Kunde-fane:** Viser alle aktive kunder
+- **Prosjekt-fane:** Live-søk mot Tripletex på prosjektnavn eller prosjektnummer (debounce 500ms)
 - **Søkefelt:** Filtrerer kundekort på kundenavn eller kundenummer (debounce 300ms)
+- **Prosjektdropp:** Når admin slipper en tekniker på et prosjektkort brukes prosjektets kunde som mottaker, og prosjektnavnet foreslås som beskrivelse i ordren
+
+### Cluster i modal
+
+- Cluster er kundespesifikke (`equipment_clusters.customer_id`)
+- Anlegg hentes med `clusterId` og `clusterName` fra `GET /api/admin/equipment?customerId={id}`
+- Hvert cluster vises som egen gruppe i modalen
+- Cluster-headeren har en egen checkbox som velger/fjerner alle anlegg i clusteret for ordren
+- `+ Nytt cluster` oppretter cluster og knytter valgte anlegg til det direkte i modalen
+- `Flytt til cluster` flytter valgte anlegg til et eksisterende cluster eller oppretter et nytt først
+- Anlegg kan tas ut av cluster direkte i modalen med en liten `-`-knapp nederst til høyre på hvert anleggskort
+- Å ta anlegg ut av cluster gjøres eksplisitt per anlegg, ikke som batch-operasjon
 
 ### Dataflyt ved opprettelse
 
@@ -46,11 +60,16 @@ Admin-planleggeren har et to-kolonners oppsett:
    - GET /api/admin/orders?status=pending,scheduled,in_progress
 
 2. Ved drop -> showModalWithEquipment():
-   - GET /api/admin/equipment?customerId={id}          (anlegg for kunden)
-   - GET /api/admin/customers/{id}/projects             (prosjektforslag)
+    - GET /api/admin/equipment?customerId={id}          (anlegg for kunden)
+    - GET /api/admin/customers/{id}/projects             (prosjektforslag)
+    - GET /api/admin/clusters?customerId={id}            (cluster for kunde, ved cluster-flyt)
+
+2b. Ved cluster-administrasjon i modal:
+    - POST /api/admin/clusters                           (opprett nytt cluster)
+    - POST /api/admin/equipment/assign-cluster          (batch-knytt valgte anlegg til cluster)
 
 3. Ved opprettelse -> saveOrderWithEquipment():
-   - GET /api/admin/customers/{id}/addresses            (fysisk/postadr.)
+    - GET /api/admin/customers/{id}/addresses            (fysisk/postadr.)
    - GET /api/admin/customers/{id}/servfixmail           (servfixmail-kontakt)
    - POST /api/admin/orders                             (opprett ordren)
    - PUT /api/admin/customers/{id}/notes                (lagre kundenotat)
@@ -64,6 +83,7 @@ Admin kan opprette nytt anlegg direkte fra opprettelsesmodalen:
 3. Fyll ut: systemnummer, systemnavn, plassering, betjener, intern kommentar
 4. `POST /api/admin/equipment` oppretter anlegget
 5. Anleggslisten refreshes automatisk
+6. Nytt anlegg kan deretter flyttes inn i et cluster fra samme modal
 
 ### Service-oversikt modal
 
@@ -149,8 +169,10 @@ Opprett-knappen er deaktivert til:
 |---|---|---|
 | Interaksjon | Drag & drop tekniker -> kunde | Søk -> velg kunde |
 | Teknikertildeling | Velges via drag | Automatisk (innlogget tekniker) |
-| Kundefilter | Skjuler kunder med aktive oppdrag | Viser alle kunder |
+| Kundefilter | Viser alle aktive kunder | Viser alle kunder |
+| Prosjektfaner | Ja, egen prosjektfane mot Tripletex | Nei |
 | Prosjektforslag | Ja (fra Tripletex) | Nei (kun fritekst) |
+| Cluster i ordreopprettelse | Ja, gruppering og enkel cluster-adm. | Nei |
 | Hurtigvalg dato | Nei (kun datepicker) | Ja (1 uke, 1/3/6 mnd) |
 | Service-oversikt | Ja (6-mnd kalender/teknikervisning) | Nei |
 | Anleggsopprettelse | Ja (inline i modal) | Ja (inline i skjema) |
@@ -160,8 +182,10 @@ Opprett-knappen er deaktivert til:
 
 ## Viktige detaljer
 
-- **Maks 1 aktivt oppdrag per kunde** — admin-planleggeren filtrerer bort kunder med `pending`, `scheduled` eller `in_progress` status som standard
+- **Flere aktive kunder synlige** — admin-planleggeren viser alle aktive kunder selv om de allerede har oppdrag
 - **Customer-data snapshot** — ved opprettelse lagres et snapshot av kundedata (adresse, kontakt, e-post) på ordren for historikk
 - **ServfixMail** — admin-planleggeren henter spesifikt `servfixmail`-kontaktens e-post, ikke kundens generelle e-post
 - **Anlegg forhåndsvalgt** — i admin-modalen er alle anlegg automatisk avkrysset; teknikeren må selv velge
+- **Cluster er kundespesifikke** — samme clusternavn kan eksistere på flere kunder, men ikke to ganger på samme kunde
+- **Ordre bruker utvalg, ikke cluster-link** — ordren lagrer kun `included_equipment_ids`; cluster brukes bare for gruppering og valg i opprettelsesøyeblikket
 - **Søk med debounce** — begge bruker 300ms debounce på søkeinput

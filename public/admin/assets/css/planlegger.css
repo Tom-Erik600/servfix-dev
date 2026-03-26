@@ -854,11 +854,35 @@ body {
     min-height: 80px;
 }
 
+.planner-tabs {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px 0;
+    background-color: var(--bg-light);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.planner-tab {
+    border: 1px solid var(--border-color);
+    background: white;
+    color: var(--text-light);
+    border-radius: 10px 10px 0 0;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.planner-tab.active {
+    color: var(--text-color);
+    border-color: #bfdbfe;
+    background: #eff6ff;
+}
+
 /* ===== CUSTOMER SEARCH SECTION ===== */
 .customer-search-section {
     position: relative;
     padding: 12px 16px;
-    border-bottom: 1px solid var(--border-color);
     background-color: var(--bg-light);
 }
 
@@ -882,6 +906,186 @@ body {
 .customer-search-input::placeholder {
     color: #9ca3af;
     font-style: italic;
+}
+
+.equipment-manage-actions,
+.equipment-bulk-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.equipment-manage-actions {
+    margin-bottom: 10px;
+}
+
+.equipment-bulk-actions {
+    margin-bottom: 16px;
+}
+
+.equipment-quick-btn {
+    min-width: auto;
+    padding: 8px 12px;
+    font-size: 12px;
+    border-radius: 999px;
+    box-shadow: none;
+}
+
+.equipment-quick-btn-add {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border: 1px solid #93c5fd;
+}
+
+.equipment-quick-btn-add:hover:not(:disabled) {
+    background: #bfdbfe;
+}
+
+.equipment-quick-btn-remove {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+}
+
+.equipment-quick-btn-remove:hover:not(:disabled) {
+    background: #e5e7eb;
+}
+
+.equipment-manage-btn {
+    min-width: auto;
+    padding: 8px 12px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+.equipment-manage-btn:hover:not(:disabled) {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.equipment-cluster-group {
+    margin-bottom: 16px;
+}
+
+.equipment-cluster-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.equipment-cluster-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cluster-master-label {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    cursor: pointer;
+}
+
+.cluster-master-label input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.cluster-master-custom,
+.cluster-master-spacer {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: 2px solid #93c5fd;
+    background: white;
+    display: inline-block;
+}
+
+.cluster-master-label input:checked + .cluster-master-custom {
+    background: #2563eb;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.cluster-master-label input:checked + .cluster-master-custom::after {
+    content: '✓';
+    display: block;
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 14px;
+}
+
+.equipment-cluster-hint {
+    font-size: 12px;
+    color: var(--text-light);
+}
+
+.equipment-cluster-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.equipment-cluster-meta {
+    font-size: 12px;
+    color: var(--text-light);
+    margin-top: 2px;
+}
+
+.cluster-equipment-item {
+    margin-bottom: 6px;
+}
+
+.cluster-equipment-item:last-child {
+    margin-bottom: 0;
+}
+
+.equipment-remove-cluster-btn {
+    align-self: flex-end;
+    margin-left: 12px;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    border: 1px solid #fecaca;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.equipment-remove-cluster-btn:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+}
+
+.project-search-card {
+    cursor: default;
+}
+
+.cluster-modal-content {
+    max-width: 520px;
+}
+
+.cluster-modal-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: white;
 }
 
 /* ===== FORBEDRET KUNDEKORT DESIGN (breddebasert) ===== */
@@ -1671,4 +1875,3 @@ body {
         gap: 12px;
     }
 }
-

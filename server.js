@@ -339,6 +339,8 @@ setupSession().then(() => {
       app.use('/api/admin/checklist-templates', require('./src/routes/checklist-templates'));
       app.use('/api/admin/reports', require('./src/routes/admin/reports'));
       app.use('/api/admin/equipment', require('./src/routes/admin/equipment'));
+      app.use('/api/admin/clusters', require('./src/routes/admin/clusters'));
+      app.use('/api/admin/projects', require('./src/routes/admin/projects'));
       // Tripletex routes hvis tilgjengelig
       try {
         app.use('/api/tripletex', require('./src/routes/tripletex'));

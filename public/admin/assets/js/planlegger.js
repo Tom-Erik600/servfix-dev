@@ -1,5 +1,6 @@
 let allCustomersForSearch = [];
 let customerSearchTimeout = null;
+let projectSearchTimeout = null;
 
 // Last alle kunder for søk (kjøres parallelt med eksisterende loadData)
 async function loadAllCustomersForSearch() {
@@ -24,6 +25,10 @@ async function loadAllCustomersForSearch() {
 
 // Håndter søkeinput med debounce
 function handleCustomerSearchInput(e) {
+    if (document.getElementById('customers-tab-btn') && !document.getElementById('customers-tab-btn').classList.contains('active')) {
+        return;
+    }
+
     clearTimeout(customerSearchTimeout);
     
     const query = e.target.value.trim().toLowerCase();
@@ -61,6 +66,39 @@ function filterCustomerCards(query) {
     }
 }
 
+async function searchProjects(query) {
+    const response = await fetch(`/api/admin/projects/search?q=${encodeURIComponent(query)}`, {
+        credentials: 'include'
+    });
+
+    if (!response.ok) {
+        throw new Error('Kunne ikke søke etter prosjekter');
+    }
+
+    return response.json();
+}
+
+function handleProjectSearchInput(e, onResults) {
+    clearTimeout(projectSearchTimeout);
+
+    const query = e.target.value.trim();
+
+    projectSearchTimeout = setTimeout(async () => {
+        if (!query) {
+            onResults([]);
+            return;
+        }
+
+        try {
+            const results = await searchProjects(query);
+            onResults(results);
+        } catch (error) {
+            console.error('❌ Error searching projects:', error);
+            onResults([]);
+        }
+    }, 500);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     const technicianList = document.getElementById('technician-list');
     console.log('technicianList element ved initialisering:', technicianList);
@@ -77,14 +115,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     const modalSaveBtn = document.getElementById('modal-save-btn');
     console.log('modalSaveBtn element ved initialisering:', modalSaveBtn);
 
-    // Ny checkbox for å vise alle kunder
-    const showAllCustomersCheckbox = document.getElementById('show-available-customers');
     const customerSearchInput = document.getElementById('customer-search-input');
+    const projectSearchInput = document.getElementById('project-search-input');
+    const customersTabBtn = document.getElementById('customers-tab-btn');
+    const projectsTabBtn = document.getElementById('projects-tab-btn');
+    const plannerListTitle = document.getElementById('planner-list-title');
 
     let draggedTechnician = null;
     let targetCustomer = null;
     let allCustomers = [];
-    let availableCustomers = [];
+    let visibleCustomers = [];
+    let currentTab = 'customers';
+    let projectSearchResults = [];
 
     // Sett minimumdato til i dag
     const today = new Date().toISOString().split('T')[0];
@@ -120,10 +162,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Finn kunder uten aktive oppdrag
             const activeCustomerIds = new Set(activeOrders.map(o => o.customer_id || o.customerId));
             console.log('activeCustomerIds:', activeCustomerIds);
-            availableCustomers = allCustomers.filter(c => !activeCustomerIds.has(c.id) && !c.isInactive);
+            visibleCustomers = allCustomers.filter(c => !c.isInactive);
 
             renderTechnicians(technicians);
-            renderCustomers();
+            renderCurrentTab();
             
         } catch (error) {
             console.error('Error fetching data:', error);
@@ -158,49 +200,78 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    function updateListHeader(title, count) {
+        if (plannerListTitle) {
+            plannerListTitle.textContent = title;
+        }
+
+        const orderCountBadge = document.getElementById('order-count');
+        if (orderCountBadge) {
+            orderCountBadge.textContent = count;
+        }
+    }
+
+    function createDropCardListeners(card) {
+        card.addEventListener('dragover', handleDragOver);
+        card.addEventListener('dragleave', handleDragLeave);
+        card.addEventListener('drop', handleDrop);
+    }
+
+    function setActiveTab(tabName) {
+        currentTab = tabName;
+
+        customersTabBtn?.classList.toggle('active', tabName === 'customers');
+        projectsTabBtn?.classList.toggle('active', tabName === 'projects');
+
+        if (customerSearchInput) {
+            customerSearchInput.style.display = tabName === 'customers' ? 'block' : 'none';
+        }
+
+        if (projectSearchInput) {
+            projectSearchInput.style.display = tabName === 'projects' ? 'block' : 'none';
+        }
+
+        renderCurrentTab();
+    }
+
+    function renderCurrentTab() {
+        if (currentTab === 'projects') {
+            renderProjects(projectSearchResults);
+            return;
+        }
+
+        renderCustomers();
+    }
+
     function renderCustomers() {
-    projectList.innerHTML = '';
-    
-    // Velg hvilke kunder som skal vises
-    const customersToShow = showAllCustomersCheckbox && showAllCustomersCheckbox.checked 
-        ? allCustomers.filter(c => !c.isInactive)
-        : availableCustomers;
-    
-    const headerText = showAllCustomersCheckbox && showAllCustomersCheckbox.checked 
-        ? 'Alle Kunder' 
-        : 'Kunder uten oppdrag';
-    
-    // Oppdater header
-    const header = document.querySelector('#project-column h2');
-    if (header) {
-        header.innerHTML = `${headerText} <span class="order-count-badge" id="order-count">${customersToShow.length}</span>`;
-    }
-    
-    if (customersToShow.length === 0) {
-        projectList.innerHTML = '<div class="empty-state"><p>Ingen kunder funnet</p></div>';
-        return;
-    }
-    
-    customersToShow.forEach(customer => {
-        console.log(`Setter dataset for ${customer.name}: ${customer.id}`);
-        const customerCard = document.createElement('div');
-        customerCard.className = 'modern-customer-card project-card';  // Bruker modern-customer-card class
-        customerCard.dataset.customerId = customer.id;
-        customerCard.dataset.customerName = customer.name;
-        customerCard.draggable = true;
-        
-        console.log(`Dataset ble satt til: ${customerCard.dataset.customerId}`);
-        
-        // MODERNE TRIPLETEX-INSPIRERT DESIGN
-        customerCard.innerHTML = `
+        projectList.innerHTML = '';
+
+        const customersToShow = visibleCustomers;
+        const headerText = 'Kunder';
+
+        updateListHeader(headerText, customersToShow.length);
+
+        if (customersToShow.length === 0) {
+            projectList.innerHTML = '<div class="empty-state"><p>Ingen kunder funnet</p></div>';
+            return;
+        }
+
+        customersToShow.forEach(customer => {
+            console.log(`Setter dataset for ${customer.name}: ${customer.id}`);
+            const customerCard = document.createElement('div');
+            customerCard.className = 'modern-customer-card project-card';
+            customerCard.dataset.customerId = customer.id;
+            customerCard.dataset.customerName = customer.name;
+            customerCard.dataset.cardType = 'customer';
+
+            console.log(`Dataset ble satt til: ${customerCard.dataset.customerId}`);
+
+            customerCard.innerHTML = `
     <div class="customer-card-header">
         <h3 class="customer-name">${escapeHtml(customer.name)}</h3>
-        ${customer.customerNumber ? 
-            `<span class="customer-number-badge">Nr. ${customer.customerNumber}</span>` : 
-            ''
-        }
+        ${customer.customerNumber ? `<span class="customer-number-badge">Nr. ${customer.customerNumber}</span>` : ''}
     </div>
-    
+
     <div class="customer-main-content">
         <div class="customer-left-section">
             <div class="customer-info-item">
@@ -209,7 +280,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     ${customer.organizationNumber || 'Ikke oppgitt'}
                 </span>
             </div>
-            
+
             <div class="customer-info-item">
                 <span class="customer-info-label">Kontaktperson</span>
                 <span class="customer-info-value ${!customer.contact ? 'empty' : ''}">
@@ -217,7 +288,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 </span>
             </div>
         </div>
-        
+
         <div class="customer-right-section">
             <div class="customer-info-item">
                 <span class="customer-info-label">Postadresse</span>
@@ -225,7 +296,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     ${customer.postalAddress || 'Ikke oppgitt'}
                 </span>
             </div>
-            
+
             <div class="customer-info-item">
                 <span class="customer-info-label">Forretningsadr.</span>
                 <span class="customer-info-value ${!customer.physicalAddress ? 'empty' : ''}">
@@ -234,7 +305,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             </div>
         </div>
     </div>
-    
+
     <div class="customer-contact-footer">
         <div class="customer-contact-item">
             <span class="contact-icon">📧</span>
@@ -246,14 +317,60 @@ document.addEventListener('DOMContentLoaded', async () => {
         </div>
     </div>
 `;
-        
-        customerCard.addEventListener('dragover', handleDragOver);
-        customerCard.addEventListener('dragleave', handleDragLeave);
-        customerCard.addEventListener('drop', handleDrop);
-        
-        projectList.appendChild(customerCard);
-    });
-}
+
+            createDropCardListeners(customerCard);
+            projectList.appendChild(customerCard);
+        });
+    }
+
+    function renderProjects(projects) {
+        projectList.innerHTML = '';
+
+        updateListHeader('Prosjekter', projects.length);
+
+        if (!projects.length) {
+            projectList.innerHTML = '<div class="empty-state"><p>Søk etter prosjekt for å se treff</p></div>';
+            return;
+        }
+
+        projects.forEach(project => {
+            const projectCard = document.createElement('div');
+            projectCard.className = 'modern-customer-card project-card project-search-card';
+            projectCard.dataset.cardType = 'project';
+            projectCard.dataset.customerId = project.customer?.id || '';
+            projectCard.dataset.customerName = project.customer?.name || '';
+            projectCard.dataset.projectId = project.id;
+            projectCard.dataset.projectName = project.displayName || project.name || '';
+
+            projectCard.innerHTML = `
+    <div class="customer-card-header">
+        <h3 class="customer-name">${escapeHtml(project.displayName || project.name || 'Uten navn')}</h3>
+        ${project.number ? `<span class="customer-number-badge">Prosj. ${escapeHtml(project.number)}</span>` : ''}
+    </div>
+
+    <div class="customer-main-content">
+        <div class="customer-left-section">
+            <div class="customer-info-item">
+                <span class="customer-info-label">Kunde</span>
+                <span class="customer-info-value ${!project.customer?.name ? 'empty' : ''}">
+                    ${escapeHtml(project.customer?.name || 'Ingen kunde koblet')}
+                </span>
+            </div>
+        </div>
+
+        <div class="customer-right-section">
+            <div class="customer-info-item">
+                <span class="customer-info-label">Status</span>
+                <span class="customer-info-value">${project.isClosed ? 'Lukket' : 'Aktivt'}</span>
+            </div>
+        </div>
+    </div>
+`;
+
+            createDropCardListeners(projectCard);
+            projectList.appendChild(projectCard);
+        });
+    }
 
 // LEGG OGSÅ TIL denne escapeHtml funksjonen hvis den ikke finnes:
 function escapeHtml(unsafe) {
@@ -266,14 +383,21 @@ function escapeHtml(unsafe) {
         .replace(/'/g, "&#039;");
 }
 
-    // Checkbox event
-    if (showAllCustomersCheckbox) {
-        showAllCustomersCheckbox.addEventListener('change', renderCustomers);
-    }
-
     if (customerSearchInput) {
         customerSearchInput.addEventListener('input', handleCustomerSearchInput);
     }
+
+    if (projectSearchInput) {
+        projectSearchInput.addEventListener('input', (e) => handleProjectSearchInput(e, (results) => {
+            projectSearchResults = results;
+            if (currentTab === 'projects') {
+                renderProjects(projectSearchResults);
+            }
+        }));
+    }
+
+    customersTabBtn?.addEventListener('click', () => setActiveTab('customers'));
+    projectsTabBtn?.addEventListener('click', () => setActiveTab('projects'));
 
     function handleDragStart(e) {
         draggedTechnician = e.target;
@@ -304,8 +428,9 @@ function escapeHtml(unsafe) {
         e.currentTarget.classList.remove('drag-over');
         
         const customerCard = e.currentTarget;
-        // FJERN parseInt() - behold customerId som string
         const customerId = customerCard.dataset.customerId;
+        const cardType = customerCard.dataset.cardType || 'customer';
+        const suggestedDescription = customerCard.dataset.projectName || '';
         console.log('Leter etter customerId:', customerId);
         console.log('Type:', typeof customerId);
 
@@ -319,14 +444,16 @@ function escapeHtml(unsafe) {
             console.log('🔍 1. technicianId:', technicianId);
 
             // Debug: Vis tilgjengelige kunder
-            console.log('Søker i array:', showAllCustomersCheckbox?.checked ? 'allCustomers' : 'availableCustomers');
-            const customersToSearch = showAllCustomersCheckbox?.checked ? allCustomers : availableCustomers;
+            console.log('Søker i array: allCustomers');
+            const customersToSearch = allCustomers;
             console.log('Array lengde:', customersToSearch.length);
-            
-            // Søk etter kunde - nå sammenligner vi streng med streng
+
             const customer = customersToSearch.find(c => {
-                console.log(`Sammenligner: "${c.id}" === "${customerId}" (${c.id === customerId})`);
-                return c.id === customerId; // Strengsammenligning
+                const localId = String(c.id || '');
+                const externalId = String(c.externalId || '');
+                const matches = localId === String(customerId) || externalId === String(customerId);
+                console.log(`Sammenligner lokal/external: "${localId}" / "${externalId}" mot "${customerId}" (${matches})`);
+                return matches;
             });
             
             console.log('🔍 2. Kunde funnet:', customer);
@@ -353,13 +480,16 @@ function escapeHtml(unsafe) {
                 ...customer,
                 technicianId,
                 customerId: customer.externalId || customer.id || customer.customerId,
-                customerName: customer.name
+                customerName: customer.name,
+                selectedProjectName: cardType === 'project' ? suggestedDescription : ''
             };
             
             console.log('✅ 5. targetCustomer satt:', targetCustomer);
             
             // OPPDATERT: Vis modal med equipment selection
-            await showModalWithEquipment(customer, technician);
+            await showModalWithEquipment(customer, technician, {
+                suggestedDescription: cardType === 'project' ? suggestedDescription : ''
+            });
             
         } catch (error) {
             console.error('❌ FEIL I HANDLEDROP:', error);
@@ -367,47 +497,366 @@ function escapeHtml(unsafe) {
         }
     }
 
-    async function loadEquipmentForModal(customer) {
-    try {
-        const response = await fetch(`/api/admin/equipment?customerId=${customer.externalId || customer.id}`, {
-            credentials: 'include'
-        });
-        
-        if (!response.ok) throw new Error('Kunne ikke laste anlegg');
-        
-        const equipment = await response.json();
-        
-        // Sorter etter ID (nyeste først)
-        equipment.sort((a, b) => b.id - a.id);
-        
-        // Oppdater equipment-listen i modalen
+    function escapeAttribute(value) {
+        return escapeHtml(value).replace(/"/g, '&quot;');
+    }
+
+    function buildEquipmentRow(eq, selectedIds = null) {
+        const name = escapeHtml(eq.systemnavn || eq.name || 'Uten navn');
+        const type = escapeHtml(eq.systemtype || eq.type || 'Ukjent type');
+        const systemNumber = escapeHtml(eq.systemnummer || eq.systemNumber || '');
+        const placement = escapeHtml(eq.plassering || eq.systemPlacement || eq.location || 'Uten plassering');
+        const isChecked = selectedIds ? selectedIds.has(String(eq.id)) : true;
+        const removeClusterButton = eq.clusterId
+            ? `<button type="button" class="equipment-remove-cluster-btn" data-equipment-id="${eq.id}" title="Ta ut av cluster">-</button>`
+            : '';
+
+        return `
+            <label class="equipment-selection-item cluster-equipment-item">
+                <input type="checkbox" value="${eq.id}" class="equipment-checkbox" data-cluster-id="${eq.clusterId || ''}" ${isChecked ? 'checked' : ''}>
+                <div class="equipment-info">
+                    <span class="equipment-name">${name}</span>
+                    <span class="equipment-type">${type}${systemNumber ? ` | ${systemNumber}` : ''}</span>
+                    <span class="equipment-location">${placement}</span>
+                </div>
+                ${removeClusterButton}
+            </label>
+        `;
+    }
+
+    function getCurrentSelectedEquipmentIds() {
+        return new Set(Array.from(document.querySelectorAll('.equipment-checkbox:checked')).map(cb => String(cb.value)));
+    }
+
+    function renderEquipmentList(equipment, selectedIds = null) {
         const equipmentList = document.querySelector('.equipment-list');
-        if (equipmentList) {
-            equipmentList.innerHTML = equipment.map(eq => `
-                <div class="equipment-item" style="padding: 12px; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 8px;">
-                    <label style="display: flex; align-items: start; cursor: pointer;">
-                        <input type="checkbox" value="${eq.id}" class="equipment-checkbox" style="margin-right: 10px; margin-top: 3px;" checked>
-                        <div>
-                            <strong>${eq.systemnavn || eq.name}</strong>
-                            <div style="font-size: 13px; color: #6b7280;">
-                                ${eq.systemtype || eq.type} | ${eq.systemnummer || ''} | ${eq.plassering || eq.location}
+        if (!equipmentList) return;
+
+        if (!equipment.length) {
+            equipmentList.innerHTML = '<div class="no-equipment-message">Ingen aktive anlegg funnet for kunden.</div>';
+            return;
+        }
+
+        const groups = new Map();
+        const ungroupedKey = '__ungrouped__';
+
+        equipment.forEach(eq => {
+            const key = eq.clusterId ? String(eq.clusterId) : ungroupedKey;
+            if (!groups.has(key)) {
+                groups.set(key, {
+                    title: eq.clusterName || 'Ovrige anlegg',
+                    items: []
+                });
+            }
+            groups.get(key).items.push(eq);
+        });
+
+        const markup = Array.from(groups.entries()).map(([key, group]) => {
+            const isGrouped = key !== ungroupedKey;
+            const rows = group.items.map(item => buildEquipmentRow(item, selectedIds)).join('');
+
+            return `
+                <div class="equipment-cluster-group">
+                    <div class="equipment-cluster-header">
+                        <div class="equipment-cluster-heading">
+                            ${isGrouped ? `
+                                <label class="cluster-master-label">
+                                    <input type="checkbox" class="cluster-master-checkbox" data-cluster-id="${escapeAttribute(key)}">
+                                    <span class="cluster-master-custom"></span>
+                                </label>
+                            ` : '<span class="cluster-master-spacer"></span>'}
+                            <div>
+                            <div class="equipment-cluster-title">${escapeHtml(group.title)}</div>
+                            <div class="equipment-cluster-meta">${group.items.length} anlegg</div>
                             </div>
                         </div>
-                    </label>
+                        ${isGrouped ? `<span class="equipment-cluster-hint">Velg cluster</span>` : ''}
+                    </div>
+                    <div class="equipment-selection-list">${rows}</div>
                 </div>
-            `).join('');
-        }
-        
-    } catch (error) {
-        console.error('Error loading equipment:', error);
-        showToast('Kunne ikke laste anlegg', 'error');
-    }
-}
+            `;
+        }).join('');
 
-    async function showModalWithEquipment(customer, technicianName) {
+        equipmentList.innerHTML = markup;
+
+        document.querySelectorAll('.cluster-master-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                setClusterSelection(checkbox.dataset.clusterId, checkbox.checked);
+            });
+        });
+
+        document.querySelectorAll('.equipment-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', syncClusterCheckboxStates);
+        });
+
+        document.querySelectorAll('.equipment-remove-cluster-btn').forEach(button => {
+            button.addEventListener('click', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const equipmentId = button.dataset.equipmentId;
+                await removeEquipmentFromCluster(equipmentId);
+            });
+        });
+
+        syncClusterCheckboxStates();
+    }
+
+    function selectAllEquipment() {
+        document.querySelectorAll('.equipment-checkbox').forEach(cb => {
+            cb.checked = true;
+        });
+        syncClusterCheckboxStates();
+    }
+
+    function deselectAllEquipment() {
+        document.querySelectorAll('.equipment-checkbox').forEach(cb => {
+            cb.checked = false;
+        });
+        syncClusterCheckboxStates();
+    }
+
+    function setClusterSelection(clusterId, checked) {
+        const checkboxes = Array.from(document.querySelectorAll(`.equipment-checkbox[data-cluster-id="${clusterId}"]`));
+        checkboxes.forEach(cb => {
+            cb.checked = checked;
+        });
+
+        syncClusterCheckboxStates();
+    }
+
+    function syncClusterCheckboxStates() {
+        document.querySelectorAll('.cluster-master-checkbox').forEach(clusterCheckbox => {
+            const clusterId = clusterCheckbox.dataset.clusterId;
+            const items = Array.from(document.querySelectorAll(`.equipment-checkbox[data-cluster-id="${clusterId}"]`));
+            const checkedCount = items.filter(item => item.checked).length;
+
+            clusterCheckbox.checked = items.length > 0 && checkedCount === items.length;
+            clusterCheckbox.indeterminate = checkedCount > 0 && checkedCount < items.length;
+        });
+    }
+
+    function getSelectedEquipmentIds() {
+        return Array.from(document.querySelectorAll('.equipment-checkbox:checked')).map(cb => cb.value);
+    }
+
+    async function fetchCustomerClusters(customer) {
+        const customerId = customer.id || customer.customerId;
+        const response = await fetch(`/api/admin/clusters?customerId=${customerId}`, {
+            credentials: 'include'
+        });
+
+        if (!response.ok) {
+            throw new Error('Kunne ikke hente cluster');
+        }
+
+        return response.json();
+    }
+
+    async function createClusterForCustomer(customer, name) {
+        const customerId = customer.id || customer.customerId;
+        const response = await fetch('/api/admin/clusters', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ customerId, name })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Kunne ikke opprette cluster');
+        }
+
+        return data;
+    }
+
+    async function assignEquipmentToCluster(equipmentIds, clusterId) {
+        const response = await fetch('/api/admin/equipment/assign-cluster', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ equipmentIds, clusterId })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Kunne ikke oppdatere cluster for anlegg');
+        }
+
+        return data;
+    }
+
+    async function removeEquipmentFromCluster(equipmentId) {
+        if (!targetCustomer) {
+            showToast('Ingen kunde valgt', 'error');
+            return;
+        }
+
+        try {
+            const selectedIds = getCurrentSelectedEquipmentIds();
+            selectedIds.delete(String(equipmentId));
+            await assignEquipmentToCluster([equipmentId], null);
+            await loadEquipmentForModal(targetCustomer, selectedIds);
+            showToast('Anlegg tatt ut av cluster', 'success');
+        } catch (error) {
+            console.error('Remove equipment from cluster error:', error);
+            showToast(error.message, 'error');
+        }
+    }
+
+    function closeInlineClusterModal() {
+        const existing = document.getElementById('inline-cluster-modal');
+        if (existing) {
+            existing.remove();
+        }
+    }
+
+    function showInlineClusterModal(customer, mode) {
+        const selectedEquipmentIds = getSelectedEquipmentIds();
+        if (!selectedEquipmentIds.length) {
+            showToast('Velg minst ett anlegg først', 'error');
+            return;
+        }
+
+        closeInlineClusterModal();
+
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay show';
+        overlay.id = 'inline-cluster-modal';
+
+        const title = mode === 'create' ? 'Nytt cluster fra valgte anlegg' : 'Legg valgte anlegg i cluster';
+        const submitLabel = mode === 'create' ? 'Opprett cluster' : 'Lagre';
+
+        overlay.innerHTML = `
+            <div class="modal-content cluster-modal-content">
+                <div class="modal-header">
+                    <h3>${title}</h3>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-info-text">${selectedEquipmentIds.length} valgte anlegg blir oppdatert.</p>
+                    ${mode === 'assign' ? `
+                        <div class="form-group">
+                            <label for="cluster-select">Velg cluster</label>
+                            <select id="cluster-select" class="cluster-modal-input">
+                                <option value="">Laster cluster...</option>
+                            </select>
+                        </div>
+                    ` : ''}
+                    <div class="form-group">
+                        <label for="cluster-name-input">${mode === 'create' ? 'Clusternavn' : 'Nytt clusternavn (valgfritt)'}</label>
+                        <input type="text" id="cluster-name-input" class="cluster-modal-input" placeholder="F.eks. Industriveien 92 Eidsvoll">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="cluster-modal-cancel">Avbryt</button>
+                    <button type="button" class="btn btn-primary" id="cluster-modal-save">${submitLabel}</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        document.getElementById('cluster-modal-cancel')?.addEventListener('click', closeInlineClusterModal);
+
+        if (mode === 'assign') {
+            fetchCustomerClusters(customer)
+                .then(clusters => {
+                    const select = document.getElementById('cluster-select');
+                    if (!select) return;
+
+                    select.innerHTML = `
+                        <option value="">Velg cluster...</option>
+                        ${clusters.map(cluster => `<option value="${cluster.id}">${escapeHtml(cluster.name)}</option>`).join('')}
+                        <option value="__new__">Opprett nytt cluster...</option>
+                    `;
+
+                    select.addEventListener('change', () => {
+                        const input = document.getElementById('cluster-name-input');
+                        if (!input) return;
+                        input.style.display = select.value === '__new__' ? 'block' : 'none';
+                        if (select.value !== '__new__') {
+                            input.value = '';
+                        }
+                    });
+
+                    const input = document.getElementById('cluster-name-input');
+                    if (input) {
+                        input.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    showToast(error.message, 'error');
+                    closeInlineClusterModal();
+                });
+        }
+
+        document.getElementById('cluster-modal-save')?.addEventListener('click', async () => {
+            try {
+                const nameInput = document.getElementById('cluster-name-input');
+                const select = document.getElementById('cluster-select');
+
+                let clusterId = null;
+
+                if (mode === 'create') {
+                    const clusterName = nameInput?.value?.trim();
+                    if (!clusterName) {
+                        throw new Error('Skriv inn clusternavn');
+                    }
+
+                    const cluster = await createClusterForCustomer(customer, clusterName);
+                    clusterId = cluster.id;
+                } else {
+                    if (!select?.value) {
+                        throw new Error('Velg cluster eller opprett nytt');
+                    }
+
+                    if (select.value === '__new__') {
+                        const clusterName = nameInput?.value?.trim();
+                        if (!clusterName) {
+                            throw new Error('Skriv inn clusternavn');
+                        }
+
+                        const cluster = await createClusterForCustomer(customer, clusterName);
+                        clusterId = cluster.id;
+                    } else {
+                        clusterId = select.value;
+                    }
+                }
+
+                const selectedIds = getCurrentSelectedEquipmentIds();
+                await assignEquipmentToCluster(selectedEquipmentIds, clusterId);
+                await loadEquipmentForModal(customer, selectedIds);
+                closeInlineClusterModal();
+                showToast('Cluster oppdatert', 'success');
+            } catch (error) {
+                console.error('Cluster handling error:', error);
+                showToast(error.message, 'error');
+            }
+        });
+    }
+
+    async function loadEquipmentForModal(customer, selectedIds = null) {
+        try {
+            const response = await fetch(`/api/admin/equipment?customerId=${customer.externalId || customer.id}`, {
+                credentials: 'include'
+            });
+
+            if (!response.ok) throw new Error('Kunne ikke laste anlegg');
+
+            const equipment = await response.json();
+            equipment.sort((a, b) => (a.clusterName || 'zzz').localeCompare(b.clusterName || 'zzz') || (a.name || '').localeCompare(b.name || ''));
+            renderEquipmentList(equipment, selectedIds);
+        } catch (error) {
+            console.error('Error loading equipment:', error);
+            showToast('Kunne ikke laste anlegg', 'error');
+        }
+    }
+
+    async function showModalWithEquipment(customer, technicianName, options = {}) {
     try {
         // Definer today lokalt i funksjonen
         const today = new Date().toISOString().split('T')[0];
+        const defaultDescription = options.suggestedDescription || `Service hos ${customer.name}`;
         
         // Bygg modal innhold med equipment selection OG description-felt
         const modalContent = document.querySelector('.modal-content');
@@ -441,7 +890,7 @@ function escapeHtml(unsafe) {
                         </select>
                     </div>
                     <input type="text" id="modal-description"
-                           value="Service hos ${customer.name}"
+                           value="${escapeAttribute(defaultDescription)}"
                            placeholder="Skriv inn beskrivelse..."
                            style="display: none; width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; box-sizing: border-box;"
                            required>
@@ -451,6 +900,14 @@ function escapeHtml(unsafe) {
                     <h4>Velg anlegg for service:</h4>
                     <div class="equipment-selection-help">
                         <small>Alle anlegg er valgt som standard. Fjern haken for anlegg som ikke skal inkluderes i dette oppdraget.</small>
+                    </div>
+                    <div class="equipment-manage-actions">
+                        <button type="button" class="btn btn-secondary equipment-manage-btn" id="equipment-create-cluster-btn">+ Nytt cluster</button>
+                        <button type="button" class="btn btn-secondary equipment-manage-btn" id="equipment-assign-cluster-btn">Flytt til cluster</button>
+                    </div>
+                    <div class="equipment-bulk-actions">
+                        <button type="button" class="btn equipment-quick-btn equipment-quick-btn-add" id="equipment-select-all-btn">+ Legg til alle</button>
+                        <button type="button" class="btn equipment-quick-btn equipment-quick-btn-remove" id="equipment-deselect-all-btn">- Fjern alle</button>
                     </div>
                     <div class="equipment-list">
                         <!-- Anleggslisten lastes her av loadEquipmentForModal -->
@@ -488,11 +945,15 @@ function escapeHtml(unsafe) {
         // Vis modal
         dateModal.style.display = 'flex';
         dateModal.classList.add('show');
-        loadProjectSuggestions(customer);
+        loadProjectSuggestions(customer, defaultDescription);
 
         // Re-attach event listeners til nye buttons
         document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
         document.getElementById('modal-save-btn').addEventListener('click', saveOrderWithEquipment);
+        document.getElementById('equipment-select-all-btn')?.addEventListener('click', selectAllEquipment);
+        document.getElementById('equipment-deselect-all-btn')?.addEventListener('click', deselectAllEquipment);
+        document.getElementById('equipment-create-cluster-btn')?.addEventListener('click', () => showInlineClusterModal(customer, 'create'));
+        document.getElementById('equipment-assign-cluster-btn')?.addEventListener('click', () => showInlineClusterModal(customer, 'assign'));
         const addEquipmentBtn = document.getElementById('modal-add-equipment-btn');
         console.log('Add equipment button:', addEquipmentBtn);
         if (addEquipmentBtn) {
@@ -511,7 +972,7 @@ function escapeHtml(unsafe) {
     }
 }
 
-async function loadProjectSuggestions(customer) {
+async function loadProjectSuggestions(customer, preferredDescription = '') {
     const select = document.getElementById('modal-description-select');
     const textInput = document.getElementById('modal-description');
     if (!select || !textInput) return;
@@ -528,8 +989,12 @@ async function loadProjectSuggestions(customer) {
             // Ingen prosjekter — gå rett til fritekst
             select.style.display = 'none';
             textInput.style.display = 'block';
-            textInput.value = `Service hos ${customer.name}`;
+            textInput.value = preferredDescription || `Service hos ${customer.name}`;
             return;
+        }
+
+        if (preferredDescription && !projects.some(p => p.displayName === preferredDescription)) {
+            projects.unshift({ displayName: preferredDescription });
         }
 
         // Fyll inn prosjekter (nyeste øverst = allerede sortert fra backend)
@@ -537,7 +1002,9 @@ async function loadProjectSuggestions(customer) {
             const opt = document.createElement('option');
             opt.value = p.displayName;
             opt.textContent = p.displayName;
-            if (i === 0) opt.selected = true;
+            if ((preferredDescription && p.displayName === preferredDescription) || (!preferredDescription && i === 0)) {
+                opt.selected = true;
+            }
             select.appendChild(opt);
         });
 
@@ -548,7 +1015,8 @@ async function loadProjectSuggestions(customer) {
         select.appendChild(manualOpt);
 
         // Synk textInput med første valg (brukes av saveOrderWithEquipment)
-        textInput.value = projects[0].displayName;
+        const selectedProject = projects.find(p => p.displayName === select.value) || projects[0];
+        textInput.value = selectedProject.displayName;
 
         select.addEventListener('change', () => {
             if (select.value === '__manual__') {
@@ -565,7 +1033,7 @@ async function loadProjectSuggestions(customer) {
         console.error('Kunne ikke laste prosjekter:', error);
         select.style.display = 'none';
         textInput.style.display = 'block';
-        textInput.value = `Service hos ${customer.name}`;
+        textInput.value = preferredDescription || `Service hos ${customer.name}`;
     }
 }
 
@@ -908,6 +1376,7 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
     // Eneste closeModal — lukker date-modal og rydder opp
     function closeModal() {
         const dateModal = document.getElementById('date-modal');
+        closeInlineClusterModal();
         dateModal.classList.remove('show');
         targetCustomer = null;
         setTimeout(() => {
