@@ -24,11 +24,12 @@ Admin-planleggeren har et to-kolonners oppsett:
 1. Admin drar et teknikerkort og slipper det på et kundekort
 2. En modal åpnes med:
    - Kundeinfo (kontakt, e-post, telefon)
-   - Datovalg (minimumsdato = i dag)
+   - Datovalg (minimumsdato = lokal dato i nettleseren, ikke UTC)
    - Beskrivelse (dropdown med prosjektforslag fra Tripletex, eller fritekst)
    - Anleggsliste (checkbox-liste, alle forhåndsvalgt)
    - Cluster-gruppering av anlegg per kunde
-   - Batch-knapper for `+ Legg til alle`, `- Fjern alle`, `+ Nytt cluster`, `Flytt til cluster`
+   - Detaljert anleggsvisning med systemnavn, systemtype, systemnummer, plassering og betjener
+   - Batch-knapper for `+ Marker alle`, `- Fjern markering alle`, `+ Nytt cluster`, `Flytt til cluster`
    - Mulighet til å opprette nytt anlegg
    - Kundenotat-felt
 3. Admin bekrefter, og oppdraget opprettes via `POST /api/admin/orders`
@@ -37,6 +38,7 @@ Admin-planleggeren har et to-kolonners oppsett:
 
 - **Kunde-fane:** Viser alle aktive kunder
 - **Prosjekt-fane:** Live-søk mot Tripletex på prosjektnavn eller prosjektnummer (debounce 500ms)
+- **Autofokus:** Ved bytte til prosjekt-fanen settes fokus automatisk i prosjektsøket
 - **Søkefelt:** Filtrerer kundekort på kundenavn eller kundenummer (debounce 300ms)
 - **Prosjektdropp:** Når admin slipper en tekniker på et prosjektkort brukes prosjektets kunde som mottaker, og prosjektnavnet foreslås som beskrivelse i ordren
 
@@ -46,10 +48,12 @@ Admin-planleggeren har et to-kolonners oppsett:
 - Anlegg hentes med `clusterId` og `clusterName` fra `GET /api/admin/equipment?customerId={id}`
 - Hvert cluster vises som egen gruppe i modalen
 - Cluster-headeren har en egen checkbox som velger/fjerner alle anlegg i clusteret for ordren
-- `+ Nytt cluster` oppretter cluster og knytter valgte anlegg til det direkte i modalen
+- `+ Nytt cluster` oppretter kun et nytt cluster; det flytter ingen anlegg automatisk
 - `Flytt til cluster` flytter valgte anlegg til et eksisterende cluster eller oppretter et nytt først
 - Anlegg kan tas ut av cluster direkte i modalen med en liten `-`-knapp nederst til høyre på hvert anleggskort
 - Å ta anlegg ut av cluster gjøres eksplisitt per anlegg, ikke som batch-operasjon
+- Fullere vedlikehold av cluster per kunde skjer også fra kundesiden (`/admin/kunder.html`) der anlegg vises gruppert per cluster, kan batch-markeres og flyttes, og tomme cluster kan slettes
+- Tomme cluster er gyldige og vises i kundebildet med `0 anlegg`
 
 ### Dataflyt ved opprettelse
 
@@ -70,9 +74,10 @@ Admin-planleggeren har et to-kolonners oppsett:
 
 3. Ved opprettelse -> saveOrderWithEquipment():
     - GET /api/admin/customers/{id}/addresses            (fysisk/postadr.)
-   - GET /api/admin/customers/{id}/servfixmail           (servfixmail-kontakt)
-   - POST /api/admin/orders                             (opprett ordren)
-   - PUT /api/admin/customers/{id}/notes                (lagre kundenotat)
+    - GET /api/admin/customers/{id}/servfixmail           (servfixmail-kontakt)
+    - POST /api/admin/orders                             (opprett ordren)
+    - PUT /api/admin/customers/{id}/notes                (lagre kundenotat)
+    - UI viser loading-overlay/spinner mens oppdraget opprettes
 ```
 
 ### Nytt anlegg fra modal
@@ -119,10 +124,14 @@ Teknikeren bruker et enklere grensesnitt uten drag & drop:
 2. Velg kunde fra dropdown-resultater
 3. Kundeinfo vises (kundenr, firmanavn, adresse, telefon, kontaktperson, e-post)
 4. Oppdragsdetaljer fylles ut:
-   - **Anlegg:** Checkbox-liste med kundens anlegg (valgfritt), mulighet for nytt anlegg
+   - **Anlegg:** Checkbox-liste med kundens anlegg (valgfritt), gruppert per cluster når cluster finnes
+   - **Cluster-valg:** Cluster-header kan krysses av for å velge alle anlegg i gruppen
+   - **Detaljvisning:** systemnavn, systemtype, systemnummer, plassering og betjener vises på hvert anlegg
+   - **Hurtigvalg:** `+ Marker alle` og `- Fjern markering alle`
+   - **Nytt anlegg:** Mulighet for nytt anlegg
    - **Kundenotat:** Internt notat (vises ikke på rapport)
    - **Beskrivelse:** Fritekst, forhåndsutfylt med "Service hos {kundenavn}"
-   - **Dato:** Hurtigvalg (1 uke, 1/3/6 mnd) eller manuelt datovalg
+   - **Dato:** Hurtigvalg (1 uke, 1/3/6 mnd) eller manuelt datovalg, med lokal min-dato
 5. "Planlegg oppdrag"-knapp sender `POST /api/orders`
 6. Etter opprettelse: "Vil du planlegge flere?" (Ja = reset form, Nei = tilbake til hovedmeny)
 
@@ -157,8 +166,9 @@ Opprett-knappen er deaktivert til:
    - GET /api/equipment?customerId={id}        (kundens anlegg)
 
 3. Ved opprettelse:
-   - POST /api/orders                          (opprett ordren)
-   - PUT /api/customers/{id}/notes             (lagre kundenotat)
+    - POST /api/orders                          (opprett ordren)
+    - PUT /api/customers/{id}/notes             (lagre kundenotat)
+    - UI viser loading-overlay/spinner mens oppdraget opprettes
 ```
 
 ---
@@ -173,6 +183,7 @@ Opprett-knappen er deaktivert til:
 | Prosjektfaner | Ja, egen prosjektfane mot Tripletex | Nei |
 | Prosjektforslag | Ja (fra Tripletex) | Nei (kun fritekst) |
 | Cluster i ordreopprettelse | Ja, gruppering og enkel cluster-adm. | Nei |
+| Cluster-bruk i anleggsvalg | Ja | Ja, kun gruppering og valg |
 | Hurtigvalg dato | Nei (kun datepicker) | Ja (1 uke, 1/3/6 mnd) |
 | Service-oversikt | Ja (6-mnd kalender/teknikervisning) | Nei |
 | Anleggsopprettelse | Ja (inline i modal) | Ja (inline i skjema) |
@@ -188,4 +199,6 @@ Opprett-knappen er deaktivert til:
 - **Anlegg forhåndsvalgt** — i admin-modalen er alle anlegg automatisk avkrysset; teknikeren må selv velge
 - **Cluster er kundespesifikke** — samme clusternavn kan eksistere på flere kunder, men ikke to ganger på samme kunde
 - **Ordre bruker utvalg, ikke cluster-link** — ordren lagrer kun `included_equipment_ids`; cluster brukes bare for gruppering og valg i opprettelsesøyeblikket
+- **Tomme cluster kan eksistere** — de kan opprettes uten anlegg, men slettes bare når de faktisk er tomme
+- **Kundesiden er hovedsted for cluster-vedlikehold** — der vises alle cluster, også tomme, som kollapsede seksjoner med `Øvrige` nederst
 - **Søk med debounce** — begge bruker 300ms debounce på søkeinput

@@ -51,6 +51,8 @@
             orderDetailsSection: document.getElementById('orderDetailsSection'),
             equipmentList: document.getElementById('equipmentList'),
             equipmentCount: document.getElementById('equipmentCount'),
+            selectAllEquipmentBtn: document.getElementById('selectAllEquipmentBtn'),
+            deselectAllEquipmentBtn: document.getElementById('deselectAllEquipmentBtn'),
             addEquipmentBtn: document.getElementById('addEquipmentBtn'),
             customerNotes: document.getElementById('customerNotes'),
             orderDescription: document.getElementById('orderDescription'),
@@ -61,7 +63,8 @@
             confirmModal: document.getElementById('confirmModal'),
             confirmMessage: document.getElementById('confirmMessage'),
             confirmYes: document.getElementById('confirmYes'),
-            confirmNo: document.getElementById('confirmNo')
+            confirmNo: document.getElementById('confirmNo'),
+            createOrderLoadingOverlay: document.getElementById('createOrderLoadingOverlay')
         };
 
         // Populate header with user info
@@ -74,8 +77,14 @@
         loadCustomers();
 
         // Set min-dato til i dag
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalDateString();
         elements.scheduledDate.min = today;
+    }
+
+    function getLocalDateString() {
+        const now = new Date();
+        const timezoneOffsetMs = now.getTimezoneOffset() * 60000;
+        return new Date(now.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
     }
 
     function populateHeader() {
@@ -155,6 +164,9 @@
             }
             showNewEquipmentModal();
         });
+
+        elements.selectAllEquipmentBtn?.addEventListener('click', selectAllEquipment);
+        elements.deselectAllEquipmentBtn?.addEventListener('click', deselectAllEquipment);
     }
 
     // =====================
@@ -312,30 +324,92 @@
             return;
         }
 
-        const selectedText = state.selectedEquipmentIds.length > 0
-            ? `${state.selectedEquipmentIds.length} valgt av ${activeEquipment.length}`
-            : `${activeEquipment.length} anlegg`;
-        elements.equipmentCount.textContent = selectedText;
+        updateEquipmentCount(activeEquipment.length);
 
-        elements.equipmentList.innerHTML = activeEquipment.map(eq => {
-            const name = eq.name || eq.systemnavn || eq.type || eq.systemtype || 'Ukjent';
-            const placement = eq.systemPlacement || eq.plassering || '';
-            const sysNum = eq.systemNumber || eq.systemnummer || '';
-            const checked = state.selectedEquipmentIds.includes(eq.id) ? 'checked' : '';
+        const groups = new Map();
+        const ungroupedKey = '__ungrouped__';
+
+        activeEquipment.forEach(eq => {
+            const key = eq.clusterId ? String(eq.clusterId) : ungroupedKey;
+            if (!groups.has(key)) {
+                groups.set(key, {
+                    title: eq.clusterName || 'Ovrige anlegg',
+                    items: []
+                });
+            }
+            groups.get(key).items.push(eq);
+        });
+
+        elements.equipmentList.innerHTML = Array.from(groups.entries()).map(([key, group]) => {
+            const rows = group.items.map(eq => {
+                const name = eq.name || eq.systemnavn || eq.type || eq.systemtype || 'Ukjent';
+                const placement = eq.systemPlacement || eq.plassering || '';
+                const sysNum = eq.systemNumber || eq.systemnummer || '';
+                const type = eq.type || eq.systemtype || 'Ukjent type';
+                const servedBy = eq.betjener || '—';
+                const checked = state.selectedEquipmentIds.includes(eq.id) ? 'checked' : '';
+
+                return `
+                    <label class="equipment-checkbox-item">
+                        <input type="checkbox" value="${eq.id}" data-cluster-id="${eq.clusterId || ''}" ${checked}>
+                        <div>
+                            <div class="equipment-checkbox-label">${escapeHtml(name)}</div>
+                            <div class="equipment-checkbox-detail-inline">
+                                <span class="equipment-checkbox-detail-chip"><strong>Type:</strong> ${escapeHtml(type)}</span>
+                                <span class="equipment-checkbox-detail-chip"><strong>Nr:</strong> ${escapeHtml(sysNum || '—')}</span>
+                                <span class="equipment-checkbox-detail-chip equipment-checkbox-detail-chip-wide"><strong>Plass:</strong> ${escapeHtml(placement || '—')}</span>
+                                <span class="equipment-checkbox-detail-chip equipment-checkbox-detail-chip-wide"><strong>Betjener:</strong> ${escapeHtml(servedBy)}</span>
+                            </div>
+                        </div>
+                    </label>
+                `;
+            }).join('');
+
+            if (key === ungroupedKey) {
+                return `
+                    <div class="equipment-cluster-group">
+                        <div class="equipment-cluster-header">
+                            <div class="equipment-cluster-left">
+                                <span style="width: 18px;"></span>
+                                <div>
+                                    <div class="equipment-cluster-title">${escapeHtml(group.title)}</div>
+                                    <div class="equipment-cluster-meta">${group.items.length} anlegg</div>
+                                </div>
+                            </div>
+                        </div>
+                        ${rows}
+                    </div>
+                `;
+            }
+
+            const checkedCount = group.items.filter(item => state.selectedEquipmentIds.includes(item.id)).length;
+            const allChecked = checkedCount === group.items.length && group.items.length > 0;
 
             return `
-                <label class="equipment-checkbox-item">
-                    <input type="checkbox" value="${eq.id}" ${checked}>
-                    <div>
-                        <div class="equipment-checkbox-label">${escapeHtml(name)}</div>
-                        <div class="equipment-checkbox-sublabel">${escapeHtml(sysNum)}${sysNum && placement ? ' \u2022 ' : ''}${escapeHtml(placement)}</div>
+                <div class="equipment-cluster-group">
+                    <div class="equipment-cluster-header">
+                        <div class="equipment-cluster-left">
+                            <input type="checkbox" class="cluster-select-checkbox" data-cluster-id="${escapeHtml(key)}" ${allChecked ? 'checked' : ''}>
+                            <div>
+                                <div class="equipment-cluster-title">${escapeHtml(group.title)}</div>
+                                <div class="equipment-cluster-meta">${group.items.length} anlegg</div>
+                            </div>
+                        </div>
+                        <span class="equipment-cluster-hint">Velg cluster</span>
                     </div>
-                </label>
+                    ${rows}
+                </div>
             `;
         }).join('');
 
-        // Add checkbox event listeners
         elements.equipmentList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            if (cb.classList.contains('cluster-select-checkbox')) {
+                cb.addEventListener('change', (e) => {
+                    setClusterSelection(e.target.dataset.clusterId, e.target.checked);
+                });
+                return;
+            }
+
             cb.addEventListener('change', (e) => {
                 const eqId = parseInt(e.target.value);
                 if (e.target.checked) {
@@ -345,13 +419,64 @@
                 } else {
                     state.selectedEquipmentIds = state.selectedEquipmentIds.filter(id => id !== eqId);
                 }
-                // Update count text
-                const total = state.customerEquipment.filter(eq => eq.status === 'active' || !eq.status).length;
-                elements.equipmentCount.textContent = state.selectedEquipmentIds.length > 0
-                    ? `${state.selectedEquipmentIds.length} valgt av ${total}`
-                    : `${total} anlegg`;
+
+                updateEquipmentCount(activeEquipment.length);
+                syncClusterCheckboxStates();
             });
         });
+
+        syncClusterCheckboxStates();
+    }
+
+    function updateEquipmentCount(total) {
+        const selectedText = state.selectedEquipmentIds.length > 0
+            ? `${state.selectedEquipmentIds.length} valgt av ${total}`
+            : `${total} anlegg`;
+        elements.equipmentCount.textContent = selectedText;
+    }
+
+    function setClusterSelection(clusterId, checked) {
+        const clusterEquipment = state.customerEquipment
+            .filter(eq => (eq.status === 'active' || !eq.status) && String(eq.clusterId || '') === String(clusterId));
+
+        const clusterIds = clusterEquipment.map(eq => eq.id);
+
+        if (checked) {
+            clusterIds.forEach(id => {
+                if (!state.selectedEquipmentIds.includes(id)) {
+                    state.selectedEquipmentIds.push(id);
+                }
+            });
+        } else {
+            state.selectedEquipmentIds = state.selectedEquipmentIds.filter(id => !clusterIds.includes(id));
+        }
+
+        renderEquipmentList();
+    }
+
+    function syncClusterCheckboxStates() {
+        elements.equipmentList.querySelectorAll('.cluster-select-checkbox').forEach(cb => {
+            const clusterId = cb.dataset.clusterId;
+            const clusterEquipment = state.customerEquipment.filter(eq =>
+                (eq.status === 'active' || !eq.status) && String(eq.clusterId || '') === String(clusterId)
+            );
+            const checkedCount = clusterEquipment.filter(eq => state.selectedEquipmentIds.includes(eq.id)).length;
+
+            cb.checked = clusterEquipment.length > 0 && checkedCount === clusterEquipment.length;
+            cb.indeterminate = checkedCount > 0 && checkedCount < clusterEquipment.length;
+        });
+    }
+
+    function selectAllEquipment() {
+        state.selectedEquipmentIds = state.customerEquipment
+            .filter(eq => eq.status === 'active' || !eq.status)
+            .map(eq => eq.id);
+        renderEquipmentList();
+    }
+
+    function deselectAllEquipment() {
+        state.selectedEquipmentIds = [];
+        renderEquipmentList();
     }
 
     // =====================
@@ -585,6 +710,14 @@
         elements.createBtn.disabled = !isValid;
     }
 
+    function showCreateOrderLoading() {
+        elements.createOrderLoadingOverlay?.classList.add('active');
+    }
+
+    function hideCreateOrderLoading() {
+        elements.createOrderLoadingOverlay?.classList.remove('active');
+    }
+
     // =====================
     // Create Planned Order
     // =====================
@@ -594,7 +727,8 @@
 
         state.isLoading = true;
         elements.createBtn.disabled = true;
-        elements.createBtn.innerHTML = '<span class="loading"></span> Oppretter...';
+        elements.createBtn.innerHTML = '<span class="loading"></span> Oppretter oppdrag...';
+        showCreateOrderLoading();
 
         try {
             const orderData = {
@@ -662,6 +796,7 @@
             state.isLoading = false;
             elements.createBtn.disabled = false;
             elements.createBtn.innerHTML = '\ud83d\udcc5 Planlegg oppdrag';
+            hideCreateOrderLoading();
         }
     }
 

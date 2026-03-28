@@ -886,6 +886,13 @@ body {
     background-color: var(--bg-light);
 }
 
+.planner-search-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-light);
+    margin-bottom: 8px;
+}
+
 .customer-search-input {
     width: 100%;
     padding: 10px 16px;
@@ -1074,6 +1081,36 @@ body {
     cursor: default;
 }
 
+.equipment-detail-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.equipment-detail-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    font-size: 12px;
+    color: #374151;
+    line-height: 1.2;
+}
+
+.equipment-detail-chip strong {
+    color: #64748b;
+    font-size: 11px;
+}
+
+.equipment-detail-chip-wide {
+    border-radius: 10px;
+}
+
 .cluster-modal-content {
     max-width: 520px;
 }
@@ -1086,6 +1123,43 @@ body {
     font-size: 14px;
     font-family: inherit;
     background: white;
+}
+
+.modal-loading-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.82);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    border-radius: inherit;
+}
+
+.modal-loading-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #dbeafe;
+    box-shadow: 0 10px 30px rgba(37, 99, 235, 0.12);
+    border-radius: 12px;
+    padding: 16px 18px;
+    color: #1e3a8a;
+    font-weight: 600;
+}
+
+.modal-loading-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #bfdbfe;
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    animation: modal-spin 0.8s linear infinite;
+}
+
+@keyframes modal-spin {
+    to { transform: rotate(360deg); }
 }
 
 /* ===== FORBEDRET KUNDEKORT DESIGN (breddebasert) ===== */

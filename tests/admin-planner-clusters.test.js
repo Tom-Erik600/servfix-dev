@@ -204,4 +204,28 @@ describe('Admin planner cluster and project routes', () => {
     ]);
     expect(mockTripletexClient.get).toHaveBeenCalledTimes(2);
   });
+
+  test('rejects deletion of non-empty cluster', async () => {
+    mockPool.query.mockResolvedValueOnce({ rows: [{ count: '2' }] });
+
+    const res = await request(app).delete('/api/admin/clusters/7');
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/bare slettes når det er tomt/i);
+  });
+
+  test('deletes empty cluster', async () => {
+    mockPool.query
+      .mockResolvedValueOnce({ rows: [{ count: '0' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 7, name: 'Tomt cluster' }] });
+
+    const res = await request(app).delete('/api/admin/clusters/7');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      message: 'Cluster slettet.',
+      deletedId: 7,
+      affectedEquipmentCount: 0
+    });
+  });
 });

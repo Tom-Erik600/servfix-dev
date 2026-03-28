@@ -58,6 +58,12 @@
         // Load initial data
         loadCustomers();
     }
+
+    function getLocalDateString() {
+        const now = new Date();
+        const timezoneOffsetMs = now.getTimezoneOffset() * 60000;
+        return new Date(now.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
+    }
     
     function populateHeader() {
         try {
@@ -242,7 +248,7 @@
                 customerData: state.selectedCustomer, // Send all customer data from Tripletex
                 description: 'Hasteordre - Akutt serviceoppdrag',
                 serviceType: 'Hasteordre',
-                scheduledDate: new Date().toISOString().split('T')[0]
+                scheduledDate: getLocalDateString()
             };
             
             console.log('📤 Sending order data:', orderData);

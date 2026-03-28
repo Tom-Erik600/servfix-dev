@@ -38,6 +38,12 @@ function handleCustomerSearchInput(e) {
     }, 300);
 }
 
+function getLocalDateString() {
+    const now = new Date();
+    const timezoneOffsetMs = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
+}
+
 // Filtrer kundekort basert på søk
 function filterCustomerCards(query) {
     const customerCards = document.querySelectorAll('.project-card, .modern-customer-card');
@@ -120,6 +126,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const customersTabBtn = document.getElementById('customers-tab-btn');
     const projectsTabBtn = document.getElementById('projects-tab-btn');
     const plannerListTitle = document.getElementById('planner-list-title');
+    const plannerSearchLabel = document.getElementById('planner-search-label');
 
     let draggedTechnician = null;
     let targetCustomer = null;
@@ -231,7 +238,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             projectSearchInput.style.display = tabName === 'projects' ? 'block' : 'none';
         }
 
+        if (plannerSearchLabel) {
+            plannerSearchLabel.textContent = tabName === 'projects' ? 'Søk prosjekt' : 'Søk kunde';
+        }
+
         renderCurrentTab();
+
+        if (tabName === 'projects' && projectSearchInput) {
+            window.requestAnimationFrame(() => projectSearchInput.focus());
+        }
+
+        if (tabName === 'customers' && customerSearchInput) {
+            window.requestAnimationFrame(() => customerSearchInput.focus());
+        }
     }
 
     function renderCurrentTab() {
@@ -506,6 +525,7 @@ function escapeHtml(unsafe) {
         const type = escapeHtml(eq.systemtype || eq.type || 'Ukjent type');
         const systemNumber = escapeHtml(eq.systemnummer || eq.systemNumber || '');
         const placement = escapeHtml(eq.plassering || eq.systemPlacement || eq.location || 'Uten plassering');
+        const servedBy = escapeHtml(eq.betjener || '—');
         const isChecked = selectedIds ? selectedIds.has(String(eq.id)) : true;
         const removeClusterButton = eq.clusterId
             ? `<button type="button" class="equipment-remove-cluster-btn" data-equipment-id="${eq.id}" title="Ta ut av cluster">-</button>`
@@ -516,8 +536,12 @@ function escapeHtml(unsafe) {
                 <input type="checkbox" value="${eq.id}" class="equipment-checkbox" data-cluster-id="${eq.clusterId || ''}" ${isChecked ? 'checked' : ''}>
                 <div class="equipment-info">
                     <span class="equipment-name">${name}</span>
-                    <span class="equipment-type">${type}${systemNumber ? ` | ${systemNumber}` : ''}</span>
-                    <span class="equipment-location">${placement}</span>
+                    <div class="equipment-detail-inline">
+                        <span class="equipment-detail-chip"><strong>Type:</strong> ${type}</span>
+                        <span class="equipment-detail-chip"><strong>Nr:</strong> ${systemNumber || '—'}</span>
+                        <span class="equipment-detail-chip equipment-detail-chip-wide"><strong>Plass:</strong> ${placement}</span>
+                        <span class="equipment-detail-chip equipment-detail-chip-wide"><strong>Betjener:</strong> ${servedBy}</span>
+                    </div>
                 </div>
                 ${removeClusterButton}
             </label>
@@ -711,9 +735,29 @@ function escapeHtml(unsafe) {
         }
     }
 
+    function setInlineClusterModalLoading(isLoading, message = 'Jobber...') {
+        const saveButton = document.getElementById('cluster-modal-save');
+        const cancelButton = document.getElementById('cluster-modal-cancel');
+        const modalBody = document.querySelector('#inline-cluster-modal .modal-body');
+
+        if (saveButton) {
+            saveButton.disabled = isLoading;
+            saveButton.textContent = isLoading ? message : saveButton.dataset.defaultLabel;
+        }
+
+        if (cancelButton) {
+            cancelButton.disabled = isLoading;
+        }
+
+        if (modalBody) {
+            modalBody.style.opacity = isLoading ? '0.65' : '1';
+            modalBody.style.pointerEvents = isLoading ? 'none' : 'auto';
+        }
+    }
+
     function showInlineClusterModal(customer, mode) {
         const selectedEquipmentIds = getSelectedEquipmentIds();
-        if (!selectedEquipmentIds.length) {
+        if (mode !== 'create' && !selectedEquipmentIds.length) {
             showToast('Velg minst ett anlegg først', 'error');
             return;
         }
@@ -724,7 +768,7 @@ function escapeHtml(unsafe) {
         overlay.className = 'modal-overlay show';
         overlay.id = 'inline-cluster-modal';
 
-        const title = mode === 'create' ? 'Nytt cluster fra valgte anlegg' : 'Legg valgte anlegg i cluster';
+        const title = mode === 'create' ? 'Opprett nytt cluster' : 'Legg valgte anlegg i cluster';
         const submitLabel = mode === 'create' ? 'Opprett cluster' : 'Lagre';
 
         overlay.innerHTML = `
@@ -733,7 +777,7 @@ function escapeHtml(unsafe) {
                     <h3>${title}</h3>
                 </div>
                 <div class="modal-body">
-                    <p class="modal-info-text">${selectedEquipmentIds.length} valgte anlegg blir oppdatert.</p>
+                    <p class="modal-info-text">${mode === 'create' ? 'Opprett et nytt cluster for kunden. Ingen anlegg flyttes automatisk.' : `${selectedEquipmentIds.length} valgte anlegg blir oppdatert.`}</p>
                     ${mode === 'assign' ? `
                         <div class="form-group">
                             <label for="cluster-select">Velg cluster</label>
@@ -757,6 +801,10 @@ function escapeHtml(unsafe) {
         document.body.appendChild(overlay);
 
         document.getElementById('cluster-modal-cancel')?.addEventListener('click', closeInlineClusterModal);
+        const clusterSaveButton = document.getElementById('cluster-modal-save');
+        if (clusterSaveButton) {
+            clusterSaveButton.dataset.defaultLabel = submitLabel;
+        }
 
         if (mode === 'assign') {
             fetchCustomerClusters(customer)
@@ -792,6 +840,7 @@ function escapeHtml(unsafe) {
 
         document.getElementById('cluster-modal-save')?.addEventListener('click', async () => {
             try {
+                setInlineClusterModalLoading(true, mode === 'create' ? 'Oppretter...' : 'Lagrer...');
                 const nameInput = document.getElementById('cluster-name-input');
                 const select = document.getElementById('cluster-select');
 
@@ -804,7 +853,10 @@ function escapeHtml(unsafe) {
                     }
 
                     const cluster = await createClusterForCustomer(customer, clusterName);
-                    clusterId = cluster.id;
+                    await loadEquipmentForModal(customer, getCurrentSelectedEquipmentIds());
+                    closeInlineClusterModal();
+                    showToast(`Cluster "${cluster.name}" opprettet`, 'success');
+                    return;
                 } else {
                     if (!select?.value) {
                         throw new Error('Velg cluster eller opprett nytt');
@@ -831,6 +883,7 @@ function escapeHtml(unsafe) {
             } catch (error) {
                 console.error('Cluster handling error:', error);
                 showToast(error.message, 'error');
+                setInlineClusterModalLoading(false, submitLabel);
             }
         });
     }
@@ -855,7 +908,7 @@ function escapeHtml(unsafe) {
     async function showModalWithEquipment(customer, technicianName, options = {}) {
     try {
         // Definer today lokalt i funksjonen
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalDateString();
         const defaultDescription = options.suggestedDescription || `Service hos ${customer.name}`;
         
         // Bygg modal innhold med equipment selection OG description-felt
@@ -906,8 +959,8 @@ function escapeHtml(unsafe) {
                         <button type="button" class="btn btn-secondary equipment-manage-btn" id="equipment-assign-cluster-btn">Flytt til cluster</button>
                     </div>
                     <div class="equipment-bulk-actions">
-                        <button type="button" class="btn equipment-quick-btn equipment-quick-btn-add" id="equipment-select-all-btn">+ Legg til alle</button>
-                        <button type="button" class="btn equipment-quick-btn equipment-quick-btn-remove" id="equipment-deselect-all-btn">- Fjern alle</button>
+                        <button type="button" class="btn equipment-quick-btn equipment-quick-btn-add" id="equipment-select-all-btn">+ Marker alle</button>
+                        <button type="button" class="btn equipment-quick-btn equipment-quick-btn-remove" id="equipment-deselect-all-btn">- Fjern markering alle</button>
                     </div>
                     <div class="equipment-list">
                         <!-- Anleggslisten lastes her av loadEquipmentForModal -->
@@ -1377,6 +1430,7 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
     function closeModal() {
         const dateModal = document.getElementById('date-modal');
         closeInlineClusterModal();
+        hideModalLoadingState();
         dateModal.classList.remove('show');
         targetCustomer = null;
         setTimeout(() => {
@@ -1403,6 +1457,31 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
                 </div>
             `;
         }, 300);
+    }
+
+    function showModalLoadingState(message = 'Oppretter oppdrag...') {
+        const modalContent = document.querySelector('#date-modal .modal-content');
+        if (!modalContent) return;
+
+        hideModalLoadingState();
+        modalContent.style.position = 'relative';
+
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-loading-overlay';
+        overlay.id = 'modal-loading-overlay';
+        overlay.innerHTML = `
+            <div class="modal-loading-card">
+                <div class="modal-loading-spinner"></div>
+                <span>${message}</span>
+            </div>
+        `;
+
+        modalContent.appendChild(overlay);
+    }
+
+    function hideModalLoadingState() {
+        const existing = document.getElementById('modal-loading-overlay');
+        if (existing) existing.remove();
     }
 
     // Fallback: Standard modal uten equipment
@@ -1483,8 +1562,19 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
         showToast('Vennligst skriv inn en beskrivelse', 'error');
         return;
     }
+
+    const saveButton = document.getElementById('modal-save-btn');
+    const cancelButton = document.getElementById('modal-cancel-btn');
+    const originalSaveText = saveButton?.textContent || 'Lagre Oppdrag';
     
     try {
+        if (saveButton) {
+            saveButton.disabled = true;
+            saveButton.textContent = 'Oppretter oppdrag...';
+        }
+        if (cancelButton) cancelButton.disabled = true;
+        showModalLoadingState('Oppretter oppdrag...');
+
         // NYTT: Hent komplette kundedata først
         console.log('📡 Fetching complete customer data...');
         const completeData = await fetchCompleteCustomerData(targetCustomer.customerId);
@@ -1570,6 +1660,13 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
     } catch (error) {
         console.error('Error creating order:', error);
         showToast(`Kunne ikke opprette ordre: ${error.message}`, 'error');
+    } finally {
+        hideModalLoadingState();
+        if (saveButton) {
+            saveButton.disabled = false;
+            saveButton.textContent = originalSaveText;
+        }
+        if (cancelButton) cancelButton.disabled = false;
     }
 }
     // Original modal save function (for fallback)

@@ -110,6 +110,7 @@
 
             <div class="modal-body" id="equipment-edit-body">
                 <input type="hidden" id="edit-equipment-id">
+                <input type="hidden" id="edit-equipment-mode" value="edit">
 
                 <div class="edit-form-row">
                     <div class="edit-form-group">
@@ -118,7 +119,7 @@
                     </div>
                     <div class="edit-form-group">
                         <label class="edit-form-label">Systemtype</label>
-                        <input type="text" class="edit-form-input" id="edit-systemtype" readonly style="background-color: #f0f0f0; cursor: not-allowed;" title="Systemtype kan ikke endres her">
+                        <select class="edit-form-input" id="edit-systemtype"></select>
                     </div>
                 </div>
 
@@ -148,11 +149,24 @@
                     <label class="edit-form-label">Notater</label>
                     <textarea class="edit-form-input" id="edit-notater" rows="3" style="resize: vertical;"></textarea>
                 </div>
+
+                <div class="edit-form-row" style="margin-top: 12px;">
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Cluster</label>
+                        <select class="edit-form-input" id="edit-cluster-id">
+                            <option value="">Ingen cluster</option>
+                        </select>
+                    </div>
+                    <div class="edit-form-group" style="justify-content: flex-end;">
+                        <label class="edit-form-label">Opprett nytt</label>
+                        <button type="button" class="btn btn-secondary" id="edit-create-cluster-btn" onclick="createClusterFromCustomerPage()">+ Nytt cluster</button>
+                    </div>
+                </div>
             </div>
 
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeEquipmentEditModal()">Avbryt</button>
-                <button type="button" class="btn btn-primary" onclick="confirmSaveEquipment()">Lagre</button>
+                <button type="button" class="btn btn-primary" id="equipment-save-btn" onclick="confirmSaveEquipment()">Lagre</button>
             </div>
         </div>
     </div>
@@ -216,6 +230,34 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeContactModal()">Avbryt</button>
                 <button type="button" class="btn btn-primary" onclick="saveContact()">Lagre</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="cluster-action-modal">
+        <div class="modal-content" style="max-width: 520px;">
+            <div class="modal-header">
+                <h3 id="cluster-action-title">Cluster</h3>
+                <button type="button" class="close-btn" onclick="closeClusterActionModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="cluster-action-description" style="font-size: 14px; color: #4b5563; margin-top: 0;"></p>
+
+                <div class="edit-form-group" id="cluster-action-select-group">
+                    <label class="edit-form-label">Eksisterende cluster</label>
+                    <select class="edit-form-input" id="cluster-action-select">
+                        <option value="">Velg cluster...</option>
+                    </select>
+                </div>
+
+                <div class="edit-form-group" style="margin-top: 12px;">
+                    <label class="edit-form-label">Nytt clusternavn</label>
+                    <input type="text" class="edit-form-input" id="cluster-action-name" placeholder="F.eks. Industriveien 92 Eidsvoll">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeClusterActionModal()">Avbryt</button>
+                <button type="button" class="btn btn-primary" id="cluster-action-save-btn">Lagre</button>
             </div>
         </div>
     </div>

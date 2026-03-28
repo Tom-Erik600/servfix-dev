@@ -178,6 +178,13 @@ router.delete('/:clusterId', async (req, res) => {
     );
     const affectedCount = parseInt(countResult.rows[0].count);
 
+    if (affectedCount > 0) {
+      return res.status(409).json({
+        error: 'Cluster kan bare slettes når det er tomt',
+        affectedEquipmentCount: affectedCount
+      });
+    }
+
     const result = await pool.query(
       `DELETE FROM equipment_clusters WHERE id = $1 RETURNING id, name`,
       [parseInt(clusterId)]
@@ -187,10 +194,10 @@ router.delete('/:clusterId', async (req, res) => {
       return res.status(404).json({ error: 'Cluster ikke funnet' });
     }
 
-    console.log(`✅ [CLUSTERS] Cluster "${result.rows[0].name}" slettet. ${affectedCount} anlegg fikk cluster_id = NULL`);
+    console.log(`✅ [CLUSTERS] Tomt cluster "${result.rows[0].name}" slettet.`);
 
     res.json({
-      message: `Cluster slettet. ${affectedCount} anlegg er nå uten cluster.`,
+      message: 'Cluster slettet.',
       deletedId: result.rows[0].id,
       affectedEquipmentCount: affectedCount
     });

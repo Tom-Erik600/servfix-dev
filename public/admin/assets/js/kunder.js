@@ -6,6 +6,10 @@ document.addEventListener('DOMContentLoaded', function() {
     let allCustomers = [];
     let currentSelectedCustomer = null;
     let customerHistory = [];
+    let currentCustomerClusters = [];
+    let selectedEquipmentIdsForCluster = [];
+    let equipmentClusterCollapseState = {};
+    let equipmentTypeOptions = [];
 
     // DOM-elementer
     const searchInput = document.getElementById('customer-search');
@@ -16,7 +20,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const orderModal = document.getElementById('order-modal');
     const equipmentEditModal = document.getElementById('equipment-edit-modal');
     const equipmentConfirmModal = document.getElementById('equipment-confirm-modal');
+    const clusterActionModal = document.getElementById('cluster-action-modal');
     let currentCustomerEquipment = [];
+    let currentClusterActionMode = null;
 
     // Optional deep-linking from other admin pages
     const urlParams = new URLSearchParams(window.location.search);
@@ -218,6 +224,9 @@ window.selectCustomer = async function(customerId) {
     }
 
     currentSelectedCustomer = customer;
+    await loadCustomerClusters(customer);
+    selectedEquipmentIdsForCluster = [];
+    equipmentClusterCollapseState = {};
     
     // Render med placeholder-adresser først
     currentCustomerEquipment = [];
@@ -465,23 +474,384 @@ window.selectCustomer = async function(customerId) {
             return;
         }
 
-        container.innerHTML = `
-            <div class="modern-equipment-section">
-                <h3 class="modern-section-title">Anlegg (${equipment.length})</h3>
-                <div class="equipment-card-grid">
-                    ${equipment.map(eq => `
-                        <div class="equipment-list-card" onclick="openEquipmentEditModal('${eq.id}')" title="Klikk for å redigere">
-                            <div class="equipment-card-name">${eq.name || 'Uten navn'}</div>
-                            <div class="equipment-card-details">
-                                <span class="equipment-card-type">${eq.type || '-'}</span>
-                                ${eq.systemNumber ? `<span class="equipment-card-number">#${eq.systemNumber}</span>` : ''}
-                            </div>
-                            ${eq.systemPlacement ? `<div class="equipment-card-placement">${eq.systemPlacement}</div>` : ''}
-                        </div>
-                    `).join('')}
+        const buildEquipmentCardMarkup = (eq) => `
+            <div class="equipment-list-card" onclick="openEquipmentEditModal('${eq.id}')" title="Klikk for å redigere">
+                <label class="equipment-select-checkbox" onclick="event.stopPropagation()">
+                    <input type="checkbox" data-equipment-id="${eq.id}" ${selectedEquipmentIdsForCluster.includes(eq.id) ? 'checked' : ''}>
+                </label>
+                <div class="equipment-card-name">${eq.name || 'Uten navn'}</div>
+                <div class="equipment-card-detail-inline">
+                    <span class="equipment-card-detail-chip"><strong>Type:</strong> ${eq.type || '-'}</span>
+                    <span class="equipment-card-detail-chip"><strong>Nr:</strong> ${eq.systemNumber || '-'}</span>
+                    <span class="equipment-card-detail-chip equipment-card-detail-chip-wide"><strong>Plass:</strong> ${eq.systemPlacement || '-'}</span>
+                    <span class="equipment-card-detail-chip equipment-card-detail-chip-wide"><strong>Betjener:</strong> ${eq.betjener || '-'}</span>
                 </div>
             </div>
         `;
+
+        const hasClusters = currentCustomerClusters.length > 0 || equipment.some(eq => eq.clusterId);
+
+        let contentMarkup = '';
+
+        if (!hasClusters) {
+            contentMarkup = `
+                <div class="equipment-card-grid">
+                    ${equipment.map(buildEquipmentCardMarkup).join('')}
+                </div>
+            `;
+        } else {
+            const groups = new Map();
+            const ungroupedKey = '__ungrouped__';
+
+            currentCustomerClusters.forEach(cluster => {
+                const key = String(cluster.id);
+                groups.set(key, {
+                    key,
+                    title: cluster.name,
+                    items: []
+                });
+
+                if (typeof equipmentClusterCollapseState[key] === 'undefined') {
+                    equipmentClusterCollapseState[key] = true;
+                }
+            });
+
+            equipment.forEach(eq => {
+                const key = eq.clusterId ? String(eq.clusterId) : ungroupedKey;
+                if (!groups.has(key)) {
+                    groups.set(key, {
+                        key,
+                        title: eq.clusterName || 'Øvrige',
+                        items: []
+                    });
+
+                    if (typeof equipmentClusterCollapseState[key] === 'undefined') {
+                        equipmentClusterCollapseState[key] = true;
+                    }
+                }
+                groups.get(key).items.push(eq);
+            });
+
+            if (!groups.has(ungroupedKey)) {
+                groups.set(ungroupedKey, {
+                    key: ungroupedKey,
+                    title: 'Øvrige',
+                    items: []
+                });
+                if (typeof equipmentClusterCollapseState[ungroupedKey] === 'undefined') {
+                    equipmentClusterCollapseState[ungroupedKey] = true;
+                }
+            }
+
+            contentMarkup = Array.from(groups.values()).map(group => {
+                const groupKey = group.key;
+                const isCollapsed = equipmentClusterCollapseState[groupKey] !== false;
+                const isEmpty = group.items.length === 0;
+                const canDelete = groupKey !== '__ungrouped__' && isEmpty;
+
+                return `
+                    <div class="equipment-cluster-block ${isCollapsed ? 'collapsed' : ''}">
+                        <div class="equipment-cluster-block-header-wrap">
+                            <button type="button" class="equipment-cluster-block-header equipment-cluster-toggle" onclick="toggleEquipmentClusterSection('${groupKey}')">
+                                <div>
+                                    <div class="equipment-cluster-block-title">${group.title}</div>
+                                    <div class="equipment-cluster-block-meta">${group.items.length} anlegg</div>
+                                </div>
+                                <span class="equipment-cluster-chevron">${isCollapsed ? '▸' : '▾'}</span>
+                            </button>
+                            ${canDelete ? `<button type="button" class="equipment-cluster-delete-btn" onclick="event.stopPropagation(); deleteEmptyClusterFromCustomerPage('${groupKey}', '${(group.title || '').replace(/'/g, "\\'")}')">Slett</button>` : ''}
+                        </div>
+                        <div class="equipment-cluster-block-body ${isCollapsed ? 'hidden' : ''}">
+                            ${isEmpty ? `<div class="equipment-empty-state">Ingen anlegg i dette clusteret</div>` : `
+                                <div class="equipment-card-grid">
+                                    ${group.items.map(buildEquipmentCardMarkup).join('')}
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        container.innerHTML = `
+            <div class="modern-equipment-section">
+                <div class="modern-section-header">
+                    <h3 class="modern-section-title">Anlegg (${equipment.length})</h3>
+                    <div class="equipment-cluster-toolbar">
+                        <button type="button" class="btn btn-primary equipment-inline-cluster-btn" onclick="openNewEquipmentModal()">+ Nytt anlegg</button>
+                        <button type="button" class="btn btn-secondary equipment-inline-cluster-btn" onclick="createClusterFromCustomerPage()">+ Nytt cluster</button>
+                        <button type="button" class="btn btn-secondary equipment-inline-cluster-btn" onclick="assignSelectedEquipmentToClusterFromCustomerPage()">Flytt valgte til cluster</button>
+                    </div>
+                </div>
+                <div class="equipment-selection-toolbar">
+                    <button type="button" class="btn equipment-selection-btn" onclick="selectAllEquipmentForCluster()">+ Marker alle</button>
+                    <button type="button" class="btn equipment-selection-btn secondary" onclick="clearEquipmentSelectionForCluster()">- Fjern markering alle</button>
+                </div>
+                ${contentMarkup}
+            </div>
+        `;
+
+        container.querySelectorAll('.equipment-select-checkbox input').forEach(checkbox => {
+            checkbox.addEventListener('change', (event) => {
+                const equipmentId = parseInt(event.target.dataset.equipmentId, 10);
+                if (event.target.checked) {
+                    if (!selectedEquipmentIdsForCluster.includes(equipmentId)) {
+                        selectedEquipmentIdsForCluster.push(equipmentId);
+                    }
+                } else {
+                    selectedEquipmentIdsForCluster = selectedEquipmentIdsForCluster.filter(id => id !== equipmentId);
+                }
+            });
+        });
+    }
+
+    async function loadCustomerClusters(customer) {
+        const customerId = customer.id;
+        try {
+            const response = await fetch(`/api/admin/clusters?customerId=${customerId}`, {
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                throw new Error('Kunne ikke hente cluster');
+            }
+
+            currentCustomerClusters = await response.json();
+        } catch (error) {
+            console.error('Feil ved henting av cluster:', error);
+            currentCustomerClusters = [];
+        }
+    }
+
+    function populateClusterSelect(selectedClusterId = null) {
+        const select = document.getElementById('edit-cluster-id');
+        if (!select) return;
+
+        select.innerHTML = `
+            <option value="">Ingen cluster</option>
+            ${currentCustomerClusters.map(cluster => `<option value="${cluster.id}">${cluster.name}</option>`).join('')}
+        `;
+
+        select.value = selectedClusterId ? String(selectedClusterId) : '';
+    }
+
+    async function loadEquipmentTypeOptions() {
+        if (equipmentTypeOptions.length > 0) {
+            return equipmentTypeOptions;
+        }
+
+        const response = await fetch('/api/admin/checklist-templates', {
+            credentials: 'include'
+        });
+
+        if (!response.ok) {
+            throw new Error('Kunne ikke hente anleggstyper');
+        }
+
+        const data = await response.json();
+        equipmentTypeOptions = Array.isArray(data.facilityTypes) ? data.facilityTypes : [];
+        return equipmentTypeOptions;
+    }
+
+    function populateEquipmentTypeSelect(selectedType = '', readonly = false) {
+        const select = document.getElementById('edit-systemtype');
+        if (!select) return;
+
+        const options = equipmentTypeOptions.length > 0
+            ? equipmentTypeOptions.map(type => `<option value="${type.id}">${type.name}</option>`).join('')
+            : (selectedType ? `<option value="${selectedType}">${selectedType}</option>` : '<option value="">Velg type</option>');
+
+        select.innerHTML = options;
+        select.value = selectedType || select.value || '';
+        select.disabled = readonly;
+        select.style.backgroundColor = readonly ? '#f0f0f0' : '';
+        select.style.cursor = readonly ? 'not-allowed' : '';
+        select.title = readonly ? 'Systemtype kan ikke endres her' : '';
+    }
+
+    function setCustomerEquipmentActionLoading(isLoading, buttonLabel = '') {
+        const buttons = document.querySelectorAll('.equipment-inline-cluster-btn, .equipment-selection-btn');
+        buttons.forEach(button => {
+            if (isLoading) {
+                if (!button.dataset.originalText) {
+                    button.dataset.originalText = button.textContent;
+                }
+                button.disabled = true;
+                if (buttonLabel && button.classList.contains('equipment-inline-cluster-btn')) {
+                    button.textContent = buttonLabel;
+                }
+            } else {
+                button.disabled = false;
+                if (button.dataset.originalText) {
+                    button.textContent = button.dataset.originalText;
+                }
+            }
+        });
+
+        const section = document.getElementById('equipment-list-section');
+        if (section) {
+            section.style.opacity = isLoading ? '0.7' : '1';
+            section.style.pointerEvents = isLoading ? 'none' : 'auto';
+        }
+    }
+
+    function openClusterActionModal(mode) {
+        currentClusterActionMode = mode;
+
+        const title = document.getElementById('cluster-action-title');
+        const description = document.getElementById('cluster-action-description');
+        const selectGroup = document.getElementById('cluster-action-select-group');
+        const select = document.getElementById('cluster-action-select');
+        const nameInput = document.getElementById('cluster-action-name');
+        const saveBtn = document.getElementById('cluster-action-save-btn');
+
+        if (!title || !description || !selectGroup || !select || !nameInput || !saveBtn) return;
+
+        title.textContent = mode === 'create' ? 'Opprett nytt cluster' : 'Flytt valgte anlegg til cluster';
+        description.textContent = mode === 'create'
+            ? 'Opprett et nytt tomt cluster for kunden. Ingen anlegg flyttes automatisk.'
+            : `Flytt ${selectedEquipmentIdsForCluster.length} valgte anlegg til et eksisterende eller nytt cluster.`;
+
+        selectGroup.style.display = mode === 'assign' ? 'block' : 'none';
+        select.innerHTML = `
+            <option value="">Velg cluster...</option>
+            ${currentCustomerClusters.map(cluster => `<option value="${cluster.id}">${cluster.name}</option>`).join('')}
+            ${mode === 'assign' ? '<option value="__new__">Opprett nytt cluster...</option>' : ''}
+        `;
+        nameInput.value = '';
+        nameInput.style.display = mode === 'create' ? 'block' : 'none';
+        saveBtn.textContent = mode === 'create' ? 'Opprett cluster' : 'Lagre';
+        saveBtn.disabled = false;
+
+        if (mode === 'assign') {
+            select.onchange = () => {
+                nameInput.style.display = select.value === '__new__' ? 'block' : 'none';
+                if (select.value !== '__new__') {
+                    nameInput.value = '';
+                }
+            };
+        } else {
+            select.onchange = null;
+        }
+
+        clusterActionModal?.classList.add('show');
+        window.requestAnimationFrame(() => nameInput.focus());
+    }
+
+    window.closeClusterActionModal = function() {
+        currentClusterActionMode = null;
+        clusterActionModal?.classList.remove('show');
+    };
+
+    async function handleClusterActionSave() {
+        if (!currentSelectedCustomer || !currentClusterActionMode) {
+            return;
+        }
+
+        const select = document.getElementById('cluster-action-select');
+        const nameInput = document.getElementById('cluster-action-name');
+        const saveBtn = document.getElementById('cluster-action-save-btn');
+
+        const clusterName = nameInput?.value?.trim();
+        let clusterId = null;
+
+        try {
+            setCustomerEquipmentActionLoading(true, currentClusterActionMode === 'create' ? 'Oppretter...' : 'Flytter...');
+            if (saveBtn) saveBtn.disabled = true;
+
+            if (currentClusterActionMode === 'create') {
+                if (!clusterName) {
+                    throw new Error('Skriv inn clusternavn');
+                }
+
+                const response = await fetch('/api/admin/clusters', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        customerId: currentSelectedCustomer.id,
+                        name: clusterName
+                    })
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Kunne ikke opprette cluster');
+                }
+
+                await loadCustomerClusters(currentSelectedCustomer);
+                if (currentCustomerEquipment.length > 0) {
+                    renderEquipmentList(currentCustomerEquipment);
+                }
+                closeClusterActionModal();
+                return;
+            }
+
+            if (!selectedEquipmentIdsForCluster.length) {
+                throw new Error('Marker minst ett anlegg først');
+            }
+
+            const selectedClusterId = select?.value;
+            if (selectedClusterId && selectedClusterId !== '__new__') {
+                clusterId = selectedClusterId;
+            } else {
+                if (!clusterName) {
+                    throw new Error('Velg cluster eller skriv nytt clusternavn');
+                }
+
+                const createResponse = await fetch('/api/admin/clusters', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        customerId: currentSelectedCustomer.id,
+                        name: clusterName
+                    })
+                });
+
+                const createData = await createResponse.json();
+                if (!createResponse.ok) {
+                    throw new Error(createData.error || 'Kunne ikke opprette cluster');
+                }
+
+                clusterId = createData.id;
+            }
+
+            const assignResponse = await fetch('/api/admin/equipment/assign-cluster', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    equipmentIds: selectedEquipmentIdsForCluster,
+                    clusterId
+                })
+            });
+
+            const assignData = await assignResponse.json();
+            if (!assignResponse.ok) {
+                throw new Error(assignData.error || 'Kunne ikke flytte anlegg til cluster');
+            }
+
+            selectedEquipmentIdsForCluster = [];
+            await loadCustomerClusters(currentSelectedCustomer);
+
+            const eqResponse = await fetch(`/api/admin/equipment?customerId=${currentSelectedCustomer.externalId || currentSelectedCustomer.id}`, {
+                credentials: 'include'
+            });
+
+            if (eqResponse.ok) {
+                currentCustomerEquipment = await eqResponse.json();
+                renderEquipmentList(currentCustomerEquipment);
+            }
+
+            closeClusterActionModal();
+        } catch (error) {
+            console.error('Cluster action error:', error);
+            alert(error.message || 'Kunne ikke lagre cluster-endring');
+            if (saveBtn) saveBtn.disabled = false;
+        } finally {
+            setCustomerEquipmentActionLoading(false);
+        }
     }
 
     function renderServiceHistory(customer) {
@@ -752,27 +1122,62 @@ window.selectCustomer = async function(customerId) {
     /**
      * Åpner redigering av anlegg
      */
-    window.openEquipmentEditModal = function(equipmentId) {
+    window.openEquipmentEditModal = async function(equipmentId) {
         const eq = currentCustomerEquipment.find(e => String(e.id) === String(equipmentId));
         if (!eq) {
             console.error('Anlegg ikke funnet:', equipmentId);
             return;
         }
 
+        if (currentSelectedCustomer) {
+            await loadCustomerClusters(currentSelectedCustomer);
+        }
+        await loadEquipmentTypeOptions();
+
+        document.getElementById('edit-equipment-mode').value = 'edit';
         document.getElementById('edit-equipment-id').value = eq.id;
         document.getElementById('edit-systemnavn').value = eq.name || '';
-        document.getElementById('edit-systemtype').value = eq.type || '';
+        populateEquipmentTypeSelect(eq.type || '', true);
         document.getElementById('edit-systemnummer').value = eq.systemNumber || '';
         document.getElementById('edit-plassering').value = eq.systemPlacement || '';
         document.getElementById('edit-betjener').value = eq.betjener || '';
         document.getElementById('edit-location').value = eq.location || '';
         document.getElementById('edit-notater').value = eq.internalNotes || '';
+        populateClusterSelect(eq.clusterId || null);
 
         // Dynamisk tittel: Rediger Anlegg — Kundenavn — Anleggsnavn
         const customerName = currentSelectedCustomer ? currentSelectedCustomer.name : '';
         const equipmentName = eq.name || 'Uten navn';
         document.getElementById('equipment-edit-title').textContent =
             `Rediger Anlegg — ${customerName} — ${equipmentName}`;
+        document.getElementById('equipment-save-btn').textContent = 'Lagre';
+
+        equipmentEditModal.classList.add('show');
+    };
+
+    window.openNewEquipmentModal = async function() {
+        if (!currentSelectedCustomer) {
+            alert('Velg en kunde først');
+            return;
+        }
+
+        await loadCustomerClusters(currentSelectedCustomer);
+        await loadEquipmentTypeOptions();
+
+        document.getElementById('edit-equipment-mode').value = 'create';
+        document.getElementById('edit-equipment-id').value = '';
+        document.getElementById('edit-systemnavn').value = '';
+        populateEquipmentTypeSelect('', false);
+        document.getElementById('edit-systemnummer').value = '';
+        document.getElementById('edit-plassering').value = '';
+        document.getElementById('edit-betjener').value = '';
+        document.getElementById('edit-location').value = '';
+        document.getElementById('edit-notater').value = '';
+        populateClusterSelect(null);
+
+        document.getElementById('equipment-edit-title').textContent =
+            `Nytt Anlegg — ${currentSelectedCustomer.name}`;
+        document.getElementById('equipment-save-btn').textContent = 'Opprett anlegg';
 
         equipmentEditModal.classList.add('show');
     };
@@ -784,10 +1189,85 @@ window.selectCustomer = async function(customerId) {
         equipmentEditModal.classList.remove('show');
     };
 
+    window.createClusterFromCustomerPage = async function() {
+        if (!currentSelectedCustomer) {
+            alert('Velg en kunde først');
+            return;
+        }
+        openClusterActionModal('create');
+    };
+
+    window.selectAllEquipmentForCluster = function() {
+        selectedEquipmentIdsForCluster = currentCustomerEquipment.map(eq => eq.id);
+        renderEquipmentList(currentCustomerEquipment);
+    };
+
+    window.toggleEquipmentClusterSection = function(groupKey) {
+        equipmentClusterCollapseState[groupKey] = !equipmentClusterCollapseState[groupKey];
+        renderEquipmentList(currentCustomerEquipment);
+    };
+
+    window.clearEquipmentSelectionForCluster = function() {
+        selectedEquipmentIdsForCluster = [];
+        renderEquipmentList(currentCustomerEquipment);
+    };
+
+    window.assignSelectedEquipmentToClusterFromCustomerPage = async function() {
+        if (!currentSelectedCustomer) {
+            alert('Velg en kunde først');
+            return;
+        }
+
+        if (!selectedEquipmentIdsForCluster.length) {
+            alert('Marker minst ett anlegg først');
+            return;
+        }
+        openClusterActionModal('assign');
+    };
+
+    window.deleteEmptyClusterFromCustomerPage = async function(clusterId, clusterName) {
+        if (!currentSelectedCustomer) {
+            alert('Velg en kunde først');
+            return;
+        }
+
+        const confirmed = window.confirm(`Er du sikker på at du vil slette clusteret "${clusterName}"?`);
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            setCustomerEquipmentActionLoading(true, 'Sletter...');
+            const response = await fetch(`/api/admin/clusters/${clusterId}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Kunne ikke slette cluster');
+            }
+
+            delete equipmentClusterCollapseState[String(clusterId)];
+            await loadCustomerClusters(currentSelectedCustomer);
+            renderEquipmentList(currentCustomerEquipment);
+        } catch (error) {
+            console.error('Feil ved sletting av cluster:', error);
+            alert(error.message || 'Kunne ikke slette cluster');
+        } finally {
+            setCustomerEquipmentActionLoading(false);
+        }
+    };
+
     /**
      * Viser bekreftelsesdialog før lagring
      */
     window.confirmSaveEquipment = function() {
+        const mode = document.getElementById('edit-equipment-mode').value;
+        if (mode === 'create') {
+            executeSaveEquipment();
+            return;
+        }
         equipmentConfirmModal.classList.add('show');
     };
 
@@ -803,6 +1283,7 @@ window.selectCustomer = async function(customerId) {
      */
     window.executeSaveEquipment = async function() {
         const equipmentId = document.getElementById('edit-equipment-id').value;
+        const mode = document.getElementById('edit-equipment-mode').value;
 
         const body = {
             systemnavn: document.getElementById('edit-systemnavn').value,
@@ -811,19 +1292,23 @@ window.selectCustomer = async function(customerId) {
             plassering: document.getElementById('edit-plassering').value,
             betjener: document.getElementById('edit-betjener').value,
             location: document.getElementById('edit-location').value,
-            notater: document.getElementById('edit-notater').value
+            notater: document.getElementById('edit-notater').value,
+            clusterId: document.getElementById('edit-cluster-id').value || null
         };
 
         try {
-            const response = await fetch(`/api/admin/equipment/${equipmentId}`, {
-                method: 'PUT',
+            const response = await fetch(mode === 'create' ? '/api/admin/equipment' : `/api/admin/equipment/${equipmentId}`, {
+                method: mode === 'create' ? 'POST' : 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify(body)
+                body: JSON.stringify({
+                    ...body,
+                    customerId: currentSelectedCustomer.externalId || currentSelectedCustomer.id
+                })
             });
 
             if (response.ok) {
-                console.log('✅ Anlegg oppdatert');
+                console.log(mode === 'create' ? '✅ Anlegg opprettet' : '✅ Anlegg oppdatert');
 
                 // Lukk begge modaler
                 equipmentConfirmModal.classList.remove('show');
@@ -831,6 +1316,7 @@ window.selectCustomer = async function(customerId) {
 
                 // Re-hent anleggsliste
                 if (currentSelectedCustomer) {
+                    await loadCustomerClusters(currentSelectedCustomer);
                     const eqResponse = await fetch(`/api/admin/equipment?customerId=${currentSelectedCustomer.externalId || currentSelectedCustomer.id}`, {
                         credentials: 'include'
                     });
@@ -1398,18 +1884,21 @@ window.selectCustomer = async function(customerId) {
         }
     });
 
-    if (equipmentEditModal) {
-        equipmentEditModal.addEventListener('click', function(e) {
-            if (e.target === equipmentEditModal) {
-                closeEquipmentEditModal();
-            }
-        });
-    }
+    // Ikke lukk anleggsmodal ved klikk utenfor.
+    // Den inneholder mange felt og cluster-valg, og utilsiktet lukking er dyrt for brukeren.
 
     if (equipmentConfirmModal) {
         equipmentConfirmModal.addEventListener('click', function(e) {
             if (e.target === equipmentConfirmModal) {
                 cancelSaveEquipment();
+            }
+        });
+    }
+
+    if (clusterActionModal) {
+        clusterActionModal.addEventListener('click', function(e) {
+            if (e.target === clusterActionModal) {
+                closeClusterActionModal();
             }
         });
     }
@@ -1441,6 +1930,8 @@ window.selectCustomer = async function(customerId) {
                 closeImportModal();
             } else if (equipmentConfirmModal.classList.contains('show')) {
                 cancelSaveEquipment();
+            } else if (clusterActionModal && clusterActionModal.classList.contains('show')) {
+                closeClusterActionModal();
             } else if (equipmentEditModal.classList.contains('show')) {
                 closeEquipmentEditModal();
             } else if (orderModal.classList.contains('show')) {
@@ -1452,6 +1943,8 @@ window.selectCustomer = async function(customerId) {
             }
         }
     });
+
+    document.getElementById('cluster-action-save-btn')?.addEventListener('click', handleClusterActionSave);
 
     // Last inn data ved oppstart
     loadData();
