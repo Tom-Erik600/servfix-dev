@@ -79,20 +79,21 @@
                     <table class="r2-table">
                         <thead>
                             <tr>
-                                <th>Oppdrag</th>
-                                <th>Service</th>
-                                <th>Tekniker</th>
+                                <th data-sort="customer" onclick="setSortField('customer')">Oppdrag</th>
+                                <th data-sort="date" onclick="setSortField('date')">Datoer</th>
+                                <th data-sort="technician" onclick="setSortField('technician')">Tekniker</th>
                                 <th>Steg</th>
                                 <th>Verktøy</th>
                             </tr>
                         </thead>
                         <tbody id="reports-table-body">
                             <tr>
-                                <td colspan="5" class="r2-loading">Laster rapporter...</td>
+                                <td colspan="6" class="r2-loading">Laster rapporter...</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
+                <div id="reports-pagination" class="r2-pagination" aria-label="Paginering"></div>
             </div>
         </main>
     </div>

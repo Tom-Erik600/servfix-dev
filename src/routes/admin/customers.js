@@ -277,6 +277,59 @@ router.get('/:customerId/contacts', async (req, res) => {
   }
 });
 
+// POST: Importer alle kontakter fra Tripletex for én kunde (uten å sette rapport-mottaker)
+router.post('/:customerId/contacts/import-from-tripletex', async (req, res) => {
+  const { customerId } = req.params;
+  try {
+    const customerService = require('../../services/customerService');
+    const tripletexService = require('../../services/tripletexService');
+    const tenantId = req.session.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID mangler' });
+
+    const customer = await customerService.getCustomer(tenantId, customerId);
+    if (!customer) return res.status(404).json({ error: 'Kunde ikke funnet' });
+
+    const tripletexCustomerId = customer.external_id;
+    if (!tripletexCustomerId) {
+      return res.status(400).json({ error: 'Kunden har ingen Tripletex-kobling (external_id mangler)' });
+    }
+
+    const tripletexContacts = await tripletexService.getCustomerContacts(tripletexCustomerId);
+
+    const stats = { imported: 0, skipped: 0, errors: [] };
+
+    for (const tc of tripletexContacts) {
+      const name = `${tc.firstName || ''} ${tc.lastName || ''}`.trim();
+      const email = tc.email || '';
+
+      // Hopp over kontakter uten e-post og uten navn
+      if (!name && !email) {
+        stats.skipped++;
+        continue;
+      }
+
+      try {
+        await customerService.upsertContact(tenantId, customerId, {
+          name,
+          email,
+          phone: tc.phoneNumberMobile || tc.phoneNumber || '',
+          role: '',
+          is_report_recipient: false
+        });
+        stats.imported++;
+      } catch (err) {
+        stats.errors.push(`${name || email}: ${err.message}`);
+      }
+    }
+
+    console.log(`✅ [ADMIN CUSTOMERS] Kontaktimport ferdig for kunde ${customerId}:`, stats);
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ [ADMIN CUSTOMERS] Kontaktimport feilet:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST opprett ny kontakt
 router.post('/:customerId/contacts', async (req, res) => {
   const { customerId } = req.params;

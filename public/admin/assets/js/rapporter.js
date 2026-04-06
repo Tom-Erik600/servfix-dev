@@ -62,13 +62,22 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     const state = {
         reports: [],
+        filteredReports: [],
         stats: {},
         isLoading: false,
         currentEditReport: null,
         currentEditReportId: null,
+        pagination: {
+            page: 1,
+            pageSize: 50
+        },
         filters: {
             queue: 'need_action',
             search: ''
+        },
+        sort: {
+            field: 'date',   // 'date' | 'description' | 'customer' | 'technician'
+            dir: 'desc'      // 'asc' | 'desc'
         }
     };
 
@@ -89,6 +98,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             sentNotInvoiced: document.getElementById('stat-sent-not-invoiced'),
             total: document.getElementById('stat-total')
         },
+        pagination: document.getElementById('reports-pagination'),
         editModal: document.getElementById('edit-report-modal')
     };
 
@@ -108,6 +118,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     function setupEventListeners() {
         if (elements.searchInput) {
             elements.searchInput.addEventListener('input', debounce(handleFilters, 250));
+            elements.searchInput.addEventListener('input', () => {
+                state.pagination.page = 1;
+            });
 
             // Small quality-of-life: press / to focus search
             document.addEventListener('keydown', (e) => {
@@ -241,6 +254,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     function setActiveQueue(queue) {
         state.filters.queue = queue;
+        state.pagination.page = 1;
         elements.tabs.forEach((btn) => {
             const isActive = (btn.dataset.queue || '') === queue;
             btn.classList.toggle('is-active', isActive);
@@ -340,6 +354,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             const searchTerm = state.filters.search.toLowerCase();
             filtered = filtered.filter((order) => {
                 return [
+                    order.order_description,
                     order.customer_name,
                     order.order_id,
                     order.technician_name,
@@ -350,18 +365,115 @@ document.addEventListener('DOMContentLoaded', async function() {
             });
         }
 
-        // Sort: blocked first, then oldest service date
+        // Sort: selected field first. Priority brukes kun som tie-breaker
+        // (slik at dato-sortering faktisk oppleves korrekt i UI).
         filtered.sort((a, b) => {
+            const dir = state.sort.dir === 'asc' ? 1 : -1;
+            let cmp = 0;
+
+            if (state.sort.field === 'description') {
+                cmp = (orderDescription(a) || '').localeCompare(orderDescription(b) || '', 'nb');
+            } else if (state.sort.field === 'customer') {
+                cmp = (a.customer_name || '').localeCompare(b.customer_name || '', 'nb');
+            } else if (state.sort.field === 'technician') {
+                cmp = (a.technician_name || '').localeCompare(b.technician_name || '', 'nb');
+            } else {
+                // default: date
+                const da = toDate(a.last_service_date) || toDate(a.order_date) || new Date(0);
+                const db = toDate(b.last_service_date) || toDate(b.order_date) || new Date(0);
+                // Viktig: bruk (da - db). Dir styrer retningen.
+                // - desc => nyest først
+                // - asc  => eldst først
+                cmp = (da - db);
+            }
+
+            if (cmp !== 0) {
+                return dir * cmp;
+            }
+
+            // Tie-breaker: behold prioritet (blocked/send/invoice/done) ved helt lik sortnøkkel
             const pa = getPriorityRank(a);
             const pb = getPriorityRank(b);
             if (pa !== pb) return pa - pb;
 
-            const da = toDate(a.last_service_date) || toDate(a.order_date) || new Date(0);
-            const db = toDate(b.last_service_date) || toDate(b.order_date) || new Date(0);
-            return da - db;
+            // Stabil siste tie-breaker
+            return (a.order_id || '').localeCompare(b.order_id || '', 'nb');
         });
 
-        renderReportsTable(filtered);
+        state.filteredReports = filtered;
+        const totalPages = Math.max(1, Math.ceil(filtered.length / state.pagination.pageSize));
+        if (state.pagination.page > totalPages) {
+            state.pagination.page = totalPages;
+        }
+
+        renderReportsTable(getCurrentPageRows(filtered));
+        renderPagination(filtered.length);
+        updateSortHeaders();
+    }
+
+    function getCurrentPageRows(rows) {
+        const start = (state.pagination.page - 1) * state.pagination.pageSize;
+        return rows.slice(start, start + state.pagination.pageSize);
+    }
+
+    function renderPagination(totalRows) {
+        const el = elements.pagination;
+        if (!el) return;
+
+        const totalPages = Math.max(1, Math.ceil(totalRows / state.pagination.pageSize));
+        const page = state.pagination.page;
+        const startRow = totalRows === 0 ? 0 : ((page - 1) * state.pagination.pageSize) + 1;
+        const endRow = Math.min(totalRows, page * state.pagination.pageSize);
+
+        if (totalRows <= state.pagination.pageSize) {
+            el.innerHTML = `
+                <div class="r2-pagination-info">Viser ${startRow}-${endRow} av ${totalRows}</div>
+            `;
+            return;
+        }
+
+        el.innerHTML = `
+            <div class="r2-pagination-info">Viser ${startRow}-${endRow} av ${totalRows}</div>
+            <div class="r2-pagination-controls">
+                <button type="button" class="r2-page-btn" data-page-action="prev" ${page <= 1 ? 'disabled' : ''}>Forrige</button>
+                <span class="r2-page-label">Side ${page} av ${totalPages}</span>
+                <button type="button" class="r2-page-btn" data-page-action="next" ${page >= totalPages ? 'disabled' : ''}>Neste</button>
+            </div>
+        `;
+
+        const prev = el.querySelector('[data-page-action="prev"]');
+        const next = el.querySelector('[data-page-action="next"]');
+        if (prev) prev.onclick = () => changePage(page - 1);
+        if (next) next.onclick = () => changePage(page + 1);
+    }
+
+    function changePage(nextPage) {
+        const totalPages = Math.max(1, Math.ceil(state.filteredReports.length / state.pagination.pageSize));
+        const page = Math.min(totalPages, Math.max(1, nextPage));
+        if (page === state.pagination.page) return;
+        state.pagination.page = page;
+        renderReportsTable(getCurrentPageRows(state.filteredReports));
+        renderPagination(state.filteredReports.length);
+    }
+
+    function setSortField(field) {
+        state.pagination.page = 1;
+        if (state.sort.field === field) {
+            state.sort.dir = state.sort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+            state.sort.field = field;
+            state.sort.dir = field === 'date' ? 'desc' : 'asc';
+        }
+        handleFilters();
+    }
+
+    function updateSortHeaders() {
+        document.querySelectorAll('.r2-table th[data-sort]').forEach(th => {
+            const field = th.dataset.sort;
+            const isActive = field === state.sort.field;
+            th.classList.toggle('sort-active', isActive);
+            th.dataset.sortDir = isActive ? state.sort.dir : '';
+        });
     }
 
     function applyQueueFilter(reports, queue) {
@@ -409,19 +521,25 @@ document.addEventListener('DOMContentLoaded', async function() {
         const isHasteordre = order.service_type === 'Hasteordre';
 
         const priorityClass = getPriorityClass(order);
-        const serviceDate = formatDate(order.last_service_date);
+        const serviceDate = order.scheduled_date ? formatDate(order.scheduled_date) : '—';
+        const reportDate = formatDate(order.last_service_date);
         const ageText = formatAge(order.last_service_date || order.order_date);
 
         const technician = order.technician_name
             ? order.technician_name.split(' ').map((n) => n[0]).join('').toUpperCase()
             : 'N/A';
 
-        const equipmentLine = order.equipment_names || 'Ukjent anlegg';
-        const equipMeta = order.equipment_count > 1
-            ? `${order.equipment_count} anlegg`
-            : (order.equipment_types || '');
-
         const customer = order.customer_name || 'Ukjent kunde';
+        const description = orderDescription(order);
+
+        const rawEquipNames = order.equipment_names || '';
+        const equipCount = order.equipment_count || 0;
+        const equipParts = rawEquipNames ? rawEquipNames.split(',').map(s => s.trim()).filter(Boolean) : [];
+        const MAX_EQUIP = 2;
+        const equipmentLine = equipParts.length > MAX_EQUIP
+            ? equipParts.slice(0, MAX_EQUIP).join(', ') + ` … og ${equipParts.length - MAX_EQUIP} til`
+            : (rawEquipNames || 'Ukjent anlegg');
+        const equipMeta = equipCount > 1 ? `${equipCount} anlegg` : (order.equipment_types || '');
 
         const reportIdsJson = JSON.stringify(order.report_ids || []).replace(/"/g, '&quot;');
 
@@ -442,7 +560,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
                 <td>
                     <div class="r2-main">
-                        <div class="title">${serviceDate}</div>
+                        <div class="title">${reportDate}</div>
+                        <div class="meta">Rapport</div>
+                        <div class="meta">Service: ${serviceDate}</div>
                         <div class="meta">${escapeHtml(ageText)}</div>
                     </div>
                 </td>
@@ -533,6 +653,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (!dateString) return null;
         const d = new Date(dateString);
         return isNaN(d.getTime()) ? null : d;
+    }
+
+    function orderDescription(order) {
+        return order.order_description || order.description || order.order_id || 'Uten beskrivelse';
     }
 
     function formatDate(dateString) {
@@ -637,25 +761,41 @@ document.addEventListener('DOMContentLoaded', async function() {
         const customerData = data.customer_data || {};
         const checklistItems = data.checklist_items || [];
         const reportDate = data.completedAt || data.createdAt;
+        const serviceDate = data.serviceDate || (data.scheduledDate ? new Date(data.scheduledDate).toISOString().slice(0, 10) : '');
         const reportYear = reportDate ? new Date(reportDate).getFullYear() : new Date().getFullYear();
         const formattedReportDate = reportDate ? new Date(reportDate).toLocaleDateString('nb-NO') : 'N/A';
 
-        let parsedAddress = 'Ikke spesifisert';
-        let parsedPostalCode = 'Ikke spesifisert';
+        let parsedAddress = '';
+        let parsedPostalCode = '';
+        let parsedCity = '';
         const physicalAddress = customerData.physicalAddress || '';
         if (physicalAddress) {
             const parts = physicalAddress.split(',').map((p) => p.trim());
             if (parts.length >= 2) {
                 parsedAddress = parts[0];
-                parsedPostalCode = parts[parts.length - 1];
+                const postalPart = parts[parts.length - 1];
+                const postalMatch = postalPart.match(/^(\d{4})\s+(.+)$/);
+                if (postalMatch) {
+                    parsedPostalCode = postalMatch[1];
+                    parsedCity = postalMatch[2];
+                } else {
+                    parsedPostalCode = postalPart;
+                }
             } else {
                 parsedAddress = physicalAddress;
             }
         } else if (customerData.post_address) {
             const pa = customerData.post_address;
             parsedAddress = pa.addressLine1 || '';
-            parsedPostalCode = pa.postalCode ? `${pa.postalCode} ${pa.city || ''}`.trim() : '';
+            parsedPostalCode = pa.postalCode || '';
+            parsedCity = pa.city || '';
         }
+
+        // Serviceadresse overstyrer kundeadresse hvis satt
+        const serviceAddress = data.serviceAddress || {};
+        const saStreet = serviceAddress.street || '';
+        const saPostalCode = serviceAddress.postalCode || '';
+        const saCity = serviceAddress.city || '';
 
         let recipient = '';
         const contacts = customerData.contacts || [];
@@ -718,22 +858,30 @@ document.addEventListener('DOMContentLoaded', async function() {
                             <tr>
                                 <td colspan="2">
                                     <div class="metadata-cell">
-                                        <label>ADRESSE</label>
-                                        <div class="readonly-field">${escapeHtml(parsedAddress)}</div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="metadata-cell">
-                                        <label>POST NR. / POSTSTED</label>
-                                        <div class="readonly-field">${escapeHtml(parsedPostalCode)}</div>
+                                        <label>SERVICEADRESSE (overstyrer kundeadresse i PDF)</label>
+                                        <input type="text" id="edit-service-address-street" class="editable-field" value="${escapeHtml(saStreet)}" placeholder="${escapeHtml(parsedAddress) || 'Gate/vei'}">
                                     </div>
                                 </td>
                             </tr>
                             <tr>
                                 <td>
                                     <div class="metadata-cell">
-                                        <label>RAPPORT DATO</label>
-                                        <div class="readonly-field">${formattedReportDate}</div>
+                                        <label>POSTNR</label>
+                                        <input type="text" id="edit-service-address-postal-code" class="editable-field" value="${escapeHtml(saPostalCode)}" placeholder="${escapeHtml(parsedPostalCode) || 'Postnr'}">
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>POSTSTED</label>
+                                        <input type="text" id="edit-service-address-city" class="editable-field" value="${escapeHtml(saCity)}" placeholder="${escapeHtml(parsedCity) || 'Poststed'}">
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>SERVICEDATO</label>
+                                        <input type="date" id="edit-service-date" class="editable-field" value="${escapeHtml(serviceDate)}">
                                     </div>
                                 </td>
                                 <td>
@@ -902,7 +1050,14 @@ document.addEventListener('DOMContentLoaded', async function() {
         const metadata = {
             agreement_number: document.getElementById('edit-agreement-number')?.value?.trim() || '',
             visit_number: document.getElementById('edit-visit-number')?.value?.trim() || '',
-            contact_person: document.getElementById('edit-contact-person')?.value?.trim() || ''
+            contact_person: document.getElementById('edit-contact-person')?.value?.trim() || '',
+            service_date: document.getElementById('edit-service-date')?.value?.trim() || ''
+        };
+
+        const serviceAddress = {
+            street: document.getElementById('edit-service-address-street')?.value?.trim() || '',
+            postalCode: document.getElementById('edit-service-address-postal-code')?.value?.trim() || '',
+            city: document.getElementById('edit-service-address-city')?.value?.trim() || ''
         };
 
         const checklistComments = {};
@@ -926,7 +1081,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
 
         const overall_comment = document.getElementById('overall-comment')?.value?.trim() || '';
-        return { metadata, checklistComments, products_used, additional_work, overall_comment };
+        return { metadata, serviceAddress, checklistComments, products_used, additional_work, overall_comment };
     }
 
     async function saveReportChanges() {
@@ -1076,6 +1231,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     window.reloadReports = loadReports;
+    window.setSortField = setSortField;
 
     console.log('✅ Servicerapporter v2 JS loaded');
 });

@@ -1385,6 +1385,55 @@
     overflow: hidden;
 }
 
+.r2-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border-top: 1px solid rgba(229, 231, 235, 0.9);
+    background: rgba(248, 250, 252, 0.8);
+}
+
+.r2-pagination-info {
+    font-size: 12px;
+    color: var(--r2-muted);
+    font-weight: 700;
+}
+
+.r2-pagination-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.r2-page-label {
+    font-size: 12px;
+    color: var(--r2-ink);
+    font-weight: 700;
+}
+
+.r2-page-btn {
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.55);
+    background: rgba(255, 255, 255, 0.95);
+    color: rgba(51, 65, 85, 0.95);
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.r2-page-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.r2-page-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .r2-table-wrap {
     overflow: auto;
 }
@@ -1413,10 +1462,62 @@
     white-space: nowrap;
 }
 
+.r2-table thead th[data-sort] {
+    cursor: pointer;
+    user-select: none;
+}
+.r2-table thead th[data-sort]:hover {
+    color: rgba(31, 41, 55, 0.95);
+    background: rgba(243, 244, 246, 0.95);
+}
+.r2-table thead th[data-sort]::after {
+    content: ' ↕';
+    opacity: 0.3;
+    font-size: 10px;
+}
+.r2-table thead th[data-sort].sort-active[data-sort-dir="desc"]::after {
+    content: ' ↓';
+    opacity: 1;
+}
+.r2-table thead th[data-sort].sort-active[data-sort-dir="asc"]::after {
+    content: ' ↑';
+    opacity: 1;
+}
+
 .r2-table tbody td {
-    padding: 12px 14px;
+    padding: 10px 12px;
     border-bottom: 1px solid rgba(229, 231, 235, 0.85);
     vertical-align: top;
+}
+
+/* Oppdrag-kolonne: begrenset bredde */
+.r2-table tbody td:first-child,
+.r2-table thead th:first-child {
+    min-width: 180px;
+    max-width: 280px;
+}
+
+/* Datoer-kolonne: kompakt */
+.r2-table tbody td:nth-child(2),
+.r2-table thead th:nth-child(2) {
+    white-space: nowrap;
+    min-width: 95px;
+    max-width: 115px;
+}
+
+/* Tekniker-kolonne: kompakt */
+.r2-table tbody td:nth-child(3),
+.r2-table thead th:nth-child(3) {
+    min-width: 65px;
+    max-width: 90px;
+}
+
+/* Steg (chips): vertikal layout */
+.r2-chiprow {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
 }
 
 .r2-row {
@@ -1448,6 +1549,10 @@
     font-size: 12px;
     color: var(--r2-muted);
     line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 270px;
 }
 
 .r2-badges {
@@ -1496,10 +1601,10 @@
 .r2-chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
+    gap: 4px;
+    padding: 3px 8px;
     border-radius: 999px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 800;
     border: 1px solid;
     background: rgba(51, 65, 85, 0.04);
@@ -1508,6 +1613,7 @@
     appearance: none;
     -webkit-appearance: none;
     user-select: none;
+    white-space: nowrap;
 }
 
 .r2-chip[data-action] {

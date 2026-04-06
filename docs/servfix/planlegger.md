@@ -55,6 +55,21 @@ Admin-planleggeren har et to-kolonners oppsett:
 - Fullere vedlikehold av cluster per kunde skjer også fra kundesiden (`/admin/kunder.html`) der anlegg vises gruppert per cluster, kan batch-markeres og flyttes, og tomme cluster kan slettes
 - Tomme cluster er gyldige og vises i kundebildet med `0 anlegg`
 
+### Felter i opprettelsesmodalen
+
+| Felt | Påkrevd | Lagres som |
+|------|---------|------------|
+| Dato | Ja | `scheduled_date` |
+| Prosjekt / Beskrivelse | Ja | `description` + evt. `customer_data.agreement_number` |
+| Besøksnr | Nei | `customer_data.visit_number` |
+| Serviceadresse | Nei | `service_address_street/postal_code/city` |
+| Anleggsvalg | Nei | `included_equipment_ids` |
+| Kundenotat | Nei | `customers.notes` (lagres separat) |
+
+**Avtalenummer (agreement_number):** Settes automatisk når admin velger et Tripletex-prosjekt fra dropdown. Hentes fra `data-project-number`-attributten på det valgte `<option>`-elementet og lagres i `customer_data.agreement_number`. Settes **ikke** ved fritekst-beskrivelse.
+
+**Besøksnummer (visit_number):** Valgfritt fritekstfelt. Lagres i `customer_data.visit_number` i JSONB-feltet på ordren. Vises i rapporter via "rediger PDF"-modalen.
+
 ### Dataflyt ved opprettelse
 
 ```
@@ -182,6 +197,8 @@ Opprett-knappen er deaktivert til:
 | Kundefilter | Viser alle aktive kunder | Viser alle kunder |
 | Prosjektfaner | Ja, egen prosjektfane mot Tripletex | Nei |
 | Prosjektforslag | Ja (fra Tripletex) | Nei (kun fritekst) |
+| Avtalenummer | Ja (settes automatisk fra Tripletex-prosjekt) | Nei |
+| Besøksnummer | Ja (valgfritt felt i modal) | Nei |
 | Cluster i ordreopprettelse | Ja, gruppering og enkel cluster-adm. | Nei |
 | Cluster-bruk i anleggsvalg | Ja | Ja, kun gruppering og valg |
 | Hurtigvalg dato | Nei (kun datepicker) | Ja (1 uke, 1/3/6 mnd) |
@@ -202,3 +219,5 @@ Opprett-knappen er deaktivert til:
 - **Tomme cluster kan eksistere** — de kan opprettes uten anlegg, men slettes bare når de faktisk er tomme
 - **Kundesiden er hovedsted for cluster-vedlikehold** — der vises alle cluster, også tomme, som kollapsede seksjoner med `Øvrige` nederst
 - **Søk med debounce** — begge bruker 300ms debounce på søkeinput
+- **agreement_number settes kun ved prosjektvalg** — fritekstbeskrivelse gir ikke avtalenummer; kun Tripletex-prosjekter setter dette feltet
+- **visit_number er valgfritt** — tomt felt = ingen `visit_number` i `customer_data`; feltet er kun synlig i admin-modalen, ikke i tekniker-appen

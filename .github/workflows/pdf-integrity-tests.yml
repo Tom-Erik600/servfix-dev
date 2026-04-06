@@ -1,0 +1,32 @@
+name: PDF integrity tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  schedule:
+    - cron: '15 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  pdf-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run PDF integrity tests
+        run: npm run test:pdf-integrity

@@ -1257,6 +1257,14 @@ function renderAnleggInfo() {
     const internalNotes = state.equipment?.notater || state.equipment?.internalNotes || '';
     const orderDescription = state.order?.description || state.order?.service_type || 'Service';
 
+    const hasFilters = state.equipment?.hasFilters || state.equipment?.has_filters;
+    const filterTypes = hasFilters ? [
+        (state.equipment?.filterSupply   || state.equipment?.filter_supply)        ? 'Tilluftsfilter' : null,
+        (state.equipment?.filterExhaust  || state.equipment?.filter_exhaust)       ? 'Avtrekksfilter' : null,
+        (state.equipment?.filterDriveSupply  || state.equipment?.filter_drive_supply)  ? 'Drivreim tilluftsvifte' : null,
+        (state.equipment?.filterDriveExhaust || state.equipment?.filter_drive_exhaust) ? 'Drivrem avtrekksvifte' : null
+    ].filter(Boolean) : [];
+
     if (isServiceV2Page()) {
         const phoneHref = phone && phone !== 'Ikke registrert' ? `tel:${phone}` : null;
         const contactText = contact || 'Ikke registrert';
@@ -1297,6 +1305,12 @@ function renderAnleggInfo() {
                         <div class="service-note-card">
                             <span>Intern kommentar</span>
                             <p>${internalNotes}</p>
+                        </div>
+                    ` : ''}
+                    ${filterTypes.length > 0 ? `
+                        <div class="service-field-card full-width">
+                            <span>Filtre</span>
+                            <strong>${filterTypes.join(', ')}</strong>
                         </div>
                     ` : ''}
                 </div>

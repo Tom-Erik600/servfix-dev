@@ -65,6 +65,22 @@ class UnifiedPDFGenerator {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  getEffectiveServiceDate(data) {
+    return data?.customer_data?.service_date || data?.service_date || '';
+  }
+
+  formatNorwegianDate(dateValue) {
+    if (!dateValue) return '';
+    if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateValue)) {
+      const [year, month, day] = dateValue.slice(0, 10).split('-');
+      return `${day}.${month}.${year}`;
+    }
+
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('nb-NO');
+  }
+
   /* ===========================
    * Company settings (logo / info)
    * =========================== */
@@ -113,6 +129,13 @@ class UnifiedPDFGenerator {
         };
         console.log('✅ Company info loaded from settings:', defaults.company);
       }
+
+      // Rapport-innstillinger
+      defaults.reportSettings = {
+        largeAvvikImages: !!settings?.reportSettings?.largeAvvikImages,
+        reportHeadingColor: settings?.reportSettings?.reportHeadingColor || '#1d4ed8',
+        reportHeadingTextColor: settings?.reportSettings?.reportHeadingTextColor || '#ffffff',
+      };
     } else {
       console.log('ℹ️ No settings file found, using defaults');
     }
@@ -593,13 +616,14 @@ class UnifiedPDFGenerator {
       </section>`;
   }
 
-  renderAvvikTable(data) {
+  renderAvvikTable(data, settings) {
+  const largeAvvikImages = !!settings?.reportSettings?.largeAvvikImages;
   console.log('🔍 renderAvvikTable called with:', {
     hasAvvik: !!data.avvik,
     avvikLength: data.avvik?.length || 0,
-    avvikData: data.avvik
+    largeAvvikImages
   });
-  
+
   if (!data.avvik || !data.avvik.length) {
     console.log('⚠️ No avvik to render - showing "Ingen avvik" message');
     return `
@@ -610,18 +634,36 @@ class UnifiedPDFGenerator {
         </p>
       </section>`;
   }
-  
-  const rows = data.avvik.map(a => `
+
+  const rows = data.avvik.map(a => {
+    const imagesHtml = (largeAvvikImages && a.images && a.images.length > 0) ? `
+      <tr>
+        <td colspan="5" style="padding: 4px 10px 12px 10px; border-top: none;">
+          <div class="avvik-images-inline">
+            <div class="images-grid">
+              ${a.images.map(img => `
+                <div class="image-container">
+                  <img src="${img.url}" class="avvik-image-small" alt="${this.escapeHtml(img.description || 'Avviksbilde')}"/>
+                  ${img.description ? `<span class="image-caption">${this.escapeHtml(img.description)}</span>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </td>
+      </tr>` : '';
+
+    return `
     <tr>
       <td>${this.escapeHtml(a.avvik_id)}</td>
       <td>${this.escapeHtml(a.systemnavn)}</td>
       <td>${this.escapeHtml(a.systemnummer)}</td>
       <td>${this.escapeHtml(a.komponent)}</td>
       <td>${this.escapeHtml(a.kommentar)}</td>
-    </tr>`).join('');
-  
-  console.log(`✅ Rendering ${data.avvik.length} avvik rows`);
-  
+    </tr>${imagesHtml}`;
+  }).join('');
+
+  console.log(`✅ Rendering ${data.avvik.length} avvik rows${largeAvvikImages ? ' (with images)' : ''}`);
+
   return `
     <section class="section avoid-break avvik-section">
       <h2 class="section-header">Registrerte avvik</h2>
@@ -855,7 +897,7 @@ renderWorkTable(work) {
 
   generateSignSection(data, settings) {
     const technician = data.technician_name || 'Ukjent tekniker';
-    const reportDate = new Date(data.completed_at || data.created_at).toLocaleDateString('nb-NO');
+    const reportDate = this.formatNorwegianDate(this.getEffectiveServiceDate(data));
 
     return `
       <section class="section sign-section avoid-break">
@@ -867,24 +909,36 @@ renderWorkTable(work) {
             Servicetekniker
           </div>
           <div class="location-date">
-            Oslo, ${reportDate}
+            Oslo${reportDate ? `, ${reportDate}` : ''}
           </div>
         </div>
       </section>`;
   }
 
   getAirTechCSS() {
+    return this.getAirTechCSSWithOptions({ largeAvvikImages: false });
+  }
+
+  getAirTechCSSWithOptions(options = {}) {
+    const largeAvvikImages = !!options.largeAvvikImages;
+    const avvikImageMaxWidth = largeAvvikImages ? 180 : 160;
+    const avvikImageMaxHeight = largeAvvikImages ? 130 : 115;
+    const headingColor = options.reportHeadingColor || '#1d4ed8';
+    const headingTextColor = options.reportHeadingTextColor || '#ffffff';
+    const avvikImageContainerMaxWidth = largeAvvikImages ? 180 : 160;
+    const avvikImageGap = largeAvvikImages ? 14 : 12;
+
     return `
       @page { size: A4; margin: 25mm 15mm 20mm 15mm; }
       html, body { font-family: Arial, sans-serif; color:#111; font-size:10pt; line-height: 1.4; }
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; box-sizing: border-box; }
-      .header-container { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0B5FAE; padding-bottom: 8px; margin-bottom: 10px; }
+      .header-container { display: flex; justify-content: space-between; align-items: flex-start; background-color: ${headingColor}; padding: 12px 16px 10px 16px; margin-bottom: 10px; border-radius: 4px; }
       .header-text { flex-grow: 1; }
       
-      .main-title { font-size: 24pt; margin: 0 0 4px 0; color:#0B5FAE; }
-      .report-id { color:#374151; margin: 0; font-size: 10pt; }
+      .main-title { font-size: 24pt; margin: 0 0 4px 0; color:${headingTextColor}; }
+      .report-id { color:${headingTextColor}; opacity: 0.85; margin: 0; font-size: 10pt; }
       .section { margin-top: 16px; }
-      .section-header { font-size: 13pt; margin: 0 0 8px 0; color:#0B5FAE; border-bottom:1px solid #0B5FAE; padding-bottom: 4px; }
+      .section-header { font-size: 13pt; margin: 0 0 8px 0; color:${headingColor}; border-bottom:1px solid ${headingColor}; padding-bottom: 4px; }
       .section-subheader { font-size: 12pt; margin: 12px 0 6px 0; }
       .avoid-break { page-break-inside: avoid; }
       .page-break { page-break-before: always; }
@@ -940,17 +994,17 @@ renderWorkTable(work) {
       }
       .images-grid-inline {
         display: flex;
-        gap: 8px;
+        gap: 10px;
         flex-wrap: wrap;
         /* ENDRET HER: Venstrejusterer bildene i gridden */
         justify-content: flex-start; 
       }
       .image-container-inline {
-        max-width: 100px;
+        max-width: 120px;
       }
       .checklist-image {
-        max-width: 100px;
-        max-height: 75px;
+        max-width: 120px;
+        max-height: 90px;
         object-fit: contain;
         border: 2px solid #e2e8f0;
         border-radius: 4px;
@@ -962,11 +1016,11 @@ renderWorkTable(work) {
         display: block;
         margin-top: 3px;
         line-height: 1.2;
-        max-width: 100px;
+        max-width: 120px;
       }
-      .photos-grid { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
-      .photo-container { display: inline-block; max-width: 140px; }
-      .photo { max-width: 140px; max-height: 95px; object-fit: contain; border: 2px solid #e2e8f0; border-radius: 4px; }
+      .photos-grid { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0; }
+      .photo-container { display: inline-block; max-width: 160px; }
+      .photo { max-width: 160px; max-height: 110px; object-fit: contain; border: 2px solid #e2e8f0; border-radius: 4px; }
       /* === SIGNATUR-SEKSJON (NY) === */
       .sign-section {
         margin-top: 50px; /* Mer luft over */
@@ -1028,9 +1082,9 @@ renderWorkTable(work) {
       .equipment-avvik-section { margin-top: 15px; }
       .avvik-detail { margin: 10px 0; padding: 10px; background: #fff; border-left: 3px solid #dc2626; }
       .avvik-images-inline { margin-top: 10px; }
-      .images-grid { display: flex; gap: 10px; flex-wrap: wrap; }
-      .image-container { display: inline-block; max-width: 140px; text-align: center; }
-      .avvik-image-small { max-width: 140px; max-height: 100px; object-fit: contain; border: 2px solid #fca5a5; border-radius: 4px; }
+      .images-grid { display: flex; gap: ${avvikImageGap}px; flex-wrap: wrap; }
+      .image-container { display: inline-block; max-width: ${avvikImageContainerMaxWidth}px; text-align: center; }
+      .avvik-image-small { max-width: ${avvikImageMaxWidth}px; max-height: ${avvikImageMaxHeight}px; object-fit: contain; border: 2px solid #fca5a5; border-radius: 4px; }
     
 /* Driftstider-tabell */
 .drift-schedule-table { 
@@ -1077,20 +1131,30 @@ renderWorkTable(work) {
     return match?.email || customerData.email || '';
   }
 
-  getOrderLocationFromCustomer(customerData, equipmentLocation) {
+  getOrderLocationFromCustomer(customerData, equipmentLocation, serviceAddress = {}) {
     console.log('🔍 DEBUG Location Data:', JSON.stringify({
       hasCustomerData: !!customerData,
       customerDataKeys: customerData ? Object.keys(customerData) : [],
       physicalAddress: customerData?.physicalAddress,
       post_address: customerData?.post_address,
       equipmentLocation: equipmentLocation,
+      serviceAddress,
       fullCustomerData: customerData
     }, null, 2));
+
     // Prioriter:
-    // 1. equipment.location (byggnavn) - fra equipment-tabellen
+    // 1. Serviceadresse satt på ordren (eksplisitt overstyring)
     // 2. physicalAddress fra Tripletex (via customerData)
     // 3. Fallback til post_address
-    
+
+    if (serviceAddress?.street) {
+      return {
+        buildingName: equipmentLocation || customerData?.location?.name || '',
+        address: serviceAddress.street,
+        postalCode: [serviceAddress.postalCode, serviceAddress.city].filter(Boolean).join(' '),
+      };
+    }
+
     const physicalAddress = customerData?.physicalAddress || '';
     const postAddress = customerData?.post_address || {};
     
@@ -1133,15 +1197,22 @@ renderWorkTable(work) {
     const theme = this.getReportTheme(data.equipment_type);
     const logoTag = ''; // Logo er nå i headerTemplate i stedet
     const customerName = data.customer_name || '';
+    const projectName = data.order_description || data.description || '';
+    const reportTitle = [customerName, projectName].filter(Boolean).join(' • ');
     const recipient = this.getRecipientFromCustomerData(data.customer_data);
-    const where = this.getOrderLocationFromCustomer(data.customer_data, data.equipment_location);
+    const where = this.getOrderLocationFromCustomer(data.customer_data, data.equipment_location, {
+      street: data.service_address_street,
+      postalCode: data.service_address_postal_code,
+      city: data.service_address_city,
+    });
+    const serviceDate = this.formatNorwegianDate(this.getEffectiveServiceDate(data));
 
     console.log('🔍 DEBUG Where Result:', JSON.stringify(where, null, 2));
     console.log('🔍 DEBUG Full data.customer_data:', JSON.stringify(data.customer_data, null, 2));
     const technician = data.technician_name || 'Ukjent tekniker';
 
     const equipmentOverview = this.renderEquipmentOverviewTable(data);
-    const avvikTable = this.renderAvvikTable(data);
+    const avvikTable = this.renderAvvikTable(data, settings);
     const summarySection = this.generateSummarySection(data, settings);
     const checklistSections = this.renderChecklistResults(data);
     const signSection = this.generateSignSection(data, settings);
@@ -1149,13 +1220,13 @@ renderWorkTable(work) {
     return `
       <!DOCTYPE html><html lang="no"><head><meta charset="utf-8"/>
       <title>${this.escapeHtml(theme.title)} ${this.escapeHtml(data.id)}</title>
-      <style>${this.getAirTechCSS()}</style></head><body>
+      <style>${this.getAirTechCSSWithOptions({ largeAvvikImages: !!settings?.reportSettings?.largeAvvikImages, reportHeadingColor: settings?.reportSettings?.reportHeadingColor, reportHeadingTextColor: settings?.reportSettings?.reportHeadingTextColor })}</style></head><body>
       <div class="pdf-container">
       <header class="header-container">
         <div class="header-text">
-          <h1 class="main-title">Servicerapport: ${this.escapeHtml(customerName)}</h1>
+          <h1 class="main-title">Servicerapport: ${this.escapeHtml(reportTitle || customerName || 'Ukjent kunde')}</h1>
           <p class="report-id">
-            Ordre ${this.escapeHtml(data.order_number || '')} • ${new Date(data.completed_at || data.created_at).toLocaleDateString('nb-NO')}
+            Ordre ${this.escapeHtml(data.order_number || '')}${serviceDate ? ` • ${serviceDate}` : ''}
           </p>
         </div>
 
@@ -1179,7 +1250,7 @@ renderWorkTable(work) {
               <td><div class="info-cell"><div class="label">Post nr. / Poststed</div><div class="data">${this.escapeHtml(where.postalCode || 'Ikke spesifisert')}</div></div></td>
             </tr>
             <tr class="meta-row">
-              <td><div class="info-cell"><div class="label">Rapport dato</div><div class="data">${new Date(data.completed_at || data.created_at).toLocaleDateString('nb-NO')}</div></div></td>
+              <td><div class="info-cell"><div class="label">Servicedato</div><div class="data">${this.escapeHtml(serviceDate)}</div></div></td>
               <td><div class="info-cell"><div class="label">Utført av</div><div class="data">${this.escapeHtml(technician)}</div></div></td>
               <td><div class="info-cell"><div class="label">Vår kontaktperson</div><div class="data">${this.escapeHtml(data.customer_data?.contact_person || technician)}</div></div></td>
             </tr>
@@ -1282,6 +1353,158 @@ renderWorkTable(work) {
     const pool = await db.getTenantConnection(tenantId);
     await pool.query('UPDATE service_reports SET pdf_path = $1, pdf_generated = true WHERE id = $2', [pdfPath, reportId]);
     console.log(`✅ Database updated for: ${reportId}`);
+  }
+
+  async updateOrderPDFPath(orderId, pdfPath, tenantId) {
+    const pool = await db.getTenantConnection(tenantId);
+    await pool.query(
+      'UPDATE orders SET pdf_path = $1, pdf_generated = true WHERE id = $2',
+      [pdfPath, orderId]
+    );
+    console.log(`✅ Database updated for order: ${orderId}`);
+  }
+
+  /* ===========================
+   * Ordre-basert datahenting (1 ordre = 1 PDF)
+   * =========================== */
+  async fetchOrderData(orderId, tenantId) {
+    const pool = await db.getTenantConnection(tenantId);
+
+    // Hent ordre-metadata + alle fullførte servicerapporter i én query
+    const orderQ = `
+      SELECT
+        o.id AS order_id,
+        o.id AS order_number,
+        o.customer_name,
+        o.description AS order_description,
+        o.customer_data,
+        o.scheduled_date AS service_date,
+        o.service_address_street,
+        o.service_address_postal_code,
+        o.service_address_city,
+        t.name AS technician_name
+      FROM orders o
+      LEFT JOIN technicians t ON t.id = o.technician_id
+      WHERE o.id = $1
+      LIMIT 1;
+    `;
+    const orderRes = await pool.query(orderQ, [orderId]);
+    if (!orderRes.rows.length) throw new Error(`Order not found: ${orderId}`);
+    const order = orderRes.rows[0];
+    order.customer_data = this.safeJsonParse(order.customer_data, {});
+
+    // Hent alle fullførte rapporter for ordren med utstyrsinformasjon
+    const reportsQ = `
+      SELECT
+        sr.id AS report_id,
+        sr.equipment_id,
+        sr.checklist_data,
+        sr.photos,
+        sr.products_used,
+        sr.additional_work,
+        e.systemnavn AS equipment_name,
+        e.systemtype AS equipment_type,
+        e.plassering AS equipment_location,
+        e.systemnummer AS system_nummer,
+        e.betjener AS equipment_betjener
+      FROM service_reports sr
+      JOIN equipment e ON e.id = sr.equipment_id
+      WHERE sr.order_id = $1
+        AND sr.status = 'completed'
+      ORDER BY sr.created_at ASC;
+    `;
+    const reportsRes = await pool.query(reportsQ, [orderId]);
+
+    const allReports = reportsRes.rows.map(r => ({
+      ...r,
+      checklist_data: this.safeJsonParse(r.checklist_data, {}),
+      photos: this.safeJsonParse(r.photos, []) || [],
+    }));
+
+    // Hent avviksbilder for alle rapporter i én query
+    const allReportIds = allReports.map(r => r.report_id).filter(Boolean);
+    let avvikImages = [];
+    if (allReportIds.length > 0) {
+      const avvikRes = await pool.query(
+        `SELECT service_report_id, checklist_item_id, image_url, metadata
+         FROM avvik_images WHERE service_report_id = ANY($1::text[])`,
+        [allReportIds]
+      );
+      avvikImages = avvikRes.rows;
+    }
+
+    console.log(`📸 Loaded ${avvikImages.length} avvik images for order ${orderId}`);
+    console.log(`📋 Loaded ${allReports.length} service reports for order ${orderId}`);
+
+    // Bruk første rapport som "primær" for enkelt-felt-kompatibilitet med processAirTechData
+    const primaryReport = allReports[0] || {};
+
+    return {
+      ...order,
+      // Feltene processAirTechData forventer fra en enkelt rapport
+      id: primaryReport.report_id || orderId,
+      equipment_id: primaryReport.equipment_id,
+      equipment_name: primaryReport.equipment_name,
+      equipment_type: primaryReport.equipment_type,
+      equipment_location: primaryReport.equipment_location,
+      equipment_serial: primaryReport.system_nummer,
+      equipment_betjener: primaryReport.equipment_betjener,
+      checklist_data: primaryReport.checklist_data || {},
+      photos: primaryReport.photos || [],
+      products_used: this.safeJsonParse(primaryReport.products_used, []) || [],
+      additional_work: this.safeJsonParse(primaryReport.additional_work, []) || [],
+      status: 'completed',
+      // Alle rapporter for fullstendig PDF
+      all_reports: allReports,
+      avvik_images: avvikImages,
+      tenant_id: tenantId,
+    };
+  }
+
+  async generateOrderReport(orderId, tenantId, onProgress = null) {
+    const progress = (pct, label) => {
+      if (onProgress) onProgress(pct, label);
+    };
+
+    await this.init();
+    try {
+      console.log(`📄 Genererer ordre-PDF for ordre ${orderId}...`);
+
+      progress(5, 'Henter ordredata...');
+      const orderData = await this.fetchOrderData(orderId, tenantId);
+
+      progress(15, 'Henter innstillinger...');
+      const settings = await this.loadCompanySettings(tenantId);
+
+      progress(25, 'Prosesserer sjekklister...');
+      const processed = await this.processAirTechData(orderData);
+
+      if (processed.avvik?.length) {
+        processed.avvik.forEach((a, i) => {
+          console.log(`  - Avvik ${i + 1} (ID: ${a.avvik_id}): ${a.images?.length || 0} bilder`);
+        });
+      }
+
+      progress(40, 'Laster inn bilder...');
+      await this.inlineAllImages(processed);
+
+      progress(65, 'Bygger rapport...');
+      const html = this.generateHTML(processed, settings);
+      await this.debugSaveHTML(html, orderId);
+
+      progress(75, 'Genererer PDF...');
+      const pdfBuffer = await this.generatePDF(html, settings);
+
+      progress(90, 'Laster opp...');
+      const relativePath = await this.uploadToGCS(tenantId, pdfBuffer, orderId, orderId);
+      await this.updateOrderPDFPath(orderId, relativePath, tenantId);
+
+      progress(100, 'Ferdig!');
+      console.log(`✅ Ordre-PDF generert: ${relativePath}`);
+      return relativePath;
+    } finally {
+      await this.close();
+    }
   }
 
   async debugSaveHTML(html, reportId) {

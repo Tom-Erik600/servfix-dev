@@ -11,6 +11,7 @@ Integrates with Tripletex as a read-only customer master data source. Customers,
 - Servfixmail contact management (report recipients for billing)
 - Project listing from Tripletex
 - Local invoice tracking (marking reports as invoiced)
+- Contact import per customer (import all Tripletex contacts for a specific customer)
 
 **Not included:**
 - Order sync from Tripletex (field `tripletex_order_id` exists but is unused)
@@ -103,7 +104,25 @@ Orders / Reports / Email — always use local data, never Tripletex directly
 | `customer_id` | FK | Links to local customer |
 | `name`, `email`, `phone` | VARCHAR | Contact info |
 | `role` | VARCHAR | Contact role |
-| `is_report_recipient` | BOOLEAN | True for servfixmail contacts |
+| `is_report_recipient` | BOOLEAN | True for servfixmail contacts only — **not** set automatically during contact import |
+
+## Contact import per customer
+
+Contacts for a specific customer can be imported from Tripletex on demand via the admin customer page (`/admin/kunder.html`).
+
+**Endpoint:** `POST /api/admin/customers/:customerId/contacts/import-from-tripletex`
+
+**Behavior:**
+- Fetches all contacts from Tripletex for the given customer (`GET /contact?customerId={externalId}`)
+- For each contact: upserts into `customer_contacts` using `(customer_id, email)` as the unique key
+- New contacts are inserted with `is_report_recipient = false` — this is never set automatically during import
+- Existing contacts with the same email are updated (name, phone, role)
+- Returns `{ imported: N }` where N is the count of inserted/updated contacts
+
+**Important rules:**
+- `is_report_recipient` is **never** automatically set during contact import. Admins must set it manually after import if needed.
+- The servfixmail contact (`lastName='servfixmail'`) is resolved separately during the full customer import flow — it is not part of per-customer contact import.
+- Import is idempotent: re-running does not create duplicates.
 
 ## Outputs
 
@@ -164,8 +183,9 @@ Orders / Reports / Email — always use local data, never Tripletex directly
 - Tripletex is read-only. ServFix must never create, update, or delete data in Tripletex via API.
 - Runtime operations in ServFix must continue to work when Tripletex is unavailable, as long as required customer data has already been imported locally.
 - Local customer edits must not be overwritten by import unless the user explicitly selects the customer for re-import.
-- The `servfixmail` contact is the single source of truth for report email recipients. Changing this contact changes where billing reports go.
+- A customer can have multiple `is_report_recipient = true` contacts. All of them receive the service report email. The flag is admin-controlled only — never set automatically during import.
 - Missing servfixmail contact must not block customer import — it only affects automatic billing recipient resolution.
+- Contact import (`import-from-tripletex`) must never automatically set `is_report_recipient = true`. That flag is admin-controlled only.
 - After import, all application logic must use local database data — never call Tripletex API for runtime operations. New features must not introduce direct Tripletex API calls into order, report, or technician runtime flows unless explicitly approved by design.
 - Imported Tripletex data must only be written to the current tenant's local database and must never become visible across tenants.
 - Re-running the same import must be idempotent — it must not create duplicate customers, contacts, or inconsistent local state.
@@ -200,7 +220,7 @@ Critical scenarios to cover:
 A Tripletex integration change is considered complete when:
 - Authentication flow works correctly (token creation, caching, usage).
 - Import correctly handles new, updated, unchanged, and locally-edited customers.
-- Servfixmail contact resolution produces correct report recipients.
+- Servfixmail contact resolution produces correct report recipients (all contacts with `is_report_recipient = true`).
 - No write operations are added to Tripletex.
 - Local data integrity is preserved (no overwrites of local edits).
 - All downstream features still use local data correctly.
@@ -231,6 +251,7 @@ A Tripletex integration change is considered complete when:
 | POST | `/:customerId/contacts` | Create contact |
 | PUT | `/:customerId/contacts/:contactId` | Update contact |
 | DELETE | `/:customerId/contacts/:contactId` | Delete contact |
+| POST | `/:customerId/contacts/import-from-tripletex` | Import all Tripletex contacts for customer |
 | GET | `/:customerId/projects` | List open Tripletex projects |
 
 **Technician Customer API** (`/api/customers`):

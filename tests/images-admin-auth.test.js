@@ -86,3 +86,59 @@ describe('Images admin auth', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('Images app-settings (tekniker)', () => {
+  test('unauthenticated user gets 401', async () => {
+    const app = createTestApp({});
+
+    const res = await request(app).get('/api/images/app-settings');
+
+    expect(res.status).toBe(401);
+  });
+
+  test('technician with session tenantId gets hmsSettings', async () => {
+    const app = createTestApp({ technicianId: 'tech-1', tenantId: 'tenant-a' });
+
+    const res = await request(app).get('/api/images/app-settings');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('hmsSettings');
+  });
+
+  test('technician falls back to req.tenantId (subdomain) when session has no tenantId', async () => {
+    const app = createTestApp({ technicianId: 'tech-1' }, { tenantId: 'tenant-a' });
+
+    const res = await request(app).get('/api/images/app-settings');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('hmsSettings');
+  });
+
+  test('technician gets 400 when neither session nor req has tenantId', async () => {
+    const app = createTestApp({ technicianId: 'tech-1' });
+
+    const res = await request(app).get('/api/images/app-settings');
+
+    expect(res.status).toBe(400);
+  });
+
+  test('admin can also use app-settings endpoint', async () => {
+    const app = createTestApp({ isAdmin: true, tenantId: 'tenant-a' });
+
+    const res = await request(app).get('/api/images/app-settings');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('hmsSettings');
+  });
+
+  test('app-settings does not expose admin-only fields', async () => {
+    const app = createTestApp({ technicianId: 'tech-1', tenantId: 'tenant-a' });
+
+    const res = await request(app).get('/api/images/app-settings');
+
+    expect(res.status).toBe(200);
+    expect(res.body).not.toHaveProperty('companyInfo');
+    expect(res.body).not.toHaveProperty('reportSettings');
+    expect(res.body).not.toHaveProperty('logo');
+  });
+});

@@ -610,7 +610,10 @@ function escapeHtml(unsafe) {
         });
 
         document.querySelectorAll('.equipment-checkbox').forEach(checkbox => {
-            checkbox.addEventListener('change', syncClusterCheckboxStates);
+            checkbox.addEventListener('change', () => {
+                syncClusterCheckboxStates();
+                updateEquipmentCounter();
+            });
         });
 
         document.querySelectorAll('.equipment-remove-cluster-btn').forEach(button => {
@@ -624,6 +627,7 @@ function escapeHtml(unsafe) {
         });
 
         syncClusterCheckboxStates();
+        updateEquipmentCounter();
     }
 
     function selectAllEquipment() {
@@ -631,6 +635,7 @@ function escapeHtml(unsafe) {
             cb.checked = true;
         });
         syncClusterCheckboxStates();
+        updateEquipmentCounter();
     }
 
     function deselectAllEquipment() {
@@ -638,6 +643,15 @@ function escapeHtml(unsafe) {
             cb.checked = false;
         });
         syncClusterCheckboxStates();
+        updateEquipmentCounter();
+    }
+
+    function updateEquipmentCounter() {
+        const counter = document.getElementById('equipment-counter');
+        if (!counter) return;
+        const all = document.querySelectorAll('.equipment-checkbox').length;
+        const checked = document.querySelectorAll('.equipment-checkbox:checked').length;
+        counter.textContent = `${checked} av ${all} anlegg merket`;
     }
 
     function setClusterSelection(clusterId, checked) {
@@ -916,39 +930,44 @@ function escapeHtml(unsafe) {
         modalContent.innerHTML = `
             <div class="modal-header">
                 <h3>Opprett serviceoppdrag</h3>
+                <span style="font-size: 13px; color: #6b7280; font-weight: 400;">${escapeHtml(customer.name)} · ${escapeHtml(technicianName)}</span>
             </div>
             
             <div class="modal-body">
-                <p class="modal-info-text">
-                    Opprett nytt serviceoppdrag for <strong>${customer.name}</strong>
-                    med tekniker <strong>${technicianName}</strong>.
-                </p>
-
-                <div style="background: #f9fafb; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 13px; color: #374151;">
-                    ${customer.contact ? `<div style="margin-bottom: 4px;"><strong>Kontakt:</strong> ${customer.contact}</div>` : ''}
-                    ${customer.email ? `<div style="margin-bottom: 4px;"><strong>E-post:</strong> ${customer.email}</div>` : ''}
-                    ${customer.phone ? `<div><strong>Telefon:</strong> ${customer.phone}</div>` : ''}
-                </div>
-
                 <div class="form-group">
-                    <label for="modal-date">Velg dato:</label>
+                    <label for="modal-date">Dato</label>
                     <input type="date" id="modal-date" value="${today}" min="${today}" required>
                 </div>
-                
+
                 <div class="form-group">
-                    <label for="modal-description">Beskrivelse:</label>
+                    <label for="modal-description">Prosjekt / Beskrivelse</label>
                     <div id="description-dropdown-wrapper">
-                        <select id="modal-description-select" style="width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; color: #374151; background: white; cursor: pointer;">
+                        <select id="modal-description-select" class="form-input">
                             <option value="">⏳ Laster prosjekter...</option>
                         </select>
                     </div>
                     <input type="text" id="modal-description"
                            value="${escapeAttribute(defaultDescription)}"
                            placeholder="Skriv inn beskrivelse..."
-                           style="display: none; width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; box-sizing: border-box;"
+                           class="form-input"
+                           style="display: none;"
                            required>
                 </div>
-                
+
+                <div class="form-group">
+                    <label for="modal-visit-number">Besøksnr <span style="font-weight: 400; color: #9ca3af;">(valgfri)</span></label>
+                    <input type="text" id="modal-visit-number" placeholder="F.eks. 3" class="form-input">
+                </div>
+
+                <div class="form-group">
+                    <label for="modal-service-address-street">Serviceadresse <span style="font-weight: 400; color: #9ca3af;">(valgfri)</span></label>
+                    <input type="text" id="modal-service-address-street" placeholder="Gate/vei" class="form-input">
+                    <div style="display: flex; gap: 8px; margin-top: 6px;">
+                        <input type="text" id="modal-service-address-postal-code" placeholder="Postnr" class="form-input" style="flex: 0 0 100px;">
+                        <input type="text" id="modal-service-address-city" placeholder="Poststed" class="form-input" style="flex: 1;">
+                    </div>
+                </div>
+
                 <div class="equipment-selection-section">
                     <h4>Velg anlegg for service:</h4>
                     <div class="equipment-selection-help">
@@ -961,6 +980,7 @@ function escapeHtml(unsafe) {
                     <div class="equipment-bulk-actions">
                         <button type="button" class="btn equipment-quick-btn equipment-quick-btn-add" id="equipment-select-all-btn">+ Marker alle</button>
                         <button type="button" class="btn equipment-quick-btn equipment-quick-btn-remove" id="equipment-deselect-all-btn">- Fjern markering alle</button>
+                        <span id="equipment-counter" style="margin-left: 12px; font-size: 13px; color: #6b7280; align-self: center;"></span>
                     </div>
                     <div class="equipment-list">
                         <!-- Anleggslisten lastes her av loadEquipmentForModal -->
@@ -974,9 +994,8 @@ function escapeHtml(unsafe) {
                 </div>
 
                 <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-                    <label for="modal-customer-notes">Kundenotat:</label>
-                    <textarea id="modal-customer-notes" rows="3" placeholder="Notat om kunden (vises ikke på rapport)..."
-                              style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; resize: vertical;"></textarea>
+                    <label for="modal-customer-notes">Kundenotat <span style="font-weight: 400; color: #9ca3af;">(vises ikke på rapport)</span></label>
+                    <textarea id="modal-customer-notes" rows="3" placeholder="Interne notater om kunden..." class="form-input" style="resize: vertical;"></textarea>
                 </div>
             </div>
             
@@ -1055,6 +1074,7 @@ async function loadProjectSuggestions(customer, preferredDescription = '') {
             const opt = document.createElement('option');
             opt.value = p.displayName;
             opt.textContent = p.displayName;
+            if (p.number != null) opt.dataset.projectNumber = p.number;
             if ((preferredDescription && p.displayName === preferredDescription) || (!preferredDescription && i === 0)) {
                 opt.selected = true;
             }
@@ -1552,6 +1572,15 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
     const scheduledDate = document.getElementById('modal-date')?.value;
     const description = document.getElementById('modal-description')?.value;
     const customerNotes = document.getElementById('modal-customer-notes')?.value?.trim() ?? '';
+    const visitNumber = document.getElementById('modal-visit-number')?.value?.trim() || null;
+    const serviceAddressStreet = document.getElementById('modal-service-address-street')?.value?.trim() || null;
+    const serviceAddressPostalCode = document.getElementById('modal-service-address-postal-code')?.value?.trim() || null;
+    const serviceAddressCity = document.getElementById('modal-service-address-city')?.value?.trim() || null;
+
+    // Les prosjektnummer fra valgt option (kun satt når et Tripletex-prosjekt er valgt)
+    const descSelect = document.getElementById('modal-description-select');
+    const selectedOption = descSelect?.options[descSelect.selectedIndex];
+    const agreementNumber = selectedOption?.dataset?.projectNumber || null;
     
     if (!scheduledDate) {
         showToast('Vennligst velg en dato', 'error');
@@ -1605,8 +1634,14 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
                 email: completeData.servfixEmail || null,  // KUN servfixmail-epost, ALDRI fallback
                 organizationNumber: targetCustomer.organizationNumber || null,
                 contact: targetCustomer.contact || null,
-                phone: targetCustomer.phone || null
-            }        };
+                phone: targetCustomer.phone || null,
+                ...(agreementNumber != null && { agreement_number: String(agreementNumber) }),
+                ...(visitNumber != null && { visit_number: visitNumber })
+            },
+            serviceAddressStreet: serviceAddressStreet,
+            serviceAddressPostalCode: serviceAddressPostalCode,
+            serviceAddressCity: serviceAddressCity
+        };
         
         // Legg til includedEquipmentIds hvis valgt
         if (selectedEquipment.length > 0) {

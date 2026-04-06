@@ -479,7 +479,21 @@
         </ul>
     </div>
     
-    <button class="create-order-btn" id="createOrderBtn" disabled>
+    <div style="margin-top: 16px;">
+        <label for="orderDescription" style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">
+            Beskrivelse <span style="font-weight: 400; color: #9ca3af;">(valgfri)</span>
+        </label>
+        <input
+            type="text"
+            id="orderDescription"
+            placeholder="Hasteordre - Akutt serviceoppdrag"
+            style="width: 100%; padding: 12px 16px; font-size: 15px; border: 2px solid #e5e7eb; border-radius: 10px; box-sizing: border-box; transition: border-color 0.2s;"
+            onfocus="this.style.borderColor='#ff6b35'; this.style.outline='none';"
+            onblur="this.style.borderColor='#e5e7eb';"
+        >
+    </div>
+
+    <button class="create-order-btn" id="createOrderBtn" disabled style="margin-top: 16px;">
         <span class="emergency-icon">⚡</span>
         Opprett hasteordre
     </button>

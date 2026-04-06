@@ -6,7 +6,7 @@ const mockPool = {
   query: jest.fn()
 };
 
-const mockGenerateReport = jest.fn();
+const mockGenerateOrderReport = jest.fn();
 
 jest.mock('../src/config/database', () => ({
   getTenantConnection: jest.fn(async () => mockPool)
@@ -20,7 +20,7 @@ jest.mock('../src/services/customerService', () => ({
 
 jest.mock('../src/services/unifiedPdfGenerator', () => {
   return jest.fn().mockImplementation(() => ({
-    generateReport: mockGenerateReport
+    generateOrderReport: mockGenerateOrderReport
   }));
 });
 
@@ -54,7 +54,7 @@ describe('Order completion', () => {
     app = createTestApp();
   });
 
-  test('marks order completed when one PDF generation fails and still returns other generated PDFs', async () => {
+  test('marks order completed and starts async order PDF generation', async () => {
     mockPool.query.mockImplementation(async (sql, params) => {
       if (sql === 'BEGIN') return { rows: [] };
       if (sql === 'COMMIT') return { rows: [] };
@@ -68,27 +68,6 @@ describe('Order completion', () => {
         return { rows: [{ id: params[1], status: 'completed' }] };
       }
 
-      if (sql.includes('FROM service_reports sr') && sql.includes('JOIN equipment e')) {
-        return {
-          rows: [
-            {
-              id: 'SR-1',
-              order_id: params[0],
-              equipment_id: 101,
-              equipment_name: 'Ventilasjon A',
-              equipment_type: 'boligventilasjon'
-            },
-            {
-              id: 'SR-2',
-              order_id: params[0],
-              equipment_id: 102,
-              equipment_name: 'Ventilasjon B',
-              equipment_type: 'boligventilasjon'
-            }
-          ]
-        };
-      }
-
       if (sql.includes('SELECT id, status FROM orders WHERE id = $1')) {
         return { rows: [{ id: params[0], status: 'completed' }] };
       }
@@ -96,9 +75,7 @@ describe('Order completion', () => {
       throw new Error(`Unexpected SQL in test: ${sql}`);
     });
 
-    mockGenerateReport
-      .mockRejectedValueOnce(new Error('Puppeteer crashed'))
-      .mockResolvedValueOnce('tenants/test-tenant/service-reports/2026/03/SR-2.pdf');
+    mockGenerateOrderReport.mockResolvedValueOnce('tenants/test-tenant/service-reports/2026/03/PROJ-2026-1710934200000.pdf');
 
     const res = await request(app)
       .post('/api/orders/PROJ-2026-1710934200000/complete')
@@ -107,18 +84,15 @@ describe('Order completion', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.orderId).toBe('PROJ-2026-1710934200000');
-    expect(res.body.generatedPDFs).toEqual([
-      {
-        reportId: 'SR-2',
-        equipmentType: 'boligventilasjon',
-        equipmentName: 'Ventilasjon B',
-        pdfPath: 'tenants/test-tenant/service-reports/2026/03/SR-2.pdf'
-      }
-    ]);
+    expect(res.body.pdfGenerated).toBe(false);
+    expect(res.body.message).toMatch(/genereres/i);
 
-    expect(mockGenerateReport).toHaveBeenCalledTimes(2);
-    expect(mockGenerateReport).toHaveBeenNthCalledWith(1, 'SR-1', 'test-tenant');
-    expect(mockGenerateReport).toHaveBeenNthCalledWith(2, 'SR-2', 'test-tenant');
+    expect(mockGenerateOrderReport).toHaveBeenCalledTimes(1);
+    expect(mockGenerateOrderReport).toHaveBeenCalledWith(
+      'PROJ-2026-1710934200000',
+      'test-tenant',
+      expect.any(Function)
+    );
 
     expect(mockPool.query).toHaveBeenCalledWith(
       'UPDATE orders SET status = $1 WHERE id = $2 RETURNING id, status',

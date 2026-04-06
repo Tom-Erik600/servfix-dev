@@ -57,6 +57,8 @@ pending ──────→ scheduled ──────→ completed
 | `customer_id` | INTEGER | Yes | Tripletex or local |
 | `customer_name` | VARCHAR | Yes | From customer data |
 | `customer_data` | JSONB | Yes | Snapshot at creation (name, email, phone, addresses, contact person) |
+| `customer_data.agreement_number` | STRING | No | Set when a Tripletex project is selected (from project number) |
+| `customer_data.visit_number` | STRING | No | Optional visit number entered by admin at order creation |
 | `description` | TEXT | No | Admin/technician input |
 | `service_type` | VARCHAR | No | Service category |
 | `technician_id` | VARCHAR | No | Assigned technician (determines pending vs scheduled) |
@@ -147,7 +149,7 @@ pending ──────→ scheduled ──────→ completed
 - Order data must never contain or reference another tenant's customers, equipment, or reports.
 - Order completion is logically independent of PDF generation — PDF generation is a side effect, not part of the core transaction. Order status must commit before PDFs are generated.
 - Database transactions must not remain open during long-running PDF generation or external calls (Puppeteer, GCS).
-- Customer data snapshot in `customer_data` JSONB must not be modified after order creation.
+- Customer data snapshot in `customer_data` JSONB must not be modified after order creation. This includes sub-fields like `agreement_number` and `visit_number` — these can only be corrected via the "rediger PDF"-modal in the reports view, which edits the service report data, not the order itself.
 - All external communication (PDF, email, billing) must use the stored `customer_data` snapshot, not live customer data.
 - The `included_equipment_ids` array must be the single source of truth for which equipment belongs to an order. Service reports generated for an order must correspond only to equipment in this array.
 - Technician order detail (`orders.html`) must, when `included_equipment_ids` is present, show only the selected equipment for that order rather than all customer equipment.

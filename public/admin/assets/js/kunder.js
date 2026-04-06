@@ -1024,17 +1024,26 @@ window.selectCustomer = async function(customerId) {
                     reportId = orderReport.report_ids[0];
                 }
                 
-                // Parse anlegg (kan være flere, komma-separert)
-                if (orderReport.equipment_names) {
+                // Parse anlegg robust:
+                // 1) Foretrekk equipment_items (name/type-par fra backend)
+                // 2) Fallback til legacy comma-separerte felter
+                if (Array.isArray(orderReport.equipment_items) && orderReport.equipment_items.length > 0) {
+                    equipmentList = orderReport.equipment_items
+                        .filter(item => item && (item.name || item.type))
+                        .map(item => ({
+                            name: (item.name || '').toString().trim() || 'Ukjent anlegg',
+                            type: (item.type || '').toString().trim() || 'Ikke spesifisert'
+                        }));
+                    console.log('🏢 Anlegg funnet (equipment_items):', equipmentList.length);
+                } else if (orderReport.equipment_names) {
                     const names = orderReport.equipment_names.split(', ');
                     const types = (orderReport.equipment_types || '').split(', ');
-                    
+
                     equipmentList = names.map((name, index) => ({
                         name: name.trim(),
                         type: types[index] ? types[index].trim() : 'Ikke spesifisert'
                     }));
-                    
-                    console.log('🏢 Anlegg funnet:', equipmentList.length);
+                    console.log('🏢 Anlegg funnet (legacy):', equipmentList.length);
                 }
             }
         }
@@ -1145,6 +1154,15 @@ window.selectCustomer = async function(customerId) {
         document.getElementById('edit-notater').value = eq.internalNotes || '';
         populateClusterSelect(eq.clusterId || null);
 
+        // Filter-felt
+        const hasFilters = !!eq.hasFilters;
+        document.getElementById('edit-has-filters').checked = hasFilters;
+        document.getElementById('edit-filter-supply').checked = !!eq.filterSupply;
+        document.getElementById('edit-filter-exhaust').checked = !!eq.filterExhaust;
+        document.getElementById('edit-filter-drive-supply').checked = !!eq.filterDriveSupply;
+        document.getElementById('edit-filter-drive-exhaust').checked = !!eq.filterDriveExhaust;
+        document.getElementById('edit-filter-types').style.display = hasFilters ? 'flex' : 'none';
+
         // Dynamisk tittel: Rediger Anlegg — Kundenavn — Anleggsnavn
         const customerName = currentSelectedCustomer ? currentSelectedCustomer.name : '';
         const equipmentName = eq.name || 'Uten navn';
@@ -1174,6 +1192,14 @@ window.selectCustomer = async function(customerId) {
         document.getElementById('edit-location').value = '';
         document.getElementById('edit-notater').value = '';
         populateClusterSelect(null);
+
+        // Filter-felt — nullstill
+        document.getElementById('edit-has-filters').checked = false;
+        document.getElementById('edit-filter-supply').checked = false;
+        document.getElementById('edit-filter-exhaust').checked = false;
+        document.getElementById('edit-filter-drive-supply').checked = false;
+        document.getElementById('edit-filter-drive-exhaust').checked = false;
+        document.getElementById('edit-filter-types').style.display = 'none';
 
         document.getElementById('equipment-edit-title').textContent =
             `Nytt Anlegg — ${currentSelectedCustomer.name}`;
@@ -1293,7 +1319,12 @@ window.selectCustomer = async function(customerId) {
             betjener: document.getElementById('edit-betjener').value,
             location: document.getElementById('edit-location').value,
             notater: document.getElementById('edit-notater').value,
-            clusterId: document.getElementById('edit-cluster-id').value || null
+            clusterId: document.getElementById('edit-cluster-id').value || null,
+            hasFilters: document.getElementById('edit-has-filters').checked,
+            filterSupply: document.getElementById('edit-filter-supply').checked,
+            filterExhaust: document.getElementById('edit-filter-exhaust').checked,
+            filterDriveSupply: document.getElementById('edit-filter-drive-supply').checked,
+            filterDriveExhaust: document.getElementById('edit-filter-drive-exhaust').checked
         };
 
         try {
@@ -1432,10 +1463,15 @@ window.selectCustomer = async function(customerId) {
 
         container.innerHTML = `
             <div class="modern-equipment-section">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
                     <h3 class="modern-section-title">Kontaktpersoner (${contacts.length})</h3>
-                    <button type="button" class="btn btn-primary" onclick="openNewContactModal('${customerId}')"
-                            style="font-size: 11px; padding: 4px 10px;">+ Ny kontakt</button>
+                    <div style="display: flex; gap: 6px;">
+                        <button type="button" class="btn btn-secondary" id="import-contacts-btn"
+                                onclick="importContactsFromTripletex('${customerId}')"
+                                style="font-size: 11px; padding: 4px 10px;">Importer fra Tripletex</button>
+                        <button type="button" class="btn btn-primary" onclick="openNewContactModal('${customerId}')"
+                                style="font-size: 11px; padding: 4px 10px;">+ Ny kontakt</button>
+                    </div>
                 </div>
                 ${contacts.length === 0 ? `
                     <div class="equipment-empty-state">
@@ -1453,9 +1489,10 @@ window.selectCustomer = async function(customerId) {
                                 ${c.phone ? `<div class="equipment-card-placement">${c.phone}</div>` : ''}
                                 ${c.role ? `<div class="equipment-card-placement" style="color: #6b7280;">${c.role}</div>` : ''}
                                 ${c.is_report_recipient ? `
-                                    <span style="position: absolute; top: 8px; right: 8px; background: #dbeafe;
-                                          color: #1d4ed8; padding: 2px 6px; border-radius: 8px;
-                                          font-size: 10px; font-weight: 600;">Rapport</span>
+                                    <span style="position: absolute; top: 8px; right: 8px; background: #1d4ed8;
+                                          color: #ffffff; padding: 3px 8px; border-radius: 10px;
+                                          font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+                                          box-shadow: 0 1px 3px rgba(29,78,216,0.4);">📧 Rapport</span>
                                 ` : ''}
                             </div>
                         `).join('')}
@@ -1568,6 +1605,40 @@ window.selectCustomer = async function(customerId) {
             }
         } catch (error) {
             console.error('Feil ved sletting av kontakt:', error);
+        }
+    };
+
+    window.importContactsFromTripletex = async function(customerId) {
+        const btn = document.getElementById('import-contacts-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Importerer...';
+        }
+
+        try {
+            const response = await fetch(`/api/admin/customers/${customerId}/contacts/import-from-tripletex`, {
+                method: 'POST',
+                credentials: 'include'
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                alert('Feil: ' + (data.error || 'Kunne ikke importere kontakter'));
+                return;
+            }
+
+            const msg = `Import fullført: ${data.imported} kontakter lagt til${data.skipped > 0 ? `, ${data.skipped} hoppet over` : ''}.${data.errors && data.errors.length > 0 ? '\n\nFeil:\n' + data.errors.join('\n') : ''}`;
+            alert(msg);
+            loadAndRenderContacts(customerId);
+        } catch (error) {
+            console.error('Feil ved import av kontakter:', error);
+            alert('Nettverksfeil ved import av kontakter');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Importer fra Tripletex';
+            }
         }
     };
 
@@ -1886,6 +1957,18 @@ window.selectCustomer = async function(customerId) {
 
     // Ikke lukk anleggsmodal ved klikk utenfor.
     // Den inneholder mange felt og cluster-valg, og utilsiktet lukking er dyrt for brukeren.
+
+    // Toggle filter-type-checkboxer ved "Har filtre"-endring
+    const hasFiltersCheckbox = document.getElementById('edit-has-filters');
+    if (hasFiltersCheckbox) {
+        hasFiltersCheckbox.addEventListener('change', function() {
+            document.getElementById('edit-filter-types').style.display = this.checked ? 'flex' : 'none';
+            if (!this.checked) {
+                ['edit-filter-supply', 'edit-filter-exhaust', 'edit-filter-drive-supply', 'edit-filter-drive-exhaust']
+                    .forEach(id => { document.getElementById(id).checked = false; });
+            }
+        });
+    }
 
     if (equipmentConfirmModal) {
         equipmentConfirmModal.addEventListener('click', function(e) {

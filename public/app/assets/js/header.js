@@ -20,19 +20,19 @@ async function renderAppHeader(options = {}) {
 
     // Bruk medsendt settings eller hent fra API
     let resolvedSettings = settings;
-    if (!resolvedSettings) {
+    let companyName = resolvedSettings?.companyInfo?.name || null;
+    if (!companyName) {
         try {
-            const response = await fetch('/api/images/settings', {
-                credentials: 'include'
-            });
+            const response = await fetch('/api/images/branding');
             if (response.ok) {
-                resolvedSettings = await response.json();
+                const branding = await response.json();
+                companyName = branding.companyName || null;
             }
         } catch (error) {
             console.log('Bruker standard bedriftsnavn:', error.message);
         }
     }
-    const companyName = resolvedSettings?.companyInfo?.name || 'AIR-TECH AS';
+    companyName = companyName || 'AIR-TECH AS';
 
     // Formater norsk dato
     const today = new Date();

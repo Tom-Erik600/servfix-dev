@@ -121,7 +121,10 @@ function getDefaultSettings(tenantId) {
     reportSettings: {
       autoSend: false,
       copyAdmin: false,
-      senderEmail: "post@air-tech.no"
+      senderEmail: "post@air-tech.no",
+      largeAvvikImages: false,
+      reportHeadingColor: "#1d4ed8",
+      reportHeadingTextColor: "#ffffff"
     },
     hmsSettings: {
       hmsMenuEnabled: true,
@@ -130,6 +133,27 @@ function getDefaultSettings(tenantId) {
     lastUpdated: new Date().toISOString()
   };
 }
+
+// GET /api/images/app-settings - Tekniker-app innstillinger (hms-flagg etc.) — krever autentisert tekniker
+// NB: Ligger FØR auth-middleware — auth sjekkes eksplisitt her
+router.get('/app-settings', async (req, res) => {
+  if (!req.session?.technicianId && !req.session?.isAdmin) {
+    return res.status(401).json({ error: 'Ikke autentisert' });
+  }
+  try {
+    const tenantId = req.session?.tenantId || req.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Kunne ikke identifisere bedrift' });
+    }
+    const settings = await loadTenantSettings(tenantId);
+    res.json({
+      hmsSettings: settings.hmsSettings ?? { hmsMenuEnabled: true, sjaPerOrderEnabled: true },
+    });
+  } catch (error) {
+    console.error('Error loading app-settings:', error);
+    res.json({ hmsSettings: { hmsMenuEnabled: true, sjaPerOrderEnabled: true } });
+  }
+});
 
 // GET /api/images/branding - Offentlig endepunkt for logo og firmanavn (brukes på login-side)
 router.get('/branding', async (req, res) => {
@@ -203,7 +227,7 @@ function ensureTenantFilePath(imageUrl, tenantId) {
 }
 
 // GET /api/images/settings - Hent alle innstillinger fra JSON-fil
-router.get('/settings', async (req, res) => {
+router.get('/settings', requireAdmin, async (req, res) => {
   try {
     const tenantId = req.session?.tenantId;
     if (!tenantId) {

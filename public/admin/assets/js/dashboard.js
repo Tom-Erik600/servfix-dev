@@ -37,17 +37,9 @@ async function loadDashboardData() {
         // Extract reports array from response object
         const reportsArray = reportsData.reports || [];
         
-        console.log('=== Dashboard Data Loaded ===');
-        console.log('Orders count:', ordersArray.length);
         if (ordersArray.length === 0) {
             console.warn('⚠️ Ingen ordre funnet! Sjekk at det finnes ordre i databasen.');
-        } else {
-            console.log('First few orders:', ordersArray.slice(0, 3));
         }
-        console.log('Customers count:', customersArray.length);
-        console.log('Technicians count:', techniciansArray.length);
-        console.log('Reports count:', reportsArray.length);
-        console.log('Quotes count:', quotes.length);
         
         populateDashboard(ordersArray, customersArray, techniciansArray, reportsArray, quotes);
     } catch (error) {
@@ -91,6 +83,48 @@ function populateDashboard(orders, customers, technicians, reports, quotes) {
     makeKpiCardsClickable();
 }
 
+function getDeleteState(order) {
+    const rawStatus = order.status;
+    const hasServiceReports = order.has_service_reports === true || order.has_service_reports === 'true';
+    const hasQuotes = order.has_quotes === true || order.has_quotes === 'true';
+
+    if (!['pending', 'scheduled'].includes(rawStatus)) {
+        return {
+            canDelete: false,
+            reason: 'Kun ventende og planlagte ordre kan slettes'
+        };
+    }
+
+    if (hasServiceReports) {
+        return {
+            canDelete: false,
+            reason: 'Kan ikke slettes fordi ordren har servicerapporter'
+        };
+    }
+
+    if (hasQuotes) {
+        return {
+            canDelete: false,
+            reason: 'Kan ikke slettes fordi ordren har tilbud'
+        };
+    }
+
+    return {
+        canDelete: true,
+        reason: 'Slett ordre'
+    };
+}
+
+function renderDeleteButton(order, orderNumber, customerName) {
+    const deleteState = getDeleteState(order);
+
+    if (deleteState.canDelete) {
+        return `<button onclick="confirmDeleteOrder('${order.id}', '${orderNumber}', '${customerName.replace(/'/g, "\\'")}')" style="padding:4px 10px; background:none; border:1px solid #E5E7EB; color:#DC2626; border-radius:6px; cursor:pointer; font-size:12px;" title="Slett ordre">🗑️</button>`;
+    }
+
+    return '';
+}
+
 function populateKpiCards(orders, technicians, reports, quotes) {
     const today = new Date().toISOString().slice(0, 10);
     const now = new Date();
@@ -107,94 +141,12 @@ function populateKpiCards(orders, technicians, reports, quotes) {
         reports = [];
     }
 
-    // Debug logging
-    console.log('=== Datoberegninger ===');
-    console.log('Today:', today);
-    console.log('Now:', formatDateShort(now));
-    console.log('Start of week:', formatDateShort(startOfWeek));
-    
-    // Vis ukens datoer
-    const weekDates = [];
-    const dayNames = ['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn'];
-    for (let i = 0; i < 7; i++) {
-        const date = new Date(startOfWeek);
-        date.setDate(startOfWeek.getDate() + i);
-        const dateStr = formatDateShort(date);
-        const dayName = dayNames[i];
-        weekDates.push(`${dayName} ${dateStr}`);
-    }
-    console.log('Ukens datoer:', weekDates.join(', '));
-    
     // Først sjekk om vi har noen ordre med norsk status
     const norwegianStatusOrders = orders.filter(o => 
         o.status === 'Fullført' || o.status === 'fullført'
     );
     
-    if (norwegianStatusOrders.length > 0) {
-        console.warn('⚠️ FANT ORDRE MED NORSK STATUS:', norwegianStatusOrders.length);
-        norwegianStatusOrders.forEach(o => {
-            console.log('Ordre med norsk status:', {
-                id: o.id || o.orderNumber || o.order_number,
-                status: o.status,
-                date: o.scheduledDate || o.scheduled_date
-            });
-        });
-    }
-    
-    // List ALLE ordre først for debugging
-    console.log('=== ALLE ORDRE ===');
-    orders.forEach(o => {
-        console.log('Ordre:', {
-            id: o.id || o.orderNumber || o.order_number,
-            date: o.scheduledDate || o.scheduled_date,
-            status: o.status,
-            statusType: typeof o.status,
-            statusLength: o.status ? o.status.length : 0,
-            exactStatus: `"${o.status}"`
-        });
-    });
-    
-    // List alle fullførte ordre for debugging
     const allCompletedOrders = orders.filter(o => o.status === 'completed');
-    console.log(`Total orders with status === 'completed': ${allCompletedOrders.length}`);
-    
-    // Sjekk hvilke datofelter som finnes på fullførte ordre
-    if (allCompletedOrders.length > 0) {
-        const sampleOrder = allCompletedOrders[0];
-        console.log('Eksempel fullført ordre:', {
-            id: sampleOrder.id || sampleOrder.orderNumber || sampleOrder.order_number,
-            scheduled_date: sampleOrder.scheduledDate || sampleOrder.scheduled_date,
-            completed_at: sampleOrder.completed_at || sampleOrder.completedAt || 'MANGLER',
-            updated_at: sampleOrder.updated_at || sampleOrder.updatedAt || 'N/A',
-            alleNøkler: Object.keys(sampleOrder).join(', ')
-        });
-    }
-    
-    const endOfWeekForLogging = new Date(startOfWeek);
-    endOfWeekForLogging.setDate(startOfWeek.getDate() + 6);
-    endOfWeekForLogging.setHours(23, 59, 59, 999);
-    
-    console.log('Week period:', {
-        start: formatDateShort(startOfWeek),
-        end: formatDateShort(endOfWeekForLogging)
-    });
-    
-    allCompletedOrders.forEach(o => {
-        const dateField = o.scheduledDate || o.scheduled_date;
-        const orderDate = parseDate(dateField);
-        console.log('Completed order:', {
-            id: o.id || o.orderNumber || o.order_number,
-            date: dateField,
-            parsedDate: orderDate ? formatDateShort(orderDate) : 'Invalid date',
-            isThisWeek: orderDate && orderDate >= startOfWeek && orderDate <= endOfWeekForLogging
-        });
-    });
-    
-    // Sjekk feltnavn på første ordre
-    if (orders.length > 0) {
-        console.log('First order fields:', Object.keys(orders[0]));
-        console.log('First order example:', orders[0]);
-    }
     
     // Oppdrag i dag - ordre planlagt for i dag
     const todaysOrders = orders.filter(o => {
@@ -207,15 +159,9 @@ function populateKpiCards(orders, technicians, reports, quotes) {
         const orderDateString = formatDateShort(orderDate);
         const matches = orderDateString === today;
         
-        if (matches) {
-            console.log('Order matches today:', o.id || o.orderNumber || o.order_number, orderDateString);
-        }
-        
         return matches;
     });
     const oppdragIDag = todaysOrders.length;
-    
-    console.log(`Oppdrag i dag (${today}):`, oppdragIDag);
     
     // Fullførte denne uken - ordre med status 'completed' denne uken
     // VIKTIG: For fullførte ordre, sjekk completed_at dato (når de faktisk ble fullført), 
@@ -224,11 +170,6 @@ function populateKpiCards(orders, technicians, reports, quotes) {
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
     endOfWeek.setHours(23, 59, 59, 999);
-    
-    console.log('Calculating completed orders for full week:', {
-        startOfWeek: formatDateShort(startOfWeek) + ' (Monday)',
-        endOfWeek: formatDateShort(endOfWeek) + ' (Sunday)'
-    });
     
     const fullfortUke = orders.filter(o => {
         // Må være fullført
@@ -244,7 +185,6 @@ function populateKpiCards(orders, technicians, reports, quotes) {
                            o.scheduled_date;
                            
         if (!dateToCheck) {
-            console.warn('Fullført ordre uten dato:', o.id || o.orderNumber || o.order_number);
             return false;
         }
         
@@ -258,37 +198,9 @@ function populateKpiCards(orders, technicians, reports, quotes) {
         // Sjekk om ordren ble fullført i denne uken
         const isInWeek = orderDateNormalized >= startOfWeek && orderDateNormalized <= endOfWeek;
         
-        if (isInWeek) {
-            console.log('Completed order in week:', {
-                id: o.id || o.orderNumber || o.order_number,
-                scheduledDate: o.scheduledDate || o.scheduled_date,
-                completedAt: o.completed_at || o.completedAt || 'N/A',
-                updatedAt: o.updated_at || o.updatedAt || 'N/A',
-                dateUsed: dateToCheck,
-                dateUsedType: o.completed_at ? 'completed_at' : 
-                             o.completedAt ? 'completedAt' :
-                             o.updated_at ? 'updated_at' :
-                             o.updatedAt ? 'updatedAt' : 'scheduled_date'
-            });
-        }
-        
         return isInWeek;
     }).length;
-    
-    console.log('Fullført denne uken count:', fullfortUke);
-    
-    // Debug: Vis alle fullførte ordre med deres datoer
-    const allCompletedWithDates = orders.filter(o => o.status === 'completed').map(o => ({
-        id: o.id || o.orderNumber || o.order_number,
-        scheduledDate: o.scheduledDate || o.scheduled_date,
-        completedAt: o.completed_at || o.completedAt || 'N/A',
-        updatedAt: o.updated_at || o.updatedAt || 'N/A',
-        dateUsedForKPI: o.completed_at || o.completedAt || o.updated_at || o.updatedAt || o.scheduledDate || o.scheduled_date
-    }));
-    
-    console.log('Alle fullførte ordre med datoer:', allCompletedWithDates);
-    
-    // Forklar forskjellen hvis det er en
+
     const completedInTableView = orders.filter(o => {
         if (o.status !== 'completed') return false;
         const dateField = o.scheduledDate || o.scheduled_date;
@@ -301,9 +213,8 @@ function populateKpiCards(orders, technicians, reports, quotes) {
     }).length;
     
     if (completedInTableView !== fullfortUke) {
-        console.log(`📊 KPI viser ${fullfortUke} fullførte (basert på når de ble fullført)`);
-        console.log(`📅 Tabellen viser ${completedInTableView} fullførte (basert på når de var planlagt)`);
-        console.log('Dette er fordi ordre kan være planlagt for en uke men fullført i en annen uke.');
+        // KPI teller basert på completed_at, tabellen viser basert på scheduled_date
+        // Forskjell er forventet når ordre fullføres i en annen uke enn planlagt
     }
     
     // Rapporter ikke sendt - rapporter som er klare men ikke sendt til kunde
@@ -322,14 +233,6 @@ function populateKpiCards(orders, technicians, reports, quotes) {
     const tilbudVenter = Array.isArray(quotes) 
         ? quotes.filter(q => q.status === 'pending' || q.status === 'sent').length
         : 0;
-
-    // Debug-logging for alle KPI-verdier
-    console.log('=== KPI Beregninger ===');
-    console.log('Oppdrag i dag:', oppdragIDag);
-    console.log('Fullførte denne uken:', fullfortUke, '(basert på completed/updated dato)');
-    console.log('Rapporter ikke sendt:', rapporterIkkeSendt);
-    console.log('Venter på fakturering (alle ikke-fakturerte):', venterFakturering);
-    console.log('Tilbud venter:', tilbudVenter);
 
     // Oppdater HTML-elementene
     updateKpiElement('kpi-oppdrag-idag', oppdragIDag);
@@ -420,7 +323,7 @@ function populateTodaysTable(orders, customerMap, technicianMap) {
     if (todaysOrders.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" style="text-align: center; padding: 40px; color: #9CA3AF;">
+                <td colspan="7" style="text-align: center; padding: 40px; color: #9CA3AF;">
                     <div style="font-size: 48px; margin-bottom: 10px;">☀️</div>
                     <div style="font-weight: 500;">Ingen oppdrag planlagt for i dag</div>
                     <div style="font-size: 14px; margin-top: 8px;">Nyt dagen!</div>
@@ -459,15 +362,18 @@ function populateTodaysTable(orders, customerMap, technicianMap) {
         const serviceType = order.serviceType || order.service_type || 'Service';
         const scheduledDate = parseDate(order.scheduledDate || order.scheduled_date);
         const dateDisplay = scheduledDate ? formatDateNorwegian(scheduledDate) : 'Ikke satt';
+        const customerName = customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde';
+        const deleteBtn = renderDeleteButton(order, orderNumber, customerName);
         
         return `
         <tr style="${rowStyle}">
             <td><strong>${orderNumber}</strong></td>
             <td>${technicianMap.get(technicianId) || '<span style="color: #EF4444;">Ikke tildelt</span>'}</td>
-            <td>${customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde'}</td>
+            <td>${customerName}</td>
             <td>${serviceType}</td>
             <td>${dateDisplay}</td>
             <td><span class="status-badge status-${deriveOrderStatus(order) || 'pending'}">${getStatusText(deriveOrderStatus(order))}</span></td>
+            <td>${deleteBtn}</td>
         </tr>
     `}).join('');
 }
@@ -485,13 +391,6 @@ function populateWeeklyTable(orders, customerMap, technicianMap) {
     endOfWeek.setDate(startOfWeek.getDate() + 6);
     endOfWeek.setHours(23, 59, 59, 999); // Inkluder hele siste dag (søndag)
 
-    console.log('Week range for table:', {
-        start: formatDateShort(startOfWeek),
-        startDay: ['Søn', 'Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør'][startOfWeek.getDay()],
-        end: formatDateShort(endOfWeek),
-        endDay: ['Søn', 'Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør'][endOfWeek.getDay()]
-    });
-
     const weeklyOrders = orders.filter(o => {
         const dateField = o.scheduledDate || o.scheduled_date;
         if (!dateField) return false;
@@ -506,23 +405,6 @@ function populateWeeklyTable(orders, customerMap, technicianMap) {
         return orderDateNormalized >= startOfWeek && orderDateNormalized <= endOfWeek;
     });
     
-    console.log(`Found ${weeklyOrders.length} orders for this week`);
-    
-    // Debug: vis status for hver ordre
-    const statusCount = {};
-    weeklyOrders.forEach(o => {
-        const status = o.status || 'no-status';
-        statusCount[status] = (statusCount[status] || 0) + 1;
-        console.log('Weekly order:', {
-            id: o.id || o.orderNumber || o.order_number,
-            date: o.scheduledDate || o.scheduled_date,
-            status: o.status,
-            displayStatus: getStatusText(o.status)
-        });
-    });
-    
-    console.log('Status count in weekly orders:', statusCount);
-    
     const tbody = document.getElementById('ukens-oppdrag-liste');
     if (!tbody) return;
     
@@ -531,7 +413,7 @@ function populateWeeklyTable(orders, customerMap, technicianMap) {
     if (weeklyOrders.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" style="text-align: center; padding: 40px; color: #9CA3AF;">
+                <td colspan="7" style="text-align: center; padding: 40px; color: #9CA3AF;">
                     <div style="font-size: 48px; margin-bottom: 10px;">📋</div>
                     <div style="font-weight: 500;">Ingen planlagte oppdrag denne uken</div>
                 </td>
@@ -571,15 +453,18 @@ function populateWeeklyTable(orders, customerMap, technicianMap) {
         const serviceType = order.serviceType || order.service_type || 'Service';
         const scheduledDate = parseDate(order.scheduledDate || order.scheduled_date);
         const dateDisplay = scheduledDate ? formatDateNorwegian(scheduledDate) : 'Ikke satt';
+        const customerName = customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde';
+        const deleteBtn = renderDeleteButton(order, orderNumber, customerName);
         
         return `
         <tr style="${rowStyle}">
             <td><strong>${orderNumber}</strong></td>
             <td>${technicianMap.get(technicianId) || '<span style="color: #EF4444;">Ikke tildelt</span>'}</td>
-            <td>${customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde'}</td>
+            <td>${customerName}</td>
             <td>${serviceType}</td>
             <td>${dateDisplay}</td>
             <td><span class="status-badge status-${deriveOrderStatus(order) || 'pending'}">${getStatusText(deriveOrderStatus(order))}</span></td>
+            <td>${deleteBtn}</td>
         </tr>
     `}).join('');
 }
@@ -617,7 +502,7 @@ function populateUnfinishedTable(orders, customerMap, technicianMap) {
     if (unfinishedOrders.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" style="text-align: center; padding: 40px; color: #9CA3AF;">
+                <td colspan="7" style="text-align: center; padding: 40px; color: #9CA3AF;">
                     <div style="font-size: 48px; margin-bottom: 10px;">🎉</div>
                     <div style="font-weight: 500;">Ingen uferdige oppdrag</div>
                     <div style="font-size: 14px; margin-top: 8px;">Alt er på stell!</div>
@@ -640,15 +525,18 @@ function populateUnfinishedTable(orders, customerMap, technicianMap) {
         const serviceType = order.serviceType || order.service_type || 'Service';
         const scheduledDate = parseDate(order.scheduledDate || order.scheduled_date);
         const dateDisplay = scheduledDate ? formatDateNorwegian(scheduledDate) : 'Ikke satt';
+        const customerName = customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde';
+        const deleteBtn = renderDeleteButton(order, orderNumber, customerName);
         
         return `
         <tr>
             <td><strong>${orderNumber}</strong></td>
             <td>${technicianMap.get(technicianId) || '<span style="color: #EF4444;">Ikke tildelt</span>'}</td>
-            <td>${customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde'}</td>
+            <td>${customerName}</td>
             <td>${serviceType}</td>
             <td>${dateDisplay}</td>
             <td><span class="status-badge status-${deriveOrderStatus(order) || 'pending'}">${getStatusText(deriveOrderStatus(order))}</span></td>
+            <td>${deleteBtn}</td>
         </tr>
     `}).join('');
 }
@@ -704,15 +592,6 @@ function getStartOfWeek(date) {
     d.setDate(d.getDate() - daysToMonday);
     d.setHours(0, 0, 0, 0);
     
-    console.log('Start of week calculated:', {
-        inputDate: formatDateShort(date),
-        inputDayOfWeek: day,
-        inputDayName: ['Søndag', 'Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lørdag'][day],
-        daysBackToMonday: daysToMonday,
-        resultDate: formatDateShort(d),
-        resultDayName: ['Søndag', 'Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lørdag'][d.getDay()]
-    });
-    
     return d;
 }
 
@@ -723,11 +602,6 @@ function formatDateNorwegian(date) {
 }
 
 function getStatusText(status) {
-    // Log alle status-verdier som ikke er standard
-    if (status && !['pending', 'scheduled', 'in_progress', 'completed', 'cancelled'].includes(status)) {
-        console.warn('Non-standard status value:', status);
-    }
-    
     const statusMap = {
         'pending': 'Venter',
         'scheduled': 'Planlagt',
@@ -770,7 +644,7 @@ function showErrorState() {
     // Vis feilmelding i tabeller
     const errorMessage = `
         <tr>
-            <td colspan="6" style="text-align: center; padding: 20px; color: #EF4444;">
+            <td colspan="7" style="text-align: center; padding: 20px; color: #EF4444;">
                 <div style="font-size: 24px; margin-bottom: 10px;">⚠️</div>
                 <div>Kunne ikke laste data. Prøv å oppdatere siden.</div>
             </td>
@@ -792,3 +666,67 @@ setInterval(loadDashboardData, 5 * 60 * 1000);
 window.reloadDashboard = loadDashboardData;
 
 // Dashboard er klar - all logging er aktivert for debugging
+
+// === SLETT ORDRE FUNKSJONALITET ===
+let pendingDeleteOrderId = null;
+
+function confirmDeleteOrder(orderId, orderNumber, customerName) {
+    pendingDeleteOrderId = orderId;
+    const modal = document.getElementById('delete-order-modal');
+    const message = document.getElementById('delete-order-message');
+    const confirmBtn = document.getElementById('delete-order-confirm-btn');
+    
+    message.textContent = `Er du sikker på at du vil slette ordre ${orderNumber} for ${customerName}? Denne handlingen kan ikke angres.`;
+    
+    // Reset knappen til ren tilstand
+    const newBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+    newBtn.id = 'delete-order-confirm-btn';
+    newBtn.textContent = 'SLETT';
+    newBtn.disabled = false;
+    newBtn.previousElementSibling.disabled = false;
+    newBtn.addEventListener('click', executeDeleteOrder);
+    
+    modal.style.display = 'flex';
+}
+
+function closeDeleteModal() {
+    const modal = document.getElementById('delete-order-modal');
+    modal.style.display = 'none';
+    pendingDeleteOrderId = null;
+}
+
+async function executeDeleteOrder() {
+    if (!pendingDeleteOrderId) return;
+    
+    const confirmBtn = document.getElementById('delete-order-confirm-btn');
+    const cancelBtn = confirmBtn.previousElementSibling;
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    confirmBtn.textContent = 'Sletter...';
+    
+    try {
+        const response = await fetch(`/api/admin/orders/${pendingDeleteOrderId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            let errorMsg = 'Kunne ikke slette ordre';
+            try {
+                const error = await response.json();
+                errorMsg = error.error || errorMsg;
+            } catch (_) {}
+            throw new Error(errorMsg);
+        }
+        
+        closeDeleteModal();
+        loadDashboardData();
+        
+    } catch (error) {
+        alert(error.message);
+        confirmBtn.textContent = 'SLETT';
+        confirmBtn.disabled = false;
+        cancelBtn.disabled = false;
+    }
+}

@@ -58,7 +58,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS) || 30000;
 app.use((req, res, next) => {
   // Ikke timeout på PDF-generering, filopplasting og kundeimport (kan ta lang tid)
-  if (req.path.includes('/pdf') || req.path.includes('/upload') || req.path.includes('/import')) {
+  if (req.path.includes('/pdf') || req.path.includes('/upload') || req.path.includes('/import') || req.path.includes('/complete')) {
     return next();
   }
   req.setTimeout(REQUEST_TIMEOUT_MS, () => {

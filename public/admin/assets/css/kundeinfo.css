@@ -3,7 +3,37 @@
     display: grid;
     grid-template-columns: 480px 1fr 350px; /* Øk fra 400px til 480px */
     gap: 24px;
-    align-items: flex-start;
+    align-items: stretch;
+    /* Fyll tilgjengelig viewport-høyde: header 64px + main-content padding 48px + page-header ~72px */
+    height: calc(100vh - 64px - 48px - 72px);
+    min-height: 400px;
+}
+
+/* Hver kolonne scroller individuelt */
+.customer-sidebar,
+.customer-details-container,
+.service-history-sidebar {
+    overflow-y: auto;
+}
+
+/* Subtile scrollbars */
+.customer-sidebar::-webkit-scrollbar,
+.service-history-sidebar::-webkit-scrollbar {
+    width: 4px;
+}
+.customer-sidebar::-webkit-scrollbar-thumb,
+.service-history-sidebar::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 4px;
+}
+
+/* Kundedetaljer-panelet har synlig scrollbar for bedre UX */
+.customer-details-container::-webkit-scrollbar {
+    width: 6px;
+}
+.customer-details-container::-webkit-scrollbar-thumb {
+    background: #9ca3af;
+    border-radius: 4px;
 }
 
 /* Juster padding for søkefelt */
@@ -50,8 +80,6 @@
 /* Moderne servicehistorikk layout */
 .service-history-list-modern {
     padding: 8px;
-    max-height: 500px;
-    overflow-y: auto;
 }
 
 .service-history-order {

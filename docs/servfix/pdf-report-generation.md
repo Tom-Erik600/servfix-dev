@@ -39,6 +39,7 @@ Generates professional PDF documents from application data (service reports, quo
 **Tenant settings** loaded from `tenants/{tenantId}/assets/settings.json` in GCS:
 - `companyInfo`: name, address, phone, email
 - `logo`: URL to company logo image
+- `reportSettings`: `largeAvvikImages` (bool), `reportHeadingColor` (hex string, default `#1d4ed8`), `reportHeadingTextColor` (hex string, default `#ffffff`)
 - `quoteSettings`: forbeholdText (terms/conditions for quotes)
 
 ## Outputs
@@ -99,3 +100,4 @@ Critical scenarios to cover:
 - ROS PDFs include a color-coded 5×5 risk matrix with before/after risk reduction percentage.
 - SJA PDFs embed photos from GCS as inline base64 images.
 - Service report PDFs are auto-generated on order completion and can be bulk-regenerated.
+- Service report heading ("Servicerapport: ...") uses `reportHeadingColor` as background color and `reportHeadingTextColor` as text color. Section headers ("Sjekkpunkter", "Avvik" etc.) use `reportHeadingColor` as text/border color only — no background.

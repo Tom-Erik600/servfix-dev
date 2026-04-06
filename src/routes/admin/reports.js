@@ -20,47 +20,56 @@ router.get('/', async (req, res) => {
     debugSteps.push('✅ DB connection OK');
     
     // Build query med conditional WHERE clause
-    let whereClause = "WHERE sr.status = 'completed' AND o.status = 'completed'";
+    // Viktig: Ved eksplisitt orderId-søk (brukes i kundemodal) skal vi kunne
+    // finne historiske ordre selv om statusfelt ikke er perfekt synkronisert.
+    // Standardliste (uten orderId) holder fortsatt kun completed-ordre.
+    let whereClause;
     let queryParams = [];
-    
+
     if (orderId) {
-      whereClause += " AND sr.order_id = $1";
+      whereClause = 'WHERE sr.order_id = $1';
       queryParams.push(orderId);
-      debugSteps.push(`🔍 Filtering by orderId: ${orderId}`);
+      debugSteps.push(`🔍 Filtering by orderId (status-agnostic): ${orderId}`);
     } else {
+      whereClause = "WHERE sr.status = 'completed' AND o.status = 'completed'";
       debugSteps.push('📋 Getting all completed reports');
     }
     
-    // NYE QUERY: Grupper per ordre og concatenate anlegg
+    // NYE QUERY: Grupper per ordre og les PDF/faktura-state direkte fra orders-tabellen
     const query = `
       WITH order_equipment AS (
         SELECT 
           sr.order_id,
+          o.description as order_description,
           o.customer_name,
           o.customer_id,
           o.scheduled_date,
           o.service_type,
           o.created_at as order_date,
+          -- PDF- og faktura-state leses nå direkte fra orders (korrekt datalagnivå)
+          o.pdf_path,
+          o.pdf_generated,
+          o.sent_til_fakturering,
+          o.pdf_sent_timestamp,
+          o.is_invoiced,
+          o.invoice_number,
+          o.invoice_date,
+          o.invoice_comment,
           MIN(sr.created_at) as first_service_date,
-          MAX(sr.created_at) as last_service_date,
+           o.scheduled_date as last_service_date,
           t.name as technician_name,
           -- Concatenate alle anlegg med komma
           STRING_AGG(DISTINCT e.systemnavn, ', ' ORDER BY e.systemnavn) as equipment_names,
           STRING_AGG(DISTINCT e.systemtype, ', ' ORDER BY e.systemtype) as equipment_types,
+          -- Bevar kobling mellom systemnavn og systemtype (unngå mismatch ved separat string_agg)
+          JSONB_AGG(
+            DISTINCT jsonb_build_object(
+              'name', e.systemnavn,
+              'type', e.systemtype
+            )
+          ) FILTER (WHERE e.systemnavn IS NOT NULL) as equipment_items,
           -- Tell antall anlegg
           COUNT(DISTINCT sr.equipment_id) as equipment_count,
-          -- Sjekk om noen er sendt
-          BOOL_OR(sr.sent_til_fakturering) as any_sent,
-          BOOL_AND(sr.sent_til_fakturering) as all_sent,
-          -- Sjekk om noen er fakturert
-          BOOL_OR(sr.is_invoiced) as any_invoiced,
-          BOOL_AND(sr.is_invoiced) as all_invoiced,
-          -- PDF status
-          BOOL_AND(sr.pdf_generated) as all_pdfs_generated,
-          -- ✅ FAKTURA-INFO (NYTT)
-          MAX(sr.invoice_number) as invoice_number,
-          MAX(sr.invoice_date) as invoice_date,
-          MAX(sr.invoice_comment) as invoice_comment,
           -- Samle alle rapport-IDer for denne ordren
           ARRAY_AGG(sr.id ORDER BY sr.created_at) as report_ids
         FROM service_reports sr
@@ -68,9 +77,11 @@ router.get('/', async (req, res) => {
         LEFT JOIN equipment e ON sr.equipment_id::varchar = e.id::varchar
         LEFT JOIN technicians t ON o.technician_id = t.id
         ${whereClause}
-        GROUP BY sr.order_id, o.customer_name, o.customer_id, o.scheduled_date, 
-                 o.service_type, o.created_at, t.name
-        ORDER BY MAX(sr.created_at) DESC
+        GROUP BY sr.order_id, o.description, o.customer_name, o.customer_id, o.scheduled_date, 
+                 o.service_type, o.created_at, t.name,
+                 o.pdf_path, o.pdf_generated, o.sent_til_fakturering, o.pdf_sent_timestamp,
+                 o.is_invoiced, o.invoice_number, o.invoice_date, o.invoice_comment
+        ORDER BY o.scheduled_date DESC NULLS LAST, MAX(sr.created_at) DESC
       )
       SELECT * FROM order_equipment
     `;
@@ -96,10 +107,7 @@ router.get('/', async (req, res) => {
       return {
         ...order,
         customer_email: customerEmail,
-        // Status basert på alle rapporter i ordren
-        sent_til_fakturering: order.all_sent,
-        is_invoiced: order.all_invoiced,
-        pdf_generated: order.all_pdfs_generated
+        // PDF- og faktura-state kommer nå direkte fra orders — ingen aliasering nødvendig
       };
     }));
     
@@ -137,8 +145,16 @@ router.get('/', async (req, res) => {
 router.get('/:reportId/pdf', async (req, res) => {
   try {
     const pool = await db.getTenantConnection(req.adminTenantId);
+    // Les primært fra orders via service_reports.
+    // Fallback: les fra legacy service_reports-kolonner hvis ordredata mangler.
     const result = await pool.query(
-      'SELECT pdf_path, pdf_generated FROM service_reports WHERE id = $1',
+      `SELECT o.pdf_path, o.pdf_generated,
+              sr.pdf_path AS legacy_pdf_path,
+              sr.pdf_generated AS legacy_pdf_generated
+       FROM service_reports sr
+       JOIN orders o ON o.id = sr.order_id
+       WHERE sr.id = $1
+       LIMIT 1`,
       [req.params.reportId]
     );
     
@@ -147,7 +163,11 @@ router.get('/:reportId/pdf', async (req, res) => {
     }
     
     const report = result.rows[0];
-    if (!report.pdf_generated || !report.pdf_path) {
+
+    const effectivePdfGenerated = Boolean(report.pdf_generated || report.legacy_pdf_generated);
+    const effectivePdfPath = report.pdf_path || report.legacy_pdf_path;
+
+    if (!effectivePdfGenerated || !effectivePdfPath) {
       return res.status(404).json({ error: 'PDF ikke generert' });
     }
     
@@ -155,20 +175,20 @@ router.get('/:reportId/pdf', async (req, res) => {
     const isCloudRun = !!process.env.K_SERVICE;  // Google Cloud Run setter denne automatisk
     const useCloudStorage = isCloudRun || process.env.USE_CLOUD_STORAGE === 'true';
     
-    console.log(`📄 Serving PDF: ${report.pdf_path}`);
+    console.log(`📄 Serving PDF: ${effectivePdfPath}`);
     console.log(`🔧 Environment: ${isCloudRun ? 'GOOGLE CLOUD RUN' : 'LOCAL DEVELOPMENT'}`);
     console.log(`☁️ Cloud Storage: ${useCloudStorage ? 'ENABLED' : 'DISABLED'}`);
     console.log(`🔧 K_SERVICE: ${process.env.K_SERVICE || 'not set'}`);
     
     if (useCloudStorage) {
       // PRODUKSJON: Redirect til Google Cloud Storage (F2: sentralisert bucket)
-      const publicUrl = `https://storage.googleapis.com/${gcs.bucketName}/tenants/${req.adminTenantId}/${report.pdf_path}`;
+      const publicUrl = `https://storage.googleapis.com/${gcs.bucketName}/tenants/${req.adminTenantId}/${effectivePdfPath}`;
       console.log(`🌐 Redirecting to GCS: ${publicUrl}`);
       res.redirect(publicUrl);
     } else {
       // DEVELOPMENT: Serve fra lokal fil
       const path = require('path');
-      const localPath = path.join(__dirname, `../../servfix-files/tenants/${req.adminTenantId}/${report.pdf_path}`);
+      const localPath = path.join(__dirname, `../../servfix-files/tenants/${req.adminTenantId}/${effectivePdfPath}`);
       
       console.log(`💾 Serving local file: ${localPath}`);
       
@@ -178,7 +198,7 @@ router.get('/:reportId/pdf', async (req, res) => {
         console.error(`❌ Local PDF file not found: ${localPath}`);
         return res.status(404).json({ 
           error: 'PDF-fil ikke funnet lokalt',
-          path: report.pdf_path,
+          path: effectivePdfPath,
           localPath: localPath
         });
       }
@@ -213,19 +233,31 @@ router.post('/order/:orderId/send', async (req, res) => {
     }
     
     const order = orderResult.rows[0];
-    
-    // Hent rapport-mottaker fra lokal customer_contacts
-    const customerService = require('../../services/customerService');
-    const recipient = await customerService.getReportRecipientByExternalId(req.adminTenantId, order.customer_id);
 
-    if (!recipient || !recipient.email) {
+    if (!order.pdf_generated || !order.pdf_path) {
+      return res.status(400).json({ error: 'Ingen PDF generert for denne ordren' });
+    }
+    
+    // Hent alle rapport-mottakere fra lokal customer_contacts
+    const customerService = require('../../services/customerService');
+    const recipients = await customerService.getReportRecipientsByExternalId(req.adminTenantId, order.customer_id);
+
+    if (!recipients || recipients.length === 0) {
       return res.status(400).json({
         error: `Ingen rapport-mottaker funnet for kunde: ${order.customer_name}`,
         customer_id: order.customer_id
       });
     }
+
+    const recipientEmails = recipients.map(r => r.email).filter(Boolean);
+    if (recipientEmails.length === 0) {
+      return res.status(400).json({
+        error: `Rapport-mottakere mangler e-postadresse for kunde: ${order.customer_name}`,
+        customer_id: order.customer_id
+      });
+    }
     
-    // Hent alle rapporter for ordren
+    // Hent alle rapporter for ordren (for anleggsliste i e-post)
     const reportsResult = await pool.query(
       `SELECT sr.*, e.systemnavn, e.systemtype 
        FROM service_reports sr
@@ -238,7 +270,7 @@ router.post('/order/:orderId/send', async (req, res) => {
       return res.status(400).json({ error: 'Ingen fullførte rapporter funnet for denne ordren' });
     }
     
-    // Send e-post med alle PDFer som vedlegg
+    // Send e-post med ordre-PDF som vedlegg til alle mottakere
     const EmailService = require('../../services/emailService');
     await EmailService.init();
     
@@ -246,22 +278,23 @@ router.post('/order/:orderId/send', async (req, res) => {
       orderId,
       req.adminTenantId,
       reportsResult.rows,
-      recipient.email,
+      recipientEmails,
       order
     );
     
-    // Oppdater alle rapporter som sendt
+    // Oppdater ordre (ikke service_reports) som sendt
     await pool.query(
-      `UPDATE service_reports 
+      `UPDATE orders 
        SET sent_til_fakturering = true, pdf_sent_timestamp = NOW() 
-       WHERE order_id = $1`,
+       WHERE id = $1`,
       [orderId]
     );
-    
+
+    const sentToDisplay = recipientEmails.join(', ');
     res.json({
       success: true,
-      message: `${reportsResult.rows.length} rapport(er) sendt til ${recipient.email}`,
-      sentTo: recipient.email,
+      message: `Servicerapport sendt til ${sentToDisplay}`,
+      sentTo: recipientEmails,
       reportCount: reportsResult.rows.length
     });
     
@@ -274,12 +307,16 @@ router.post('/order/:orderId/send', async (req, res) => {
   }
 });
 
-// Mark as invoiced (unchanged)
+// Mark as invoiced — oppdaterer orders-tabellen via rapport-ID
 router.post('/:reportId/mark-invoiced', async (req, res) => {
   try {
     const pool = await db.getTenantConnection(req.adminTenantId);
+    // Finn ordre-ID fra rapport og oppdater orders-tabellen
     await pool.query(
-      'UPDATE service_reports SET is_invoiced = $1 WHERE id = $2',
+      `UPDATE orders o
+       SET is_invoiced = $1
+       FROM service_reports sr
+       WHERE sr.id = $2 AND o.id = sr.order_id`,
       [req.body.isInvoiced, req.params.reportId]
     );
     res.json({ 
@@ -308,14 +345,14 @@ router.put('/order/:orderId/invoice', async (req, res) => {
     }
     
     const query = `
-      UPDATE service_reports 
+      UPDATE orders 
       SET 
         is_invoiced = $1,
         invoice_number = $2,
         invoice_date = $3,
         invoice_comment = $4
-      WHERE order_id = $5 AND status = 'completed'
-      RETURNING id, equipment_id, invoice_number
+      WHERE id = $5
+      RETURNING id, invoice_number
     `;
     
     const result = await pool.query(query, [
@@ -328,11 +365,11 @@ router.put('/order/:orderId/invoice', async (req, res) => {
     
     if (result.rows.length === 0) {
       return res.status(404).json({ 
-        error: 'Ingen fullførte rapporter funnet' 
+        error: 'Ordre ikke funnet' 
       });
     }
     
-    console.log(`✅ Updated ${result.rows.length} reports`);
+    console.log(`✅ Updated order ${orderId} invoice status`);
     
     res.json({ 
       success: true,
@@ -376,6 +413,9 @@ router.get('/:reportId/edit-data', async (req, res) => {
         o.customer_data,
         o.scheduled_date,
         o.service_type,
+        o.service_address_street,
+        o.service_address_postal_code,
+        o.service_address_city,
         e.systemnavn as equipment_name,
         e.systemtype as equipment_type,
         e.location as equipment_location,
@@ -513,6 +553,19 @@ router.get('/:reportId/edit-data', async (req, res) => {
 
     const customerData = safeJsonParse(report.customer_data, {});
 
+    const toDateOnlyIso = (value) => {
+      if (!value) return '';
+      if (typeof value === 'string') {
+        const dateOnlyMatch = value.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (dateOnlyMatch) return dateOnlyMatch[1];
+      }
+
+      const date = value instanceof Date ? value : new Date(value);
+      return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+    };
+
+    const serviceDateSource = customerData.service_date || report.scheduled_date;
+
     // ✅ Hent overall_comment fra checklistData (kan være i root eller i checklist objekt)
     const parsedChecklistData = safeJsonParse(report.checklist_data, {});
     const overallComment = parsedChecklistData.overallComment ||
@@ -529,7 +582,13 @@ router.get('/:reportId/edit-data', async (req, res) => {
       customerName: report.customer_name,
       technicianName: report.technician_name,
       scheduledDate: report.scheduled_date,
+      serviceDate: toDateOnlyIso(serviceDateSource),
       serviceType: report.service_type,
+      serviceAddress: {
+        street: report.service_address_street || '',
+        postalCode: report.service_address_postal_code || '',
+        city: report.service_address_city || ''
+      },
       status: report.status,
       createdAt: report.created_at,
       completedAt: report.completed_at,
@@ -567,7 +626,7 @@ router.get('/:reportId/edit-data', async (req, res) => {
 // ========================================
 router.put('/:reportId/update-content', async (req, res) => {
   const { reportId } = req.params;
-  const { checklistComments, products_used, additional_work, metadata, overall_comment } = req.body;
+  const { checklistComments, products_used, additional_work, metadata, overall_comment, serviceAddress } = req.body;
 
   console.log(`📝 Updating content for report: ${reportId}`);
   console.log(`   - checklistComments: ${checklistComments ? Object.keys(checklistComments).length : 0} items`);
@@ -695,8 +754,11 @@ router.put('/:reportId/update-content', async (req, res) => {
           customerData = {};
         }
 
-        // Merge metadata inn i customer_data
-        const updatedCustomerData = { ...customerData, ...metadata };
+        // Merge metadata inn i customer_data, inkl. overstyrt servicedato
+        const updatedCustomerData = {
+          ...customerData,
+          ...(metadata && typeof metadata === 'object' ? metadata : {})
+        };
 
         await pool.query(
           'UPDATE orders SET customer_data = $1 WHERE id = $2',
@@ -707,14 +769,32 @@ router.put('/:reportId/update-content', async (req, res) => {
       }
     }
 
-    // Regenerer PDF
+    // Oppdater serviceadresse-kolonner direkte (ikke via customer_data JSONB)
+    if (serviceAddress && orderId) {
+      await pool.query(
+        `UPDATE orders
+         SET service_address_street = $1,
+             service_address_postal_code = $2,
+             service_address_city = $3
+         WHERE id = $4`,
+        [
+          serviceAddress.street || null,
+          serviceAddress.postalCode || null,
+          serviceAddress.city || null,
+          orderId
+        ]
+      );
+      console.log(`✅ Order ${orderId} service address updated`);
+    }
+
+    // Regenerer PDF for hele ordren
     let pdfRegenerated = false;
     try {
       const UnifiedPDFGenerator = require('../../services/unifiedPdfGenerator');
       const pdfGenerator = new UnifiedPDFGenerator();
 
-      console.log(`🔄 Regenerating PDF for report: ${reportId}`);
-      const pdfPath = await pdfGenerator.generateReport(reportId, req.adminTenantId);
+      console.log(`🔄 Regenerating PDF for order: ${orderId}`);
+      const pdfPath = await pdfGenerator.generateOrderReport(orderId, req.adminTenantId);
       pdfRegenerated = true;
       console.log(`✅ PDF regenerated: ${pdfPath}`);
 

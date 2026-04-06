@@ -242,11 +242,14 @@
             
             console.log('User type:', { isAdmin, technicianId });
             
+            const descriptionInput = document.getElementById('orderDescription')?.value?.trim();
+            const description = descriptionInput || 'Hasteordre - Akutt serviceoppdrag';
+
             const orderData = {
                 customerId: state.selectedCustomer.id,
                 customerName: state.selectedCustomer.name,
                 customerData: state.selectedCustomer, // Send all customer data from Tripletex
-                description: 'Hasteordre - Akutt serviceoppdrag',
+                description: description,
                 serviceType: 'Hasteordre',
                 scheduledDate: getLocalDateString()
             };

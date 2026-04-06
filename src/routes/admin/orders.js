@@ -47,7 +47,17 @@ router.get('/', async (req, res) => {
 
     const result = await pool.query(
       `SELECT o.*, t.name as technician_name,
-              o.customer_data->>'physicalAddress' as delivery_address
+              o.customer_data->>'physicalAddress' as delivery_address,
+              EXISTS (
+                SELECT 1
+                FROM service_reports sr
+                WHERE sr.order_id = o.id
+              ) AS has_service_reports,
+              EXISTS (
+                SELECT 1
+                FROM quotes q
+                WHERE q.order_id = o.id
+              ) AS has_quotes
        FROM orders o
        LEFT JOIN technicians t ON o.technician_id = t.id
        ${whereClause}
@@ -118,7 +128,10 @@ router.post('/', async (req, res) => {
       serviceType, 
       technicianId, 
       scheduledDate,
-      includedEquipmentIds
+      includedEquipmentIds,
+      serviceAddressStreet,
+      serviceAddressPostalCode,
+      serviceAddressCity
     } = req.body;
     
     console.log('=== CREATE ORDER REQUEST ===');
@@ -160,7 +173,10 @@ router.post('/', async (req, res) => {
         technician_id, 
         scheduled_date, 
         status, 
-        included_equipment_ids
+        included_equipment_ids,
+        service_address_street,
+        service_address_postal_code,
+        service_address_city
       ) VALUES (
         $1, 
         $2::integer, 
@@ -171,7 +187,10 @@ router.post('/', async (req, res) => {
         $7, 
         $8::date, 
         $9, 
-        $10::jsonb
+        $10::jsonb,
+        $11,
+        $12,
+        $13
       ) RETURNING *
     `;
     
@@ -194,7 +213,10 @@ const params = [
   technicianId || null,
   scheduledDate || null,
   technicianId ? 'scheduled' : 'pending',
-  equipmentIdsJsonString
+  equipmentIdsJsonString,
+  serviceAddressStreet || null,
+  serviceAddressPostalCode || null,
+  serviceAddressCity || null
 ];
     
     console.log('INSERT params:');
@@ -230,4 +252,49 @@ const params = [
     });
   }
 });
+// DELETE order - hard delete, kun for pending/scheduled ordrer
+router.delete('/:id', async (req, res) => {
+  try {
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    const orderId = req.params.id;
+
+    // Hent ordren og sjekk at den finnes
+    const orderResult = await pool.query('SELECT id, status FROM orders WHERE id = $1', [orderId]);
+    if (orderResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Ordre ikke funnet' });
+    }
+
+    const order = orderResult.rows[0];
+
+    // Kun pending og scheduled kan slettes
+    if (!['pending', 'scheduled'].includes(order.status)) {
+      return res.status(400).json({ 
+        error: `Kan ikke slette ordre med status "${order.status}". Kun ventende og planlagte ordrer kan slettes.` 
+      });
+    }
+
+    // Sjekk om det finnes servicerapporter knyttet til ordren
+    const reportsResult = await pool.query('SELECT COUNT(*) FROM service_reports WHERE order_id = $1', [orderId]);
+    if (parseInt(reportsResult.rows[0].count) > 0) {
+      return res.status(400).json({ error: 'Kan ikke slette ordre som har servicerapporter. Slett rapportene først.' });
+    }
+
+    // Sjekk om det finnes tilbud knyttet til ordren
+    const quotesResult = await pool.query('SELECT COUNT(*) FROM quotes WHERE order_id = $1', [orderId]);
+    if (parseInt(quotesResult.rows[0].count) > 0) {
+      return res.status(400).json({ error: 'Kan ikke slette ordre som har tilbud. Slett tilbudene først.' });
+    }
+
+    // Hard delete av ordren
+    await pool.query('DELETE FROM orders WHERE id = $1', [orderId]);
+
+    console.log(`Order deleted: ${orderId} (status was: ${order.status})`);
+    res.json({ message: 'Ordre slettet', orderId });
+
+  } catch (error) {
+    console.error('Error deleting order:', error);
+    res.status(500).json({ error: 'Kunne ikke slette ordre. Prøv igjen.' });
+  }
+});
+
 module.exports = router;

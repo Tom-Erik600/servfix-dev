@@ -8,6 +8,21 @@ const { requireTenant } = require('../middleware/auth');
 
 const router = express.Router();
 
+// In-memory progress store: orderId → { pct, label, done, error }
+const pdfProgressStore = new Map();
+
+function setPdfProgress(orderId, pct, label, { done = false, error = null } = {}) {
+  pdfProgressStore.set(String(orderId), { pct, label, done, error, updatedAt: Date.now() });
+}
+
+// Clean up entries older than 10 minutes to avoid memory leaks
+setInterval(() => {
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const [key, val] of pdfProgressStore.entries()) {
+    if (val.updatedAt < cutoff) pdfProgressStore.delete(key);
+  }
+}, 60 * 1000);
+
 // Middleware - sjekk auth og tenant
 router.use((req, res, next) => {
   if (!req.session.technicianId) {
@@ -474,9 +489,6 @@ router.post('/:orderId/complete', async (req, res) => {
   }
 
   let pool;
-  let serviceReports;
-  const generatedPDFs = [];
-  let pdfGenerator = null;
 
   try {
     pool = await db.getTenantConnection(tenantId);
@@ -509,59 +521,20 @@ router.post('/:orderId/complete', async (req, res) => {
     }
 
     console.log(`✅ Order status UPDATED in transaction:`, statusUpdate.rows[0]);
-   
-    // Hent service rapporter - filtrer på inkluderte anlegg hvis spesifisert
-    let serviceReportsQuery = `
-      SELECT sr.*, e.systemnavn as equipment_name, e.systemtype as equipment_type
-      FROM service_reports sr
-      JOIN equipment e ON sr.equipment_id = e.id
-      WHERE sr.order_id = $1
-    `;
 
-    let queryParams = [orderId];
-
-    // Filtrer på inkluderte anlegg hvis spesifisert
+    // Filtrer service_reports til kun inkluderte anlegg hvis spesifisert
     if (includedEquipmentIds && Array.isArray(includedEquipmentIds) && includedEquipmentIds.length > 0) {
-      serviceReportsQuery += ` AND sr.equipment_id = ANY($2)`;
-      queryParams.push(includedEquipmentIds);
+      // Sett rapporter for ikke-inkluderte anlegg tilbake til draft så de ikke havner i PDF
+      await pool.query(
+        `UPDATE service_reports SET status = 'excluded'
+         WHERE order_id = $1
+           AND equipment_id NOT IN (SELECT unnest($2::int[]))
+           AND status = 'completed'`,
+        [orderId, includedEquipmentIds]
+      );
+      console.log(`📋 Ekskluderte anlegg satt til 'excluded' (ikke med i PDF)`);
     }
 
-    serviceReportsQuery += ` ORDER BY sr.created_at ASC`;
-
-    serviceReports = await pool.query(serviceReportsQuery, queryParams);
-    
-    console.log(`📋 Fant ${serviceReports.rows.length} rapporter å generere PDF-er for (av ${includedEquipmentIds?.length || 'alle'} valgte anlegg)`);
-    
-    // Generer PDF-er for filtrerte rapporter
-    if (serviceReports.rows.length > 0) {
-      try {
-        pdfGenerator = new UnifiedPDFGenerator();
-        
-        for (const report of serviceReports.rows) {
-          try {
-            console.log(`📄 Genererer PDF for rapport ${report.id} (${report.equipment_type})...`);
-            
-            const pdfPath = await pdfGenerator.generateReport(report.id, tenantId);
-            
-            generatedPDFs.push({
-              reportId: report.id,
-              equipmentType: report.equipment_type,
-              equipmentName: report.equipment_name,
-              pdfPath: pdfPath
-            });
-            
-            console.log(`✅ PDF generert: ${pdfPath}`);
-            
-          } catch (pdfError) {
-            console.error(`❌ PDF-generering feilet for rapport ${report.id}:`, pdfError.message);
-          }
-        }
-        
-      } catch (pdfInitError) {
-        console.error('❌ Kunne ikke opprette PDF-generator:', pdfInitError.message);
-      }
-    }
-    
     // Verify status before commit
     const verifyQuery = await pool.query(
       'SELECT id, status FROM orders WHERE id = $1',
@@ -573,24 +546,30 @@ router.post('/:orderId/complete', async (req, res) => {
     await pool.query('COMMIT');
     console.log(`✅ COMMIT successful!`);
 
-    // Verify after commit
-    const afterCommit = await pool.query(
-      'SELECT id, status FROM orders WHERE id = $1',
-      [orderId]
-    );
-    console.log(`🔍 Status AFTER COMMIT:`, afterCommit.rows[0]);
-    
-    console.log(`✅ Ordre ${orderId} ferdigstilt med ${generatedPDFs.length} PDF-er generert`);
-    
+    // Svar klienten umiddelbart etter commit — PDF-generering skjer asynkront
     res.json({
       success: true,
       orderId: orderId,
-      message: generatedPDFs.length > 0 
-        ? `Ordre ferdigstilt med ${generatedPDFs.length} servicerapporter`
-        : 'Ordre ferdigstilt',
-      generatedPDFs: generatedPDFs,
+      message: 'Ordre ferdigstilt — servicerapport genereres',
+      pdfGenerated: false,
       includedEquipmentCount: includedEquipmentIds?.length || 'alle'
     });
+
+    // Generer PDF asynkront etter at svar er sendt (blokkerer ikke klienten)
+    const pdfGenerator = new UnifiedPDFGenerator();
+    console.log(`📄 Genererer ordre-PDF for ${orderId} (asynkront)...`);
+    setPdfProgress(orderId, 0, 'Starter...');
+    pdfGenerator.generateOrderReport(orderId, tenantId, (pct, label) => {
+      setPdfProgress(orderId, pct, label);
+    })
+      .then(() => {
+        setPdfProgress(orderId, 100, 'Ferdig!', { done: true });
+        console.log(`✅ Ordre ${orderId}: PDF generert`);
+      })
+      .catch(err => {
+        setPdfProgress(orderId, 0, 'Feil ved generering', { done: true, error: err.message });
+        console.error(`❌ PDF-generering feilet for ordre ${orderId}:`, err.message);
+      });
     
   } catch (error) {
     if (pool) {
@@ -604,9 +583,73 @@ router.post('/:orderId/complete', async (req, res) => {
   }
 });
 
-// Hent alle rapporter for en ordre med PDF-status
-router.get('/:id/reports', async (req, res) => {
+// Hent PDF-status for en ordre (brukes av frontend til polling etter ferdigstilling)
+router.get('/:orderId/pdf-status', async (req, res) => {
+  const { orderId } = req.params;
+  const tenantId = req.tenantId || req.session.tenantId;
+
+  if (!req.session.technicianId) {
+    return res.status(401).json({ error: 'Ikke autentisert' });
+  }
+
   try {
+    const pool = await db.getTenantConnection(tenantId);
+    const result = await pool.query(
+      'SELECT pdf_generated, pdf_path FROM orders WHERE id = $1',
+      [orderId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ordre ikke funnet' });
+    }
+
+    const { pdf_generated, pdf_path } = result.rows[0];
+    res.json({ pdfGenerated: pdf_generated || false, pdfPath: pdf_path || null });
+  } catch (error) {
+    console.error('❌ Feil ved henting av PDF-status:', error.message);
+    res.status(500).json({ error: 'Kunne ikke hente PDF-status' });
+  }
+});
+
+// SSE: stream PDF-genereringsfremgang til klienten
+router.get('/:orderId/pdf-progress', (req, res) => {
+  const { orderId } = req.params;
+
+  if (!req.session.technicianId) {
+    return res.status(401).end();
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (data) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  // Send current state immediately so client isn't stuck waiting
+  const current = pdfProgressStore.get(String(orderId));
+  if (current) sendEvent(current);
+
+  const POLL_MS = 500;
+  const interval = setInterval(() => {
+    const state = pdfProgressStore.get(String(orderId));
+    if (!state) return;
+
+    sendEvent(state);
+
+    if (state.done) {
+      clearInterval(interval);
+      res.end();
+    }
+  }, POLL_MS);
+
+  req.on('close', () => clearInterval(interval));
+});
+
+// Hent alle rapporter for en ordre med PDF-status
+router.get('/:id/reports', async (req, res) => {  try {
     const { id: orderId } = req.params;
     const tenantId = req.session.tenantId;
     
@@ -616,11 +659,7 @@ router.get('/:id/reports', async (req, res) => {
       `SELECT 
         sr.*,
         e.systemnavn as equipment_name,
-        e.systemtype as equipment_type,
-        CASE 
-          WHEN sr.pdf_generated = true THEN 'generated'
-          ELSE 'pending'
-        END as pdf_status
+        e.systemtype as equipment_type
        FROM service_reports sr
        JOIN equipment e ON sr.equipment_id = e.id
        WHERE sr.order_id = $1
@@ -848,16 +887,13 @@ router.post('/', async (req, res) => {
 
 // POST regenerate reports for completed order
 router.post('/:id/regenerate-reports', async (req, res) => {
-  let pool;
   try {
     const { id: orderId } = req.params;
-    const { includedEquipmentIds } = req.body;
     const tenantId = req.session.tenantId;
     
-    console.log(`🔄 Regenerating reports for order ${orderId}`);
-    console.log('Included equipment IDs:', includedEquipmentIds);
+    console.log(`🔄 Regenerating report for order ${orderId}`);
     
-    pool = await db.getTenantConnection(tenantId);
+    const pool = await db.getTenantConnection(tenantId);
     
     // Sjekk at ordren eksisterer og er ferdigstilt
     const orderCheck = await pool.query(
@@ -874,117 +910,34 @@ router.post('/:id/regenerate-reports', async (req, res) => {
       return res.status(400).json({ error: 'Kan kun regenerere rapporter for ferdigstilte ordre' });
     }
     
-    await pool.query('BEGIN');
-    
-    // Hent eksisterende service rapporter for de inkluderte anleggene
-    let serviceReportsQuery = `
-      SELECT sr.*, e.systemnavn as equipment_name, e.systemtype as equipment_type
-      FROM service_reports sr
-      JOIN equipment e ON sr.equipment_id = e.id
-      WHERE sr.order_id = $1
-    `;
-    
-    let queryParams = [orderId];
-    
-    // Hvis spesifikke anlegg er spesifisert, filtrer på de
-    if (includedEquipmentIds && Array.isArray(includedEquipmentIds) && includedEquipmentIds.length > 0) {
-      serviceReportsQuery += ` AND sr.equipment_id = ANY($2)`;
-      queryParams.push(includedEquipmentIds);
-    }
-    
-    serviceReportsQuery += ` ORDER BY sr.created_at ASC`;
-    
-    const serviceReports = await pool.query(serviceReportsQuery, queryParams);
-    
-    if (serviceReports.rows.length === 0) {
-      await pool.query('ROLLBACK');
-      return res.status(400).json({ error: 'Ingen servicerapporter funnet for regenerering' });
-    }
-    
-    console.log(`📋 Found ${serviceReports.rows.length} service reports to regenerate`);
-    
-    // Generer PDF for hver servicerapport
-    const generatedPDFs = [];
+    // Generer én ny samlet PDF for ordren
     const UnifiedPDFGenerator = require('../services/unifiedPdfGenerator');
     const pdfGenerator = new UnifiedPDFGenerator();
     
-    for (const report of serviceReports.rows) {
-      try {
-        console.log(`📄 Regenerating PDF for equipment ${report.equipment_id}: ${report.equipment_name}`);
-        
-        const pdfPath = await pdfGenerator.generateReport(report.id, tenantId);
-        
-        // Oppdater service_reports tabellen med ny PDF-status og timestamp
-        await pool.query(
-          `UPDATE service_reports 
-           SET pdf_path = $1, 
-               pdf_generated = true, 
-               pdf_sent_timestamp = NOW(),
-               updated_at = NOW()
-           WHERE id = $2`,
-          [pdfPath, report.id]
-        );
-        
-        generatedPDFs.push({
-          equipmentId: report.equipment_id,
-          equipmentName: report.equipment_name,
-          reportId: report.id,
-          pdfGenerated: true,
-          pdfPath: pdfPath
-        });
-        
-        console.log(`✅ PDF regenerated for equipment ${report.equipment_id}`);
-        
-      } catch (pdfError) {
-        console.error(`❌ Failed to regenerate PDF for equipment ${report.equipment_id}:`, pdfError);
-        
-        // Mark as failed but don't rollback the whole transaction
-        await pool.query(
-          `UPDATE service_reports 
-           SET pdf_generated = false, 
-               updated_at = NOW()
-           WHERE id = $1`,
-          [report.id]
-        );
-        
-        generatedPDFs.push({
-          equipmentId: report.equipment_id,
-          equipmentName: report.equipment_name,
-          reportId: report.id,
-          pdfGenerated: false,
-          error: pdfError.message
-        });
-      }
+    let pdfPath;
+    try {
+      pdfPath = await pdfGenerator.generateOrderReport(orderId, tenantId);
+    } catch (pdfError) {
+      console.error(`❌ Failed to regenerate PDF for order ${orderId}:`, pdfError);
+      return res.status(500).json({
+        error: 'Kunne ikke regenerere rapport',
+        details: pdfError.message
+      });
     }
     
-    await pool.query('COMMIT');
-    
-    // Beregn antall suksessfulle regenereringer
-    const successfulRegens = generatedPDFs.filter(pdf => pdf.pdfGenerated).length;
-    const failedRegens = generatedPDFs.filter(pdf => !pdf.pdfGenerated).length;
-    
-    console.log(`🎯 Report regeneration completed: ${successfulRegens} successful, ${failedRegens} failed`);
+    console.log(`✅ PDF regenerated for order ${orderId}: ${pdfPath}`);
     
     res.json({
       success: true,
-      message: failedRegens > 0 
-        ? `${successfulRegens} rapporter regenerert, ${failedRegens} feilet`
-        : `${successfulRegens} servicerapporter regenerert`,
-      generatedPDFs: generatedPDFs,
-      stats: {
-        total: generatedPDFs.length,
-        successful: successfulRegens,
-        failed: failedRegens
-      }
+      message: 'Servicerapport regenerert',
+      pdfPath,
+      stats: { total: 1, successful: 1, failed: 0 }
     });
     
   } catch (error) {
-    if (pool) {
-      await pool.query('ROLLBACK');
-    }
-    console.error('❌ Feil ved regenerering av rapporter:', error);
+    console.error('❌ Feil ved regenerering av rapport:', error);
     res.status(500).json({ 
-      error: 'Kunne ikke regenerere rapporter',
+      error: 'Kunne ikke regenerere rapport',
       details: error.message 
     });
   }

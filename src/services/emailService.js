@@ -113,9 +113,9 @@ class EmailService {
       console.log(`📧 Sending email from ${fromEmail} to ${customerEmail}`);
       const result = await this.transporter.sendMail(mailOptions);
       
-      // Oppdater rapport status når e-post er sendt
+      // Oppdater ordre-status når e-post er sendt
       await pool.query(
-        'UPDATE service_reports SET sent_til_fakturering = true, pdf_sent_timestamp = NOW() WHERE id = $1',
+        'UPDATE orders SET sent_til_fakturering = true, pdf_sent_timestamp = NOW() WHERE id = (SELECT order_id FROM service_reports WHERE id = $1)',
         [reportId]
       );
       
@@ -254,10 +254,20 @@ class EmailService {
         throw error;
     }
 }
-async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, order) {
+async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmailOrEmails, order) {
   await this.ensureInit();
   try {
-    console.log(`📧 Sending report for order ${orderId} to ${customerEmail}`);
+    // Støtter både enkelt e-post (string) og array av e-poster
+    const toAddresses = Array.isArray(customerEmailOrEmails)
+      ? customerEmailOrEmails.filter(Boolean)
+      : [customerEmailOrEmails].filter(Boolean);
+
+    if (toAddresses.length === 0) {
+      throw new Error('Ingen e-postadresser oppgitt');
+    }
+
+    const toField = toAddresses.join(', ');
+    console.log(`📧 Sending report for order ${orderId} to ${toField}`);
     
     // Hent from-adresse fra settings
     let fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
@@ -271,15 +281,13 @@ async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, orde
       console.warn('Could not load sender email, using default:', error.message);
     }
     
-    // ENDRING: Kun bruk FØRSTE rapport siden alle peker til samme PDF
-    const firstReport = reports[0];
-    
-    if (!firstReport || !firstReport.pdf_path || !firstReport.pdf_generated) {
+    // Bruk order.pdf_path direkte — PDF er nå lagret på ordre-nivå
+    if (!order.pdf_path || !order.pdf_generated) {
       throw new Error('Ingen PDF funnet for denne ordren');
     }
     
     // Hent PDF fra GCS via bucket API (autentisert, fungerer uansett om bucket er public eller ikke)
-    const gcsPath = `tenants/${tenantId}/${firstReport.pdf_path}`;
+    const gcsPath = `tenants/${tenantId}/${order.pdf_path}`;
     console.log(`📥 Fetching PDF from GCS: ${gcsPath} (bucket: ${gcs.bucketName})`);
 
     let pdfBuffer;
@@ -299,7 +307,7 @@ async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, orde
     
     const mailOptions = {
       from: fromEmail,
-      to: customerEmail,
+      to: toField,
       subject: `Servicerapport - Ordre ${orderId} - ${order.customer_name}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -336,7 +344,7 @@ async sendOrderReportsToCustomer(orderId, tenantId, reports, customerEmail, orde
     return {
       success: true,
       messageId: result.messageId,
-      sentTo: customerEmail,
+      sentTo: toAddresses,
       fromEmail: fromEmail,
       reportCount: 1  // Alltid 1 PDF nå
     };

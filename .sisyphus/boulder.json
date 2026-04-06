@@ -1,0 +1,44 @@
+{
+  "active_plan": "E:/apps/servfix-dev/.sisyphus/plans/krav-1-servicedato.md",
+  "started_at": "2026-03-30T19:56:41.671873+00:00",
+  "session_ids": [
+    "ses_2ceac2648ffetpvXIsjmLhEcEO",
+    "ses_2bfad9906ffeaakkLey1V4Q6GO",
+    "ses_2bfad9947ffem4h6PaJRMesnjM",
+    "ses_2bfa9006bffeGH4d8iGIkZV2rM",
+    "ses_2bfa67ec8ffeU4pu3bkJtk8Q9c",
+    "ses_2bfa67f0fffeQxHSTKbj2jh0Qw",
+    "ses_2b64988dcffe1sOiqWTgM67qOG",
+    "ses_2b63226eaffecgRj70od77L7Xs",
+    "ses_2b62b5de6ffefKrtBRA8aVrvzu",
+    "ses_2b5d309fdffemv2g5SOuelnl11",
+    "ses_2b5c14a40ffelmJYpmHzH2Tsun",
+    "ses_2b5bd7509ffeUmx3fVicgDATe0",
+    "ses_2b23ef2a3ffed9O4FleDO39fFp",
+    "ses_2b23ec145ffezQKZ5cWLzvny5k",
+    "ses_2b23e8193ffe5cjuXWcLw4FdtY",
+    "ses_2b0e9424dffe7hGYDN73aUMoEC",
+    "ses_2b0e90d6effeKe6CvU2WARp99L"
+  ],
+  "plan_name": "krav-1-servicedato",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "PDF-generator: bruk `service_date` som servicedato i HTML-malen",
+      "session_id": "ses_2bfad9947ffem4h6PaJRMesnjM",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-03-30T19:59:05.477Z"
+    },
+    "todo:3": {
+      "task_key": "todo:3",
+      "task_label": "3",
+      "task_title": "`edit-data`-endepunkt: eksponer `serviceDate` i respons",
+      "session_id": "ses_2bfa9006bffeGH4d8iGIkZV2rM",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-03-30T20:03:23.326Z"
+    }
+  }
+}

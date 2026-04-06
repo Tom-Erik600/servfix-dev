@@ -54,8 +54,9 @@
                             <th>Tekniker</th>
                             <th>Kunde</th>
                             <th>Type</th>
-                            <th>Dato</th>  <!-- ENDRET FRA "TID" TIL "DATO" -->
+                            <th>Dato</th>
                             <th>Status</th>
+                            <th style="width: 70px;"></th>
                         </tr>
                     </thead>
                     <tbody id="dagens-oppdrag-liste"></tbody>
@@ -71,9 +72,10 @@
                             <th>Ordrenr</th>
                             <th>Tekniker</th>
                             <th>Kunde</th>
-                            <th>Type</th>  <!-- LAGT TIL TYPE-KOLONNE -->
+                            <th>Type</th>
                             <th>Dato</th>
                             <th>Status</th>
+                            <th style="width: 70px;"></th>
                         </tr>
                     </thead>
                     <tbody id="ukens-oppdrag-liste"></tbody>
@@ -95,6 +97,7 @@
                             <th>Type</th>
                             <th>Dato</th>
                             <th>Status</th>
+                            <th style="width: 70px;"></th>
                         </tr>
                     </thead>
                     <tbody id="uferdige-oppdrag-liste"></tbody>
@@ -103,6 +106,18 @@
 
             <!-- Uplanlagte oppdrag-seksjonen er fjernet som forespurt -->
         </main>
+    </div>
+
+    <!-- Bekreftelsesdialog for sletting av ordre -->
+    <div id="delete-order-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:#fff; border-radius:12px; padding:32px; max-width:420px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+            <h3 style="margin:0 0 8px 0; font-size:18px; color:#111827;">Slett ordre?</h3>
+            <p id="delete-order-message" style="margin:0 0 24px 0; color:#6B7280; font-size:14px; line-height:1.5;"></p>
+            <div style="display:flex; gap:12px; justify-content:flex-end;">
+                <button onclick="closeDeleteModal()" style="padding:10px 20px; border:1px solid #D1D5DB; background:#fff; color:#374151; border-radius:8px; cursor:pointer; font-size:14px; font-weight:500;">Avbryt</button>
+                <button id="delete-order-confirm-btn" style="padding:10px 20px; border:none; background:#DC2626; color:#fff; border-radius:8px; cursor:pointer; font-size:14px; font-weight:600;">SLETT</button>
+            </div>
+        </div>
     </div>
     
     <script src="/admin/assets/js/main.js"></script>

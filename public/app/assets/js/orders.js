@@ -3,11 +3,13 @@
 let pageState = {
     order: null,
     customer: null,
-    equipment: [],
+    equipment: [],          // Anlegg som vises nå (filtrert)
+    allEquipment: [],       // Alle aktive anlegg for kunden (ufiltrert)
     totalEquipmentCount: 0,
     technician: null,
     quotes: [],
-    selectedEquipmentIds: [] // For equipment selection
+    selectedEquipmentIds: [], // For equipment selection
+    showAllEquipment: false   // Toggle: vis alle vs. kun inkluderte
 };
 
 // HMS-innstillinger — lastes ved sideload
@@ -15,10 +17,10 @@ let hmsSettings = { hmsMenuEnabled: true, sjaPerOrderEnabled: true };
 
 async function loadHmsSettings() {
     try {
-        const res = await fetch('/api/images/settings', { credentials: 'include' });
-        const settings = await res.json();
-        if (settings?.hmsSettings) {
-            hmsSettings = settings.hmsSettings;
+        const res = await fetch('/api/images/app-settings', { credentials: 'include' });
+        const data = await res.json();
+        if (data?.hmsSettings) {
+            hmsSettings = data.hmsSettings;
         }
     } catch (e) {
         console.warn('Kunne ikke hente HMS-innstillinger, bruker default');
@@ -34,11 +36,13 @@ function resetPageState() {
     pageState = { 
         order: null, 
         customer: null, 
-        equipment: [],  // TØM array
+        equipment: [],
+        allEquipment: [],
         totalEquipmentCount: 0,
         technician: null,
         quotes: [],
-        selectedEquipmentIds: []
+        selectedEquipmentIds: [],
+        showAllEquipment: false
     };
 }
 
@@ -181,7 +185,7 @@ async function initializePage() {
         pageState.totalEquipmentCount = activeEquipment.length;
 
         // Map equipment med korrekt struktur
-        pageState.equipment = activeEquipment.map(eq => ({
+        pageState.allEquipment = activeEquipment.map(eq => ({
             ...eq,
             id: parseInt(eq.id),
             serviceStatus: eq.serviceStatus || eq.serviceReportStatus || 'not_started',
@@ -192,14 +196,14 @@ async function initializePage() {
         const uniqueEquipment = [];
         const seenIds = new Set();
         
-        for (const eq of pageState.equipment) {
+        for (const eq of pageState.allEquipment) {
             if (!seenIds.has(eq.id)) {
                 seenIds.add(eq.id);
                 uniqueEquipment.push(eq);
             }
         }
         
-        pageState.equipment = uniqueEquipment;
+        pageState.allEquipment = uniqueEquipment;
         
         // Håndter inkluderte anlegg
         if (!pageState.order) {
@@ -210,21 +214,18 @@ async function initializePage() {
             pageState.selectedEquipmentIds = pageState.order.included_equipment_ids.map(id => parseInt(id));
             console.log('Loaded selected equipment from order:', pageState.selectedEquipmentIds);
 
-            pageState.equipment = pageState.equipment.filter(eq =>
+            // Vis kun inkluderte anlegg som standard (men allEquipment bevares for toggle)
+            pageState.equipment = pageState.allEquipment.filter(eq =>
                 pageState.selectedEquipmentIds.includes(parseInt(eq.id))
             );
             console.log('Showing only included equipment on order page:', pageState.equipment.map(eq => eq.id));
         } else {
             // Bakoverkompatibel: NULL eller tom = alle anlegg inkludert
-            pageState.selectedEquipmentIds = pageState.equipment.map(eq => parseInt(eq.id));
+            pageState.selectedEquipmentIds = pageState.allEquipment.map(eq => parseInt(eq.id));
+            pageState.equipment = [...pageState.allEquipment];
             console.log('No specific selection, including all equipment:', pageState.selectedEquipmentIds);
         }
         
-        // VIKTIG: Konverter equipment IDs til integers for konsistens
-        pageState.equipment = pageState.equipment.map(eq => ({
-            ...eq,
-            id: parseInt(eq.id)
-        }));        
         console.log('Equipment after update:', {
             count: pageState.equipment.length,
             ids: pageState.equipment.map(eq => eq.id)
@@ -352,33 +353,54 @@ function getStatusText(status) {
 
 function renderEquipmentList() {
     const container = document.getElementById('equipment-list');
-    
-    // ✅ EKSTRA SIKKERHET: Filtrer ut inaktive anlegg her også (dobbeltsjekk)
-    const activeEquipment = pageState.equipment.filter(eq => {
+    const hasSelection = pageState.order?.included_equipment_ids && pageState.order.included_equipment_ids.length > 0;
+
+    // Bestem hvilke anlegg som vises
+    let displayEquipment;
+    if (hasSelection && !pageState.showAllEquipment) {
+        // Vis kun inkluderte aktive anlegg
+        displayEquipment = pageState.allEquipment.filter(eq =>
+            pageState.selectedEquipmentIds.includes(parseInt(eq.id))
+        );
+    } else {
+        // Vis alle aktive anlegg (inkl. ikke-inkluderte)
+        displayEquipment = [...pageState.allEquipment];
+    }
+
+    // Filtrer inaktive (dobbeltsjekk)
+    displayEquipment = displayEquipment.filter(eq => {
         const status = eq.equipment_status || eq.status;
         return !status || status === 'active';
     });
-    
-    if (activeEquipment.length !== pageState.equipment.length) {
-        console.warn(`⚠️ renderEquipmentList: Filtered ${pageState.equipment.length - activeEquipment.length} inactive items`);
-        pageState.equipment = activeEquipment;
-    }
-    
+
+    // Synk pageState.equipment med det som faktisk vises
+    pageState.equipment = displayEquipment;
+
     let equipmentHTML = `<button class="add-system-btn" data-action="add-equipment">+ Legg til Anlegg</button>`;
 
-    if (pageState.order?.included_equipment_ids && pageState.order.included_equipment_ids.length > 0) {
-        equipmentHTML += `<p class="placeholder-text" style="margin-top: 12px; margin-bottom: 16px; text-align: left;">Viser ${pageState.equipment.length} valgte anlegg for dette oppdraget.</p>`;
+    if (hasSelection) {
+        const includedCount = pageState.selectedEquipmentIds.length;
+        const toggleLabel = pageState.showAllEquipment ? 'Skjul inaktive' : 'Vis alle anlegg';
+        equipmentHTML += `
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 12px; margin-bottom: 16px;">
+                <p class="placeholder-text" style="margin: 0; text-align: left;">Viser ${includedCount} valgte anlegg for dette oppdraget.</p>
+                <button
+                    onclick="toggleShowAllEquipment()"
+                    style="font-size: 13px; padding: 4px 10px; border: 1px solid #d1d5db; border-radius: 6px; background: white; color: #374151; cursor: pointer; white-space: nowrap; flex-shrink: 0;">
+                    ${toggleLabel}
+                </button>
+            </div>`;
     }
-    
-    if (pageState.equipment.length > 0) {
-        equipmentHTML += pageState.equipment.map(createEquipmentCard).join('');
+
+    if (displayEquipment.length > 0) {
+        equipmentHTML += displayEquipment.map(eq => createEquipmentCard(eq)).join('');
     } else {
         equipmentHTML += `<p class="placeholder-text">Ingen aktive anlegg funnet på kunde.</p>`;
     }
-    
+
     // Legg til tilbud-seksjonen
     equipmentHTML += renderQuotesList();
-    
+
     // Legg til "Opprett tilbud" knapp
     equipmentHTML += `<button class="create-quote-btn" data-action="create-quote">+ Opprett tilbud</button>`;
     if (hmsSettings.sjaPerOrderEnabled !== false) {
@@ -388,8 +410,14 @@ function renderEquipmentList() {
             <span>SJA</span>
           </button>`;
     }
-    
+
     container.innerHTML = `<div class="section-header"><h3>Anlegg for service</h3></div>` + equipmentHTML;
+}
+
+function toggleShowAllEquipment() {
+    pageState.showAllEquipment = !pageState.showAllEquipment;
+    renderEquipmentList();
+    setupEventListeners();
 }
 
 function createEquipmentCard(eq) {
@@ -432,6 +460,12 @@ function createEquipmentCard(eq) {
                         <div class="info-linje"><strong>Systemnr:</strong> ${eq.systemnummer || '-'}</div>
                         <div class="info-linje"><strong>Plassering:</strong> ${eq.plassering || '-'}</div>
                         ${eq.betjener ? `<div class="info-linje"><strong>Betjener:</strong> ${eq.betjener}</div>` : ''}
+                        ${eq.hasFilters ? `<div class="info-linje" style="margin-top: 4px;">${[
+                            eq.filterSupply        ? 'Tilluftsfilter' : null,
+                            eq.filterExhaust       ? 'Avtrekksfilter' : null,
+                            eq.filterDriveSupply   ? 'Drivreim tilluftsvifte' : null,
+                            eq.filterDriveExhaust  ? 'Drivrem avtrekksvifte' : null
+                        ].filter(Boolean).map(f => `<span style="display:inline-block; background:#fef3c7; color:#92400e; font-size:11px; padding:2px 7px; border-radius:10px; margin:2px 2px 0 0;">${f}</span>`).join('')}</div>` : ''}
                     </div>
                 </div>
 
@@ -627,13 +661,9 @@ async function handleEquipmentSelectionChange(equipmentId, isChecked) {
     // Lagre valget til backend
     await saveSelectedEquipment();
 
-    if (pageState.order?.included_equipment_ids && pageState.order.included_equipment_ids.length > 0) {
-        pageState.equipment = pageState.equipment.filter(eq => pageState.selectedEquipmentIds.includes(parseInt(eq.id)));
-        renderEquipmentList();
-        setupEventListeners();
-    } else {
-        updateEquipmentCardStyles();
-    }
+    // Re-render uten å kutte listen — renderEquipmentList bestemmer hva som vises basert på state
+    renderEquipmentList();
+    setupEventListeners();
 
     renderActionButtons();
 }
@@ -686,6 +716,9 @@ async function saveSelectedEquipment() {
         
         const result = await response.json();
         console.log('Selected equipment saved successfully:', result);
+
+        // Oppdater lokal order-state så hasSelection-logikken i renderEquipmentList stemmer
+        pageState.order.included_equipment_ids = [...pageState.selectedEquipmentIds];
         
     } catch (error) {
         console.error('Error saving selected equipment:', error);
@@ -738,8 +771,11 @@ async function confirmDeleteEquipment(equipmentId) {
             // ✅ VIKTIG: Fjern fra ALLE state-arrays med konsistent ID-håndtering
             const equipmentIdInt = parseInt(equipmentId);
             
-            // Fjern fra equipment array
+            // Fjern fra begge equipment-arrays (deaktivert anlegg skal ikke vises)
             pageState.equipment = pageState.equipment.filter(eq => 
+                parseInt(eq.id) !== equipmentIdInt
+            );
+            pageState.allEquipment = pageState.allEquipment.filter(eq =>
                 parseInt(eq.id) !== equipmentIdInt
             );
             
@@ -797,7 +833,7 @@ async function handleCompleteOrder() {
         return;
     }
     
-    setLoading(true, 'Ferdigstiller ordre og genererer rapporter...');
+    setLoading(true, 'Ferdigstiller ordre...');
     
     try {
         const response = await fetch(`/api/orders/${pageState.order.id}/complete`, {
@@ -815,31 +851,65 @@ async function handleCompleteOrder() {
             const error = await response.json();
             throw new Error(error.error || 'Kunne ikke ferdigstille ordre');
         }
-        
-        const result = await response.json();
-        console.log('Order completed:', result);
-        
-        // Oppdater lokal state
+
+        await response.json();
+
+        // Ordre er ferdigstilt — poll PDF-status mens vi viser progress
         pageState.order.status = 'completed';
-        
-        // Re-render action buttons for å vise "Ordre er fullført"
         renderActionButtons();
-        
-        // Vis suksessmelding
-        const reportCount = result.generatedPDFs ? result.generatedPDFs.length : selectedEquipment.length;
-        showToast(`Ordre ferdigstilt! ${reportCount} ${reportCount === 1 ? 'rapport' : 'rapporter'} generert.`, 'success');
-        
-        // Vent litt før navigering slik at bruker ser suksessmeldingen
-        setTimeout(() => {
-            window.location.href = 'index.html';
-        }, 2000);
-        
+
+        await pollPdfStatus(pageState.order.id);
+
+        showToast('Ordre ferdigstilt! Servicerapport generert.', 'success');
+        setTimeout(() => { window.location.href = 'index.html'; }, 2000);
+
     } catch (error) {
         console.error('Complete order error:', error);
         showToast(`Kunne ikke ferdigstille ordre: ${error.message}`, 'error');
     } finally {
         setLoading(false);
     }
+}
+
+function pollPdfStatus(orderId) {
+    return new Promise((resolve) => {
+        const progressEl = document.getElementById('pdf-progress');
+        const fillEl = document.getElementById('pdf-progress-fill');
+        const labelEl = document.getElementById('pdf-progress-label');
+        const messageEl = document.querySelector('#loading-indicator .loading-spinner p');
+
+        if (progressEl) progressEl.style.display = 'block';
+        if (messageEl) messageEl.textContent = 'Genererer servicerapport...';
+
+        const updateBar = (pct, label) => {
+            if (fillEl) fillEl.style.width = `${pct}%`;
+            if (labelEl) labelEl.textContent = label || `${pct}%`;
+        };
+
+        updateBar(0, 'Starter...');
+
+        const es = new EventSource(`/api/orders/${orderId}/pdf-progress`);
+
+        es.onmessage = async (event) => {
+            const state = JSON.parse(event.data);
+            updateBar(state.pct, state.label);
+
+            if (state.done) {
+                es.close();
+                if (state.pct === 100) {
+                    await new Promise(r => setTimeout(r, 400)); // kort pause så bruker ser 100%
+                }
+                if (progressEl) progressEl.style.display = 'none';
+                resolve();
+            }
+        };
+
+        es.onerror = () => {
+            es.close();
+            if (progressEl) progressEl.style.display = 'none';
+            resolve(); // Ikke blokker bruker ved feil
+        };
+    });
 }
 
 async function handleDeleteQuote(quoteId) {
@@ -1073,7 +1143,9 @@ async function loadEquipmentData(customerId) {
         // Sorter nyeste først
         equipment.sort((a, b) => b.id - a.id);
         
-        pageState.equipment = equipment;
+        // Oppdater begge arrays
+        pageState.allEquipment = equipment.map(eq => ({ ...eq, id: parseInt(eq.id) }));
+        // renderEquipmentList vil sette pageState.equipment basert på showAllEquipment-state
         
         // Refresh visningen
         renderEquipmentList();

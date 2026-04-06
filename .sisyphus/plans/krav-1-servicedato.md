@@ -101,7 +101,7 @@ Wave FINAL:
 
 ## TODOs
 
-- [ ] 1. PDF-generator: bruk `service_date` som servicedato i HTML-malen
+- [x] 1. PDF-generator: bruk `service_date` som servicedato i HTML-malen
 
   **What to do**:
   - Finn de to stedene i `src/services/unifiedPdfGenerator.js` (~linje 1158 og ~1182) der `completed_at || created_at` brukes som dato i PDF-headeren og metadata-tabellen
@@ -159,7 +159,7 @@ Wave FINAL:
   - Message: `fix(pdf): use scheduled_date as service date in PDF report`
   - Files: `src/services/unifiedPdfGenerator.js`
 
-- [ ] 2. Rapport-kø-spørring: bruk `scheduled_date` istedenfor `MAX(sr.created_at)`
+- [x] 2. Rapport-kø-spørring: bruk `scheduled_date` istedenfor `MAX(sr.created_at)`
 
   **What to do**:
   - Finn rapport-kø-spørringen i `src/routes/admin/reports.js` der `MAX(sr.created_at) AS last_service_date` brukes
@@ -204,7 +204,7 @@ Wave FINAL:
   - Message: `fix(reports): use scheduled_date in report queue service date column`
   - Files: `src/routes/admin/reports.js`
 
-- [ ] 3. `edit-data`-endepunkt: eksponer `serviceDate` i respons
+- [x] 3. `edit-data`-endepunkt: eksponer `serviceDate` i respons
 
   **What to do**:
   - Finn `GET /api/admin/reports/:reportId/edit-data` i `src/routes/admin/reports.js`
@@ -247,7 +247,7 @@ Wave FINAL:
   - Message: `feat(reports): expose serviceDate in edit-data endpoint`
   - Files: `src/routes/admin/reports.js`
 
-- [ ] 4. `rapporter.js`: legg til redigerbart servicedato-felt i rediger-modalen
+- [x] 4. `rapporter.js`: legg til redigerbart servicedato-felt i rediger-modalen
 
   **What to do**:
   - Finn edit-modalen i `public/admin/rapporter.html` – legg til `<input type="date" id="edit-service-date">` med tilhørende label "Servicedato"
@@ -294,7 +294,7 @@ Wave FINAL:
   - Message: `feat(reports): add editable service date field in report edit modal`
   - Files: `public/admin/rapporter.html`, `public/admin/assets/js/rapporter.js`
 
-- [ ] 5. `update-content`: lagre overstyrt servicedato og bruk i PDF-regenerering
+- [x] 5. `update-content`: lagre overstyrt servicedato og bruk i PDF-regenerering
 
   **What to do**:
   - Finn `PUT /api/admin/reports/:reportId/update-content` i `src/routes/admin/reports.js`
@@ -354,7 +354,7 @@ Wave FINAL:
 
 ## Final Verification Wave
 
-- [ ] F1. **End-to-end QA** — `unspecified-high`
+- [x] F1. **End-to-end QA** — `unspecified-high`
 
   Verifiser alle tre delene av krav #1:
 

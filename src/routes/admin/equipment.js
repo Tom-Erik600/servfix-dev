@@ -20,6 +20,8 @@ router.get('/', async (req, res) => {
     const query = `
       SELECT e.id, e.customer_id, e.systemtype, e.systemnummer, e.systemnavn,
              e.plassering, e.betjener, e.location, e.status, e.notater,
+             e.has_filters, e.filter_supply, e.filter_exhaust,
+             e.filter_drive_supply, e.filter_drive_exhaust,
              e.cluster_id, ec.name AS cluster_name,
              e.created_at, e.updated_at
       FROM equipment e
@@ -43,6 +45,11 @@ router.get('/', async (req, res) => {
       betjener: eq.betjener,
       status: eq.status,
       internalNotes: eq.notater,
+      hasFilters: eq.has_filters,
+      filterSupply: eq.filter_supply,
+      filterExhaust: eq.filter_exhaust,
+      filterDriveSupply: eq.filter_drive_supply,
+      filterDriveExhaust: eq.filter_drive_exhaust,
       clusterId: eq.cluster_id || null,
       clusterName: eq.cluster_name || null,
       serviceStatus: 'not_started'
@@ -59,7 +66,8 @@ router.get('/', async (req, res) => {
 // POST new equipment
 router.post('/', async (req, res) => {
   try {
-    const { customerId, systemtype, systemnummer, systemnavn, plassering, betjener, location, notater, clusterId } = req.body;
+    const { customerId, systemtype, systemnummer, systemnavn, plassering, betjener, location, notater, clusterId,
+            hasFilters, filterSupply, filterExhaust, filterDriveSupply, filterDriveExhaust } = req.body;
 
     // Valider påkrevde felter
     if (!customerId || !systemtype || !systemnummer || !systemnavn || !plassering) {
@@ -72,8 +80,9 @@ router.post('/', async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO equipment
-        (customer_id, systemtype, systemnummer, systemnavn, plassering, betjener, location, status, notater, cluster_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        (customer_id, systemtype, systemnummer, systemnavn, plassering, betjener, location, status, notater, cluster_id,
+         has_filters, filter_supply, filter_exhaust, filter_drive_supply, filter_drive_exhaust)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        RETURNING *;`,
       [
         parseInt(customerId),
@@ -85,7 +94,12 @@ router.post('/', async (req, res) => {
         location || null,
         'active',
         notater || null,
-        clusterId ? parseInt(clusterId) : null
+        clusterId ? parseInt(clusterId) : null,
+        hasFilters || false,
+        filterSupply || false,
+        filterExhaust || false,
+        filterDriveSupply || false,
+        filterDriveExhaust || false
       ]
     );
     
@@ -151,7 +165,8 @@ router.put('/:equipmentId', async (req, res) => {
     const { equipmentId } = req.params;
     const {
       systemtype, systemnummer, systemnavn, plassering,
-      betjener, location, notater, clusterId
+      betjener, location, notater, clusterId,
+      hasFilters, filterSupply, filterExhaust, filterDriveSupply, filterDriveExhaust
     } = req.body;
 
     const pool = await db.getTenantConnection(req.adminTenantId);
@@ -162,13 +177,20 @@ router.put('/:equipmentId', async (req, res) => {
          systemtype = $1, systemnummer = $2, systemnavn = $3, plassering = $4,
          betjener = $5, location = $6, notater = $7,
          cluster_id = $8,
+         has_filters = $9, filter_supply = $10, filter_exhaust = $11,
+         filter_drive_supply = $12, filter_drive_exhaust = $13,
          updated_at = CURRENT_TIMESTAMP
-       WHERE id = $9
+       WHERE id = $14
        RETURNING *;`,
       [
         systemtype, systemnummer, systemnavn, plassering,
         betjener, location, notater,
         clusterId ? parseInt(clusterId) : null,
+        hasFilters || false,
+        filterSupply || false,
+        filterExhaust || false,
+        filterDriveSupply || false,
+        filterDriveExhaust || false,
         equipmentId
       ]
     );

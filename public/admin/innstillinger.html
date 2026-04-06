@@ -137,11 +137,46 @@
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
+
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <div class="setting-title">🖼️ Store bilder på avvik</div>
+                                <div class="setting-description">Viser avviksbilder litt større i PDF under «Registrerte avvik»</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="large-avvik-images-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
                     </div>
                     
-                    <button type="button" class="btn btn-primary" id="save-report-settings">
-                        Lagre rapport-innstillinger
-                    </button>
+                    <div class="form-group" style="margin-top: 16px;">
+                        <label for="report-heading-color">Bakgrunnsfarge på "Servicerapport:"-overskrift i PDF</label>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <input type="color" id="report-heading-color" value="#1d4ed8"
+                                   style="width: 48px; height: 36px; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; padding: 2px;">
+                            <input type="text" id="report-heading-color-text" class="form-input" placeholder="#1d4ed8"
+                                   style="width: 110px; font-family: monospace;" maxlength="7">
+                            <small style="color: var(--text-light);">Standard: #1d4ed8 (blå)</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label for="report-heading-text-color">Tekstfarge på "Servicerapport:"-overskrift i PDF</label>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <input type="color" id="report-heading-text-color" value="#ffffff"
+                                   style="width: 48px; height: 36px; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; padding: 2px;">
+                            <input type="text" id="report-heading-text-color-text" class="form-input" placeholder="#ffffff"
+                                   style="width: 110px; font-family: monospace;" maxlength="7">
+                            <small style="color: var(--text-light);">Standard: #ffffff (hvit)</small>
+                        </div>
+                    </div>
+
+                    <div style="text-align: center; margin-top: 24px;">
+                        <button type="button" class="btn btn-primary btn-large" id="save-report-settings">
+                            💾 Lagre rapport-innstillinger
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -277,6 +312,32 @@
             const senderEmailInput = document.getElementById('sender-email');
             const autoSendToggle = document.getElementById('auto-send-toggle');
             const copyAdminToggle = document.getElementById('copy-admin-toggle');
+            const largeAvvikImagesToggle = document.getElementById('large-avvik-images-toggle');
+            const reportHeadingColorPicker = document.getElementById('report-heading-color');
+            const reportHeadingColorText = document.getElementById('report-heading-color-text');
+            const reportHeadingTextColorPicker = document.getElementById('report-heading-text-color');
+            const reportHeadingTextColorText = document.getElementById('report-heading-text-color-text');
+
+            // Sync color picker ↔ text input (bakgrunnsfarge)
+            reportHeadingColorPicker?.addEventListener('input', () => {
+                if (reportHeadingColorText) reportHeadingColorText.value = reportHeadingColorPicker.value;
+            });
+            reportHeadingColorText?.addEventListener('input', () => {
+                const val = reportHeadingColorText.value.trim();
+                if (/^#[0-9a-fA-F]{6}$/.test(val) && reportHeadingColorPicker) {
+                    reportHeadingColorPicker.value = val;
+                }
+            });
+            // Sync color picker ↔ text input (tekstfarge)
+            reportHeadingTextColorPicker?.addEventListener('input', () => {
+                if (reportHeadingTextColorText) reportHeadingTextColorText.value = reportHeadingTextColorPicker.value;
+            });
+            reportHeadingTextColorText?.addEventListener('input', () => {
+                const val = reportHeadingTextColorText.value.trim();
+                if (/^#[0-9a-fA-F]{6}$/.test(val) && reportHeadingTextColorPicker) {
+                    reportHeadingTextColorPicker.value = val;
+                }
+            });
             
             // Quote settings elements
             const forbeholdTextInput = document.getElementById('forbehold-text');
@@ -341,6 +402,19 @@
                     senderEmailInput.value = currentSettings.reportSettings.senderEmail || '';
                     autoSendToggle.checked = currentSettings.reportSettings.autoSend || false;
                     copyAdminToggle.checked = currentSettings.reportSettings.copyAdmin || false;
+                    largeAvvikImagesToggle.checked = currentSettings.reportSettings.largeAvvikImages || false;
+                    const headingColor = currentSettings.reportSettings.reportHeadingColor || '#1d4ed8';
+                    if (reportHeadingColorPicker) reportHeadingColorPicker.value = headingColor;
+                    if (reportHeadingColorText) reportHeadingColorText.value = headingColor;
+                    const headingTextColor = currentSettings.reportSettings.reportHeadingTextColor || '#ffffff';
+                    if (reportHeadingTextColorPicker) reportHeadingTextColorPicker.value = headingTextColor;
+                    if (reportHeadingTextColorText) reportHeadingTextColorText.value = headingTextColor;
+                } else {
+                    largeAvvikImagesToggle.checked = false;
+                    if (reportHeadingColorPicker) reportHeadingColorPicker.value = '#1d4ed8';
+                    if (reportHeadingColorText) reportHeadingColorText.value = '#1d4ed8';
+                    if (reportHeadingTextColorPicker) reportHeadingTextColorPicker.value = '#ffffff';
+                    if (reportHeadingTextColorText) reportHeadingTextColorText.value = '#ffffff';
                 }
                 
                 // Quote settings (NEW)
@@ -535,7 +609,10 @@ async function saveCompanyInfo() {
                     const reportSettings = {
                         senderEmail: senderEmailInput.value.trim(),
                         autoSend: autoSendToggle.checked,
-                        copyAdmin: copyAdminToggle.checked
+                        copyAdmin: copyAdminToggle.checked,
+                        largeAvvikImages: largeAvvikImagesToggle.checked,
+                        reportHeadingColor: reportHeadingColorPicker?.value || '#1d4ed8',
+                        reportHeadingTextColor: reportHeadingTextColorPicker?.value || '#ffffff'
                     };
                     
                     const response = await fetch('/api/images/save-settings', {
@@ -605,7 +682,8 @@ async function saveCompanyInfo() {
                         reportSettings: {
                             senderEmail: senderEmailInput.value.trim(),
                             autoSend: autoSendToggle.checked,
-                            copyAdmin: copyAdminToggle.checked
+                            copyAdmin: copyAdminToggle.checked,
+                            largeAvvikImages: largeAvvikImagesToggle.checked
                         },
                         quoteSettings: {
                             forbeholdText: forbeholdTextInput.value.trim(),

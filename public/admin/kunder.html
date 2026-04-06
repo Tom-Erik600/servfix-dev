@@ -150,6 +150,28 @@
                     <textarea class="edit-form-input" id="edit-notater" rows="3" style="resize: vertical;"></textarea>
                 </div>
 
+                <div class="edit-form-group" style="margin-top: 12px;">
+                    <label class="edit-form-label" style="margin-bottom: 6px;">Filtre</label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer;">
+                        <input type="checkbox" id="edit-has-filters">
+                        Har filtre
+                    </label>
+                    <div id="edit-filter-types" style="display: none; margin-top: 8px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="edit-filter-supply"> Tilluftsfilter
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="edit-filter-exhaust"> Avtrekksfilter
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="edit-filter-drive-supply"> Drivreim tilluftsvifte
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="edit-filter-drive-exhaust"> Drivrem avtrekksvifte
+                        </label>
+                    </div>
+                </div>
+
                 <div class="edit-form-row" style="margin-top: 12px;">
                     <div class="edit-form-group">
                         <label class="edit-form-label">Cluster</label>

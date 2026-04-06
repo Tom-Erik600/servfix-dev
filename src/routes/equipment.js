@@ -30,7 +30,8 @@ router.get('/:id', async (req, res) => {
     
     const result = await pool.query(
       `SELECT id, customer_id, systemtype, systemnummer, systemnavn, 
-              plassering, betjener, location, status, notater
+              plassering, betjener, location, status, notater,
+              has_filters, filter_supply, filter_exhaust, filter_drive_supply, filter_drive_exhaust
        FROM equipment 
        WHERE id = $1`,
       [parseInt(id)]
@@ -61,6 +62,7 @@ router.get('/', async (req, res) => {
     const query = `
       SELECT id, customer_id, systemtype, systemnummer, systemnavn, 
              plassering, betjener, location, status, notater,
+             has_filters, filter_supply, filter_exhaust, filter_drive_supply, filter_drive_exhaust,
              created_at, updated_at
       FROM equipment 
       WHERE customer_id = $1 
@@ -77,15 +79,20 @@ router.get('/', async (req, res) => {
         return {
           id: equipment.id,
           customerId: equipment.customer_id,
-          type: equipment.systemtype,           // Map systemtype -> type
-          name: equipment.systemnavn,           // Map systemnavn -> name
+          type: equipment.systemtype,
+          name: equipment.systemnavn,
           location: equipment.location,
-          systemNumber: equipment.systemnummer, // Ny: systemNumber
-          systemPlacement: equipment.plassering, // Ny: systemPlacement
-          betjener: equipment.betjener,         // Ny: betjener
+          systemNumber: equipment.systemnummer,
+          systemPlacement: equipment.plassering,
+          betjener: equipment.betjener,
           status: equipment.status,
-          internalNotes: equipment.notater,     // Map notater -> internalNotes
-          serviceStatus: 'not_started'          // Service status fra service_reports
+          internalNotes: equipment.notater,
+          hasFilters: equipment.has_filters,
+          filterSupply: equipment.filter_supply,
+          filterExhaust: equipment.filter_exhaust,
+          filterDriveSupply: equipment.filter_drive_supply,
+          filterDriveExhaust: equipment.filter_drive_exhaust,
+          serviceStatus: 'not_started'
         };
     });
 
@@ -108,7 +115,8 @@ router.post('/', async (req, res) => {
     // ✅ OPPDATERT: Bruk nye feltnavn
     const { 
       customerId, systemtype, systemnummer, systemnavn, 
-      plassering, betjener, location, status, notater 
+      plassering, betjener, location, status, notater,
+      hasFilters, filterSupply, filterExhaust, filterDriveSupply, filterDriveExhaust
     } = req.body;
     
     // Valider påkrevde felter
@@ -123,8 +131,9 @@ router.post('/', async (req, res) => {
     // ✅ OPPDATERT INSERT: Bruk nye kolonnenavn
     const result = await pool.query(
       `INSERT INTO equipment 
-        (customer_id, systemtype, systemnummer, systemnavn, plassering, betjener, location, status, notater) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
+        (customer_id, systemtype, systemnummer, systemnavn, plassering, betjener, location, status, notater,
+         has_filters, filter_supply, filter_exhaust, filter_drive_supply, filter_drive_exhaust) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
        RETURNING *;`,
       [
         parseInt(customerId), 
@@ -135,7 +144,12 @@ router.post('/', async (req, res) => {
         betjener || null, 
         location || null, 
         status || 'active', 
-        notater || null
+        notater || null,
+        hasFilters || false,
+        filterSupply || false,
+        filterExhaust || false,
+        filterDriveSupply || false,
+        filterDriveExhaust || false
       ]
     );
     
@@ -172,7 +186,8 @@ router.put('/:equipmentId', async (req, res) => {
     // ✅ OPPDATERT: Bruk nye feltnavn
     const { 
       systemtype, systemnummer, systemnavn, plassering, 
-      betjener, location, status, notater 
+      betjener, location, status, notater,
+      hasFilters, filterSupply, filterExhaust, filterDriveSupply, filterDriveExhaust
     } = req.body;
     
     const pool = await db.getTenantConnection(req.session.tenantId);
@@ -183,12 +198,20 @@ router.put('/:equipmentId', async (req, res) => {
        SET 
          systemtype = $1, systemnummer = $2, systemnavn = $3, plassering = $4, 
          betjener = $5, location = $6, status = $7, notater = $8,
+         has_filters = $9, filter_supply = $10, filter_exhaust = $11,
+         filter_drive_supply = $12, filter_drive_exhaust = $13,
          updated_at = CURRENT_TIMESTAMP
-       WHERE id = $9
+       WHERE id = $14
        RETURNING *;`,
       [
         systemtype, systemnummer, systemnavn, plassering, 
-        betjener, location, status, notater, equipmentId
+        betjener, location, status, notater,
+        hasFilters || false,
+        filterSupply || false,
+        filterExhaust || false,
+        filterDriveSupply || false,
+        filterDriveExhaust || false,
+        equipmentId
       ]
     );
     
