@@ -139,6 +139,15 @@ router.get('/', async (req, res) => {
                     e.location, 
                     e.status,
                     e.notater,
+                    e.has_filters,
+                    e.filter_supply,
+                    e.filter_exhaust,
+                    e.filter_drive_supply,
+                    e.filter_drive_exhaust,
+                    e.filter_supply_text,
+                    e.filter_exhaust_text,
+                    e.filter_drive_supply_text,
+                    e.filter_drive_exhaust_text,
                     COALESCE(sr.status, 'not_started') as service_status,
                     COALESCE(sr.status, 'not_started') as service_report_status
                 FROM equipment e
@@ -149,6 +158,22 @@ router.get('/', async (req, res) => {
 
             equipment = equipmentResult.rows.map(eq => ({
                 id: eq.id,
+                systemtype: eq.systemtype,
+                systemnummer: eq.systemnummer,
+                systemnavn: eq.systemnavn,
+                plassering: eq.plassering,
+                betjener: eq.betjener,
+                location: eq.location,
+                notater: eq.notater,
+                hasFilters: eq.has_filters,
+                filterSupply: eq.filter_supply,
+                filterExhaust: eq.filter_exhaust,
+                filterDriveSupply: eq.filter_drive_supply,
+                filterDriveExhaust: eq.filter_drive_exhaust,
+                filterSupplyText: eq.filter_supply_text,
+                filterExhaustText: eq.filter_exhaust_text,
+                filterDriveSupplyText: eq.filter_drive_supply_text,
+                filterDriveExhaustText: eq.filter_drive_exhaust_text,
                 serviceStatus: eq.service_status || 'not_started',
                 serviceReportStatus: eq.service_report_status || 'not_started'
             }));
@@ -199,7 +224,23 @@ router.get('/today', async (req, res) => {
             // Hent equipment for denne ordren
             const equipmentResult = await pool.query(
                 `SELECT 
-                    e.id, 
+                    e.id,
+                    e.systemtype,
+                    e.systemnummer,
+                    e.systemnavn,
+                    e.plassering,
+                    e.betjener,
+                    e.location,
+                    e.notater,
+                    e.has_filters,
+                    e.filter_supply,
+                    e.filter_exhaust,
+                    e.filter_drive_supply,
+                    e.filter_drive_exhaust,
+                    e.filter_supply_text,
+                    e.filter_exhaust_text,
+                    e.filter_drive_supply_text,
+                    e.filter_drive_exhaust_text,
                     -- e.data->>'serviceStatus' as service_status, FJERNET
                     COALESCE(sr.status, 'not_started') as service_status,
                     COALESCE(sr.status, 'not_started') as service_report_status
@@ -211,6 +252,22 @@ router.get('/today', async (req, res) => {
 
             equipment = equipmentResult.rows.map(eq => ({
                 id: eq.id,
+                systemtype: eq.systemtype,
+                systemnummer: eq.systemnummer,
+                systemnavn: eq.systemnavn,
+                plassering: eq.plassering,
+                betjener: eq.betjener,
+                location: eq.location,
+                notater: eq.notater,
+                hasFilters: eq.has_filters,
+                filterSupply: eq.filter_supply,
+                filterExhaust: eq.filter_exhaust,
+                filterDriveSupply: eq.filter_drive_supply,
+                filterDriveExhaust: eq.filter_drive_exhaust,
+                filterSupplyText: eq.filter_supply_text,
+                filterExhaustText: eq.filter_exhaust_text,
+                filterDriveSupplyText: eq.filter_drive_supply_text,
+                filterDriveExhaustText: eq.filter_drive_exhaust_text,
                 serviceStatus: eq.service_status || 'not_started',
                 serviceReportStatus: eq.service_report_status || 'not_started'
             }));
