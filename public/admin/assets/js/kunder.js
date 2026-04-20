@@ -1162,6 +1162,14 @@ window.selectCustomer = async function(customerId) {
         document.getElementById('edit-filter-drive-supply').checked = !!eq.filterDriveSupply;
         document.getElementById('edit-filter-drive-exhaust').checked = !!eq.filterDriveExhaust;
         document.getElementById('edit-filter-types').style.display = hasFilters ? 'flex' : 'none';
+        document.getElementById('edit-filter-supply-text').value = eq.filterSupplyText || '';
+        document.getElementById('edit-filter-exhaust-text').value = eq.filterExhaustText || '';
+        document.getElementById('edit-filter-drive-supply-text').value = eq.filterDriveSupplyText || '';
+        document.getElementById('edit-filter-drive-exhaust-text').value = eq.filterDriveExhaustText || '';
+        document.getElementById('edit-filter-supply-text').style.display = (hasFilters && !!eq.filterSupply) ? 'block' : 'none';
+        document.getElementById('edit-filter-exhaust-text').style.display = (hasFilters && !!eq.filterExhaust) ? 'block' : 'none';
+        document.getElementById('edit-filter-drive-supply-text').style.display = (hasFilters && !!eq.filterDriveSupply) ? 'block' : 'none';
+        document.getElementById('edit-filter-drive-exhaust-text').style.display = (hasFilters && !!eq.filterDriveExhaust) ? 'block' : 'none';
 
         // Dynamisk tittel: Rediger Anlegg — Kundenavn — Anleggsnavn
         const customerName = currentSelectedCustomer ? currentSelectedCustomer.name : '';
@@ -1200,6 +1208,14 @@ window.selectCustomer = async function(customerId) {
         document.getElementById('edit-filter-drive-supply').checked = false;
         document.getElementById('edit-filter-drive-exhaust').checked = false;
         document.getElementById('edit-filter-types').style.display = 'none';
+        document.getElementById('edit-filter-supply-text').value = '';
+        document.getElementById('edit-filter-exhaust-text').value = '';
+        document.getElementById('edit-filter-drive-supply-text').value = '';
+        document.getElementById('edit-filter-drive-exhaust-text').value = '';
+        document.getElementById('edit-filter-supply-text').style.display = 'none';
+        document.getElementById('edit-filter-exhaust-text').style.display = 'none';
+        document.getElementById('edit-filter-drive-supply-text').style.display = 'none';
+        document.getElementById('edit-filter-drive-exhaust-text').style.display = 'none';
 
         document.getElementById('equipment-edit-title').textContent =
             `Nytt Anlegg — ${currentSelectedCustomer.name}`;
@@ -1324,7 +1340,11 @@ window.selectCustomer = async function(customerId) {
             filterSupply: document.getElementById('edit-filter-supply').checked,
             filterExhaust: document.getElementById('edit-filter-exhaust').checked,
             filterDriveSupply: document.getElementById('edit-filter-drive-supply').checked,
-            filterDriveExhaust: document.getElementById('edit-filter-drive-exhaust').checked
+            filterDriveExhaust: document.getElementById('edit-filter-drive-exhaust').checked,
+            filterSupplyText: document.getElementById('edit-filter-supply-text').value.trim() || null,
+            filterExhaustText: document.getElementById('edit-filter-exhaust-text').value.trim() || null,
+            filterDriveSupplyText: document.getElementById('edit-filter-drive-supply-text').value.trim() || null,
+            filterDriveExhaustText: document.getElementById('edit-filter-drive-exhaust-text').value.trim() || null
         };
 
         try {
@@ -1968,9 +1988,26 @@ window.selectCustomer = async function(customerId) {
             if (!this.checked) {
                 ['edit-filter-supply', 'edit-filter-exhaust', 'edit-filter-drive-supply', 'edit-filter-drive-exhaust']
                     .forEach(id => { document.getElementById(id).checked = false; });
+                ['edit-filter-supply-text', 'edit-filter-exhaust-text', 'edit-filter-drive-supply-text', 'edit-filter-drive-exhaust-text']
+                    .forEach(id => { document.getElementById(id).style.display = 'none'; });
             }
         });
     }
+
+    // Toggle tekst-input ved endring av filter-sub-checkboxer
+    [
+        ['edit-filter-supply', 'edit-filter-supply-text'],
+        ['edit-filter-exhaust', 'edit-filter-exhaust-text'],
+        ['edit-filter-drive-supply', 'edit-filter-drive-supply-text'],
+        ['edit-filter-drive-exhaust', 'edit-filter-drive-exhaust-text']
+    ].forEach(([checkboxId, textId]) => {
+        const cb = document.getElementById(checkboxId);
+        if (cb) {
+            cb.addEventListener('change', function() {
+                document.getElementById(textId).style.display = this.checked ? 'block' : 'none';
+            });
+        }
+    });
 
     if (equipmentConfirmModal) {
         equipmentConfirmModal.addEventListener('click', function(e) {
