@@ -461,10 +461,10 @@ function createEquipmentCard(eq) {
                         <div class="info-linje"><strong>Plassering:</strong> ${eq.plassering || '-'}</div>
                         ${eq.betjener ? `<div class="info-linje"><strong>Betjener:</strong> ${eq.betjener}</div>` : ''}
                         ${eq.hasFilters ? `<div class="info-linje" style="margin-top: 4px;">${[
-                            eq.filterSupply        ? 'Tilluftsfilter' : null,
-                            eq.filterExhaust       ? 'Avtrekksfilter' : null,
-                            eq.filterDriveSupply   ? 'Drivreim tilluftsvifte' : null,
-                            eq.filterDriveExhaust  ? 'Drivrem avtrekksvifte' : null
+                            eq.filterSupply        ? 'Tilluftsfilter'         + (eq.filterSupplyText       ? ` (${eq.filterSupplyText})`       : '') : null,
+                            eq.filterExhaust       ? 'Avtrekksfilter'         + (eq.filterExhaustText      ? ` (${eq.filterExhaustText})`      : '') : null,
+                            eq.filterDriveSupply   ? 'Drivreim tilluftsvifte' + (eq.filterDriveSupplyText  ? ` (${eq.filterDriveSupplyText})`  : '') : null,
+                            eq.filterDriveExhaust  ? 'Drivrem avtrekksvifte'  + (eq.filterDriveExhaustText ? ` (${eq.filterDriveExhaustText})` : '') : null
                         ].filter(Boolean).map(f => `<span style="display:inline-block; background:#fef3c7; color:#92400e; font-size:11px; padding:2px 7px; border-radius:10px; margin:2px 2px 0 0;">${f}</span>`).join('')}</div>` : ''}
                     </div>
                 </div>

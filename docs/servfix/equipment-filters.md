@@ -26,11 +26,18 @@ Tracks whether a piece of equipment has filters, and which filter types are pres
 | `filter_exhaust` | BOOLEAN | `false` | Avtrekk-filter (exhaust air filter) |
 | `filter_drive_supply` | BOOLEAN | `false` | Aggregat tilluft-filter (drive-side supply filter) |
 | `filter_drive_exhaust` | BOOLEAN | `false` | Aggregat avtrekk-filter (drive-side exhaust filter) |
+| `filter_supply_text` | TEXT | `NULL` | Fritekst for tilluft-filter, f.eks. «ePM1 60%, 592×592×100, 2 stk» |
+| `filter_exhaust_text` | TEXT | `NULL` | Fritekst for avtrekk-filter |
+| `filter_drive_supply_text` | TEXT | `NULL` | Fritekst for aggregat tilluft-filter |
+| `filter_drive_exhaust_text` | TEXT | `NULL` | Fritekst for aggregat avtrekk-filter |
 
 **Rule:** `filter_supply`, `filter_exhaust`, `filter_drive_supply`, and `filter_drive_exhaust` are only meaningful when `has_filters = true`. The admin UI enforces this by hiding the type checkboxes unless "Har filtre" is checked. The backend does not enforce it — the frontend is the sole guard.
 
+Tekstfeltene er valgfrie og vises kun i UI når tilhørende boolean-felt er `true`. Ingen backend-validering — frontend er eneste guard.
+
 ### Migration
 `database/equipment_filters_migration.sql` — idempotent, run on all tenant databases.
+`database/equipment_filter_text_migration.sql` — idempotent, kjøres etter `equipment_filters_migration.sql`.
 
 ## Admin UI (`/admin/kunder.html`)
 
@@ -40,6 +47,8 @@ Tracks whether a piece of equipment has filters, and which filter types are pres
   - Avtrekk
   - Aggregat tilluft
   - Aggregat avtrekk
+- Hvert sub-checkbox har et tilhørende tekstfelt (input type=text) som vises kun når checkboxen er checked
+- Tekstfeltet nullstilles ikke automatisk når checkboxen uncheckes — verdien beholdes i DB
 - When "Har filtre" is unchecked, sub-checkboxes are hidden (but not reset in DB — unchecking `has_filters` is the only meaningful state change)
 - Filter fields appear in both the "Opprett anlegg" and "Rediger anlegg" modals
 
@@ -47,12 +56,13 @@ Tracks whether a piece of equipment has filters, and which filter types are pres
 
 ### Equipment cards (`orders.html`)
 - Equipment with `has_filters = true` gets an amber badge listing active filter types
-- Format: `🔧 Filter: Tilluft, Avtrekk` (only active types shown)
+- Format: «Tilluftsfilter (ePM1 60%, 592×592×100)» — tekst i parentes vises kun hvis tekstfelt er satt
 - Badge is omitted entirely if `has_filters = false` or no types are active
+- En filterknapp (SVG layers-ikon) vises øverst til høyre i ordre-kortet hvis ordren har minst ett anlegg med `has_filters = true`. Klikk åpner en modal som lister alle anlegg med aktive filtre og tilhørende tekst.
 
 ### Anlegg-info grid (`service.html`)
 - Filter row shown in the equipment info section when `has_filters = true`
-- Lists active filter types as comma-separated text
+- Lists active filter types with optional text, e.g. «Tilluftsfilter: ePM1 60%, 592×592×100, Avtrekksfilter»
 
 ## API
 
@@ -69,7 +79,11 @@ Filter fields included in GET (list + single), POST (create), and PUT (update) p
   "filterSupply": true,
   "filterExhaust": false,
   "filterDriveSupply": false,
-  "filterDriveExhaust": true
+  "filterDriveExhaust": true,
+  "filterSupplyText": "ePM1 60%, 592×592×100, 2 stk",
+  "filterExhaustText": null,
+  "filterDriveSupplyText": null,
+  "filterDriveExhaustText": null
 }
 ```
 Note: camelCase in JSON payloads, snake_case in database columns.
@@ -84,9 +98,11 @@ Note: camelCase in JSON payloads, snake_case in database columns.
 | File | Role |
 |------|------|
 | `database/equipment_filters_migration.sql` | DB migration (already run) |
+| `database/equipment_filter_text_migration.sql` | DB migration for tekstkolonner |
 | `src/routes/admin/equipment.js` | Admin API — filter fields in GET/POST/PUT |
 | `src/routes/equipment.js` | Technician API — filter fields in GET/POST/PUT |
 | `public/admin/kunder.html` | Admin modal — filter checkboxes |
 | `public/admin/assets/js/kunder.js` | Populate/save filter fields, toggle visibility |
 | `public/app/assets/js/orders.js` | Amber filter badges on equipment cards |
 | `public/app/assets/js/service.js` | Filter types in anlegg-info grid |
+| `public/app/assets/js/app.js` | Filterknapp i ordre-kort + showFilterModal |

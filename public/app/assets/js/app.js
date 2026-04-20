@@ -396,6 +396,7 @@ function createOrderCardHTML(order, listType) {
     const contactName = order.customerData?.contact || '';
     const contactPhone = order.customerData?.contactPhone || order.customerData?.phone || '';
     const contactEmail = order.customerData?.contactEmail || order.customerData?.email || '';
+    const hasAnyFilters = Array.isArray(order.equipment) && order.equipment.some(eq => eq.hasFilters || eq.has_filters);
 
     return `
         <div class="order-card ${isExpanded ? 'expanded' : ''} status-${derivedStatus}" data-card-key="${cardKey}">
@@ -409,6 +410,7 @@ function createOrderCardHTML(order, listType) {
                     <div class="order-time">${timeDisplay}</div>
                     <div class="order-number">#${(order.orderNumber || order.id).slice(-6)}</div>
                 </div>
+                ${hasAnyFilters ? `<button class="filter-info-btn" onclick="event.stopPropagation(); showFilterModal(${JSON.stringify(order.equipment).replace(/"/g, '&quot;')})" title="Vis filterliste" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#92400e;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></button>` : ''}
             </div>
             ${isExpanded ? `
                 <div class="order-card-details">
@@ -444,6 +446,24 @@ function createOrderCardHTML(order, listType) {
             ` : ''}
         </div>
     `;
+}
+
+function showFilterModal(equipment) {
+    const filterLines = equipment.filter(eq => eq.hasFilters || eq.has_filters).map(eq => {
+        const filters = [
+            (eq.filterSupply || eq.filter_supply)               ? 'Tilluftsfilter'          + ((eq.filterSupplyText        || eq.filter_supply_text)        ? `: ${eq.filterSupplyText        || eq.filter_supply_text}`        : '') : null,
+            (eq.filterExhaust || eq.filter_exhaust)             ? 'Avtrekksfilter'          + ((eq.filterExhaustText       || eq.filter_exhaust_text)       ? `: ${eq.filterExhaustText       || eq.filter_exhaust_text}`       : '') : null,
+            (eq.filterDriveSupply || eq.filter_drive_supply)    ? 'Drivreim tilluftsvifte'  + ((eq.filterDriveSupplyText   || eq.filter_drive_supply_text)   ? `: ${eq.filterDriveSupplyText   || eq.filter_drive_supply_text}`   : '') : null,
+            (eq.filterDriveExhaust || eq.filter_drive_exhaust)  ? 'Drivrem avtrekksvifte'   + ((eq.filterDriveExhaustText  || eq.filter_drive_exhaust_text)  ? `: ${eq.filterDriveExhaustText  || eq.filter_drive_exhaust_text}`  : '') : null
+        ].filter(Boolean);
+        return `<div style="margin-bottom:12px;"><strong>${eq.systemnavn || 'Anlegg'}</strong><ul style="margin:4px 0 0 16px;padding:0;">${filters.map(f => `<li style="margin:2px 0;">${f}</li>`).join('')}</ul></div>`;
+    }).join('');
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = `<div style="background:#fff;border-radius:12px;padding:24px;max-width:400px;width:90%;max-height:80vh;overflow-y:auto;"><h3 style="margin:0 0 16px;">Filterliste</h3>${filterLines}<button onclick="this.closest('[style*=fixed]').remove()" style="margin-top:16px;padding:8px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:8px;cursor:pointer;width:100%;">Lukk</button></div>`;
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
 }
 
 function updateNavigationText() {

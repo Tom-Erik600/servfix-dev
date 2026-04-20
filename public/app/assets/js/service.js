@@ -1259,10 +1259,10 @@ function renderAnleggInfo() {
 
     const hasFilters = state.equipment?.hasFilters || state.equipment?.has_filters;
     const filterTypes = hasFilters ? [
-        (state.equipment?.filterSupply   || state.equipment?.filter_supply)        ? 'Tilluftsfilter' : null,
-        (state.equipment?.filterExhaust  || state.equipment?.filter_exhaust)       ? 'Avtrekksfilter' : null,
-        (state.equipment?.filterDriveSupply  || state.equipment?.filter_drive_supply)  ? 'Drivreim tilluftsvifte' : null,
-        (state.equipment?.filterDriveExhaust || state.equipment?.filter_drive_exhaust) ? 'Drivrem avtrekksvifte' : null
+        (state.equipment?.filterSupply   || state.equipment?.filter_supply)        ? 'Tilluftsfilter'         + ((state.equipment?.filterSupplyText       || state.equipment?.filter_supply_text)       ? ': ' + (state.equipment?.filterSupplyText       || state.equipment?.filter_supply_text)       : '') : null,
+        (state.equipment?.filterExhaust  || state.equipment?.filter_exhaust)       ? 'Avtrekksfilter'         + ((state.equipment?.filterExhaustText      || state.equipment?.filter_exhaust_text)      ? ': ' + (state.equipment?.filterExhaustText      || state.equipment?.filter_exhaust_text)      : '') : null,
+        (state.equipment?.filterDriveSupply  || state.equipment?.filter_drive_supply)  ? 'Drivreim tilluftsvifte' + ((state.equipment?.filterDriveSupplyText  || state.equipment?.filter_drive_supply_text)  ? ': ' + (state.equipment?.filterDriveSupplyText  || state.equipment?.filter_drive_supply_text)  : '') : null,
+        (state.equipment?.filterDriveExhaust || state.equipment?.filter_drive_exhaust) ? 'Drivrem avtrekksvifte'  + ((state.equipment?.filterDriveExhaustText || state.equipment?.filter_drive_exhaust_text) ? ': ' + (state.equipment?.filterDriveExhaustText || state.equipment?.filter_drive_exhaust_text) : '') : null
     ].filter(Boolean) : [];
 
     if (isServiceV2Page()) {
