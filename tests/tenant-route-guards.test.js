@@ -110,4 +110,15 @@ describe('Tenant route guards', () => {
     expect(res.body.error).toMatch(/mangler tenant/i);
     expect(mockGetTenantConnection).not.toHaveBeenCalled();
   });
+
+  test('clusters returns 401 when technician session exists but tenant is missing', async () => {
+    const router = require('../src/routes/clusters');
+    const app = createTestApp(router, '/api/clusters', { technicianId: 'tech-1' });
+
+    const res = await request(app).get('/api/clusters?customerId=123');
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/mangler tenant/i);
+    expect(mockGetTenantConnection).not.toHaveBeenCalled();
+  });
 });

@@ -809,6 +809,25 @@ document.addEventListener('DOMContentLoaded', async function() {
                     <p class="order-info">Ordre ${escapeHtml(data.orderId || 'N/A')} • ${formattedReportDate}</p>
                 </div>
 
+                <div class="edit-section" style="margin-bottom: 12px;">
+                    <h4>📂 Prosjekt (brukes i PDF-header)</h4>
+                    <p style="margin: 4px 0 8px; font-size: 13px; color: #6b7280;">Nåværende header: <strong>${escapeHtml([data.customerName, data.orderDescription].filter(Boolean).join(' • ') || data.customerName || 'Ukjent kunde')}</strong></p>
+                    <table class="metadata-table">
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <div class="metadata-cell">
+                                        <label>PROSJEKT</label>
+                                        <select id="edit-project-select" class="editable-field">
+                                            <option value="${escapeHtml(data.orderDescription || '')}" selected>${escapeHtml(data.orderDescription || 'Ingen beskrivelse')}</option>
+                                        </select>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
                 <div class="edit-section">
                     <h4>📋 Rapportinformasjon</h4>
                     <p class="section-description">Grønne felt kan redigeres, grå felt er låst</p>
@@ -851,7 +870,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                                 <td>
                                     <div class="metadata-cell">
                                         <label>MOTTAKER AV RAPPORT</label>
-                                        <div class="readonly-field">${escapeHtml(recipient || 'N/A')}</div>
+                                        <input type="text" id="edit-report-recipient" class="editable-field" value="${escapeHtml(recipient || '')}" placeholder="E-post eller navn">
                                     </div>
                                 </td>
                             </tr>
@@ -998,6 +1017,28 @@ document.addEventListener('DOMContentLoaded', async function() {
         `;
 
         modalBody.innerHTML = html;
+
+        // Hent kundens prosjekter for dropdown
+        const tripletexCustomerId = customerData.id;
+        if (tripletexCustomerId) {
+            fetch(`/api/admin/customers/${tripletexCustomerId}/projects`, { credentials: 'include' })
+            .then(res => res.json())
+            .then(projects => {
+                const select = document.getElementById('edit-project-select');
+                if (select && projects.length > 0) {
+                    const currentValue = data.orderDescription || '';
+                    projects.forEach(p => {
+                        // Ikke legg til duplikat av nåværende verdi
+                        if (p.displayName === currentValue) return;
+                        const opt = document.createElement('option');
+                        opt.value = p.displayName;
+                        opt.textContent = p.displayName;
+                        select.appendChild(opt);
+                    });
+                }
+            })
+            .catch(err => console.warn('Could not load projects:', err));
+        }
     }
 
     function createProductRowHtml(product, index) {
@@ -1054,10 +1095,24 @@ document.addEventListener('DOMContentLoaded', async function() {
             service_date: document.getElementById('edit-service-date')?.value?.trim() || ''
         };
 
+        // Use placeholder values (parsed from customer data) when input is empty.
+        // This prevents partial service address override where street is set but
+        // postalCode/city are blank, causing "Ikke spesifisert" in the PDF.
+        const genericPlaceholders = ['Gate/vei', 'Postnr', 'Poststed'];
+        function getValueOrPlaceholder(id) {
+            const el = document.getElementById(id);
+            if (!el) return '';
+            const value = el.value?.trim();
+            if (value) return value;
+            const placeholder = el.placeholder;
+            if (placeholder && !genericPlaceholders.includes(placeholder)) return placeholder;
+            return '';
+        }
+
         const serviceAddress = {
-            street: document.getElementById('edit-service-address-street')?.value?.trim() || '',
-            postalCode: document.getElementById('edit-service-address-postal-code')?.value?.trim() || '',
-            city: document.getElementById('edit-service-address-city')?.value?.trim() || ''
+            street: getValueOrPlaceholder('edit-service-address-street'),
+            postalCode: getValueOrPlaceholder('edit-service-address-postal-code'),
+            city: getValueOrPlaceholder('edit-service-address-city')
         };
 
         const checklistComments = {};
@@ -1081,7 +1136,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
 
         const overall_comment = document.getElementById('overall-comment')?.value?.trim() || '';
-        return { metadata, serviceAddress, checklistComments, products_used, additional_work, overall_comment };
+        const orderDescription = document.getElementById('edit-project-select')?.value || '';
+        const reportRecipient = document.getElementById('edit-report-recipient')?.value?.trim() || '';
+        return { metadata, serviceAddress, checklistComments, products_used, additional_work, overall_comment, orderDescription, reportRecipient };
     }
 
     async function saveReportChanges() {

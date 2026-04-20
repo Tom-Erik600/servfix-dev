@@ -260,6 +260,7 @@ A Tripletex integration change is considered complete when:
 |--------|------|---------|
 | GET | `/health` | Test Tripletex connection |
 | GET | `/:customerId/addresses` | Get customer addresses |
+| GET | `/:customerId/projects` | List open Tripletex projects |
 | PUT | `/:customerId/notes` | Update local customer notes |
 
 **Admin Reports/Billing API** (`/api/admin/reports`):

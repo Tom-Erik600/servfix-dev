@@ -15,13 +15,18 @@ function setPdfProgress(orderId, pct, label, { done = false, error = null } = {}
   pdfProgressStore.set(String(orderId), { pct, label, done, error, updatedAt: Date.now() });
 }
 
-// Clean up entries older than 10 minutes to avoid memory leaks
-setInterval(() => {
+// Clean up entries older than 10 minutes to avoid memory leaks.
+// Avoid keeping Node/Jest alive solely because of this housekeeping timer.
+const pdfProgressCleanupInterval = setInterval(() => {
   const cutoff = Date.now() - 10 * 60 * 1000;
   for (const [key, val] of pdfProgressStore.entries()) {
     if (val.updatedAt < cutoff) pdfProgressStore.delete(key);
   }
 }, 60 * 1000);
+
+if (typeof pdfProgressCleanupInterval.unref === 'function') {
+  pdfProgressCleanupInterval.unref();
+}
 
 // Middleware - sjekk auth og tenant
 router.use((req, res, next) => {

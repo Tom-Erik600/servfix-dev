@@ -410,6 +410,7 @@ router.get('/:reportId/edit-data', async (req, res) => {
         sr.created_at,
         sr.completed_at,
         o.customer_name,
+        o.description AS order_description,
         o.customer_data,
         o.scheduled_date,
         o.service_type,
@@ -580,6 +581,7 @@ router.get('/:reportId/edit-data', async (req, res) => {
       equipmentType: report.equipment_type,
       equipmentLocation: report.equipment_location,
       customerName: report.customer_name,
+      orderDescription: report.order_description || '',
       technicianName: report.technician_name,
       scheduledDate: report.scheduled_date,
       serviceDate: toDateOnlyIso(serviceDateSource),
@@ -626,7 +628,7 @@ router.get('/:reportId/edit-data', async (req, res) => {
 // ========================================
 router.put('/:reportId/update-content', async (req, res) => {
   const { reportId } = req.params;
-  const { checklistComments, products_used, additional_work, metadata, overall_comment, serviceAddress } = req.body;
+  const { checklistComments, products_used, additional_work, metadata, overall_comment, serviceAddress, orderDescription, reportRecipient } = req.body;
 
   console.log(`📝 Updating content for report: ${reportId}`);
   console.log(`   - checklistComments: ${checklistComments ? Object.keys(checklistComments).length : 0} items`);
@@ -733,8 +735,8 @@ router.put('/:reportId/update-content', async (req, res) => {
 
     console.log(`✅ Report ${reportId} updated in database`);
 
-    // Oppdater customer_data i orders-tabellen med metadata
-    if (metadata && orderId) {
+    // Oppdater customer_data i orders-tabellen med metadata og mottaker-overskrivning
+    if (orderId && (metadata || reportRecipient !== undefined)) {
       // Hent eksisterende customer_data
       const orderResult = await pool.query(
         'SELECT customer_data FROM orders WHERE id = $1',
@@ -757,7 +759,8 @@ router.put('/:reportId/update-content', async (req, res) => {
         // Merge metadata inn i customer_data, inkl. overstyrt servicedato
         const updatedCustomerData = {
           ...customerData,
-          ...(metadata && typeof metadata === 'object' ? metadata : {})
+          ...(metadata && typeof metadata === 'object' ? metadata : {}),
+          ...(reportRecipient !== undefined ? { report_recipient: reportRecipient } : {})
         };
 
         await pool.query(
@@ -785,6 +788,12 @@ router.put('/:reportId/update-content', async (req, res) => {
         ]
       );
       console.log(`✅ Order ${orderId} service address updated`);
+    }
+
+    // Oppdater ordrebeskrivelse (prosjektnavn) hvis endret
+    if (orderId && orderDescription !== undefined) {
+      await pool.query('UPDATE orders SET description = $1 WHERE id = $2', [orderDescription, orderId]);
+      console.log(`✅ Order ${orderId} description updated`);
     }
 
     // Regenerer PDF for hele ordren

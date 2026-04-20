@@ -66,6 +66,7 @@ module.exports = async () => {
     next();
   }, require('./routes/equipment'));
   app.use('/api/customers', require('./routes/customers'));
+  app.use('/api/clusters', require('./routes/clusters'));
   app.use('/api/reports', require('./routes/reports'));
   app.use('/api/servicereports', require('./routes/reports')); // Alias for frontend kompatibilitet
   app.use('/api/technicians', require('./routes/technicians'));

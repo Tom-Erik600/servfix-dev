@@ -876,6 +876,32 @@
             <div class="order-details-section" id="orderDetailsSection" style="display: none;">
                 <h3 class="section-title">&#128203; Oppdragsdetaljer</h3>
 
+                <!-- Prosjekt / Beskrivelse -->
+                <div class="form-group">
+                    <label class="form-label">Prosjekt / Beskrivelse</label>
+                    <select id="orderDescriptionSelect" class="form-input">
+                        <option value="">⏳ Laster prosjekter...</option>
+                    </select>
+                    <input type="text" id="orderDescription" class="form-input"
+                           placeholder="Skriv inn beskrivelse..." style="display: none;">
+                </div>
+
+                <!-- Besøksnr -->
+                <div class="form-group">
+                    <label class="form-label">Besøksnr <span style="font-weight: 400; color: #9ca3af;">(valgfri)</span></label>
+                    <input type="text" id="visitNumber" class="form-input" placeholder="F.eks. 3">
+                </div>
+
+                <!-- Serviceadresse -->
+                <div class="form-group">
+                    <label class="form-label">Serviceadresse <span style="font-weight: 400; color: #9ca3af;">(valgfri)</span></label>
+                    <input type="text" id="serviceAddressStreet" class="form-input" placeholder="Gate/vei">
+                    <div style="display: flex; gap: 8px; margin-top: 6px;">
+                        <input type="text" id="serviceAddressPostalCode" class="form-input" placeholder="Postnr" style="flex: 0 0 100px;">
+                        <input type="text" id="serviceAddressCity" class="form-input" placeholder="Poststed" style="flex: 1;">
+                    </div>
+                </div>
+
                 <!-- Anleggsvalg (checkbox-liste) -->
                 <div class="form-group">
                     <label class="form-label">Anlegg (valgfritt)</label>
@@ -885,8 +911,10 @@
                             <button type="button" id="addEquipmentBtn" class="add-equipment-btn">+ Nytt anlegg</button>
                         </div>
                         <div class="equipment-actions">
-                            <button type="button" id="selectAllEquipmentBtn" class="equipment-action-btn">+ Marker alle</button>
-                            <button type="button" id="deselectAllEquipmentBtn" class="equipment-action-btn secondary">- Fjern markering alle</button>
+                            <button type="button" id="createClusterBtn" class="equipment-action-btn">+ Nytt cluster</button>
+                            <button type="button" id="assignClusterBtn" class="equipment-action-btn">Flytt til cluster</button>
+                            <button type="button" id="selectAllEquipmentBtn" class="equipment-action-btn secondary">+ Marker alle</button>
+                            <button type="button" id="deselectAllEquipmentBtn" class="equipment-action-btn secondary">- Fjern alle</button>
                         </div>
                         <div class="equipment-list" id="equipmentList">
                             <div class="equipment-list-empty">Velg en kunde for å se anlegg</div>
@@ -900,13 +928,6 @@
                     <textarea id="customerNotes" class="form-input" rows="2"
                               placeholder="Notat om kunden (vises ikke på rapport)..."
                               style="font-size: 13px;"></textarea>
-                </div>
-
-                <!-- Beskrivelse -->
-                <div class="form-group">
-                    <label class="form-label">Beskrivelse</label>
-                    <input type="text" id="orderDescription" class="form-input"
-                           placeholder="Skriv inn beskrivelse...">
                 </div>
 
                 <!-- Når -->
@@ -933,6 +954,21 @@
     <!-- Equipment Modal -->
     <div class="modal-overlay" id="equipmentModal">
         <div class="modal-content"></div>
+    </div>
+
+    <!-- Cluster Modal -->
+    <div class="modal-overlay" id="clusterModal">
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="modal-header">
+                <h3 id="clusterModalTitle">Cluster</h3>
+                <button class="close-btn" id="clusterModalClose">&times;</button>
+            </div>
+            <div class="modal-body" id="clusterModalBody"></div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="clusterModalCancel">Avbryt</button>
+                <button class="btn-primary" id="clusterModalSave">Lagre</button>
+            </div>
+        </div>
     </div>
 
     <div class="create-order-loading-overlay" id="createOrderLoadingOverlay">

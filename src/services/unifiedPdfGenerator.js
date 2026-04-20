@@ -965,7 +965,7 @@ renderWorkTable(work) {
       .info-cell .data { font-size: 10pt; font-weight: 600; color: #212529; }
       table.styled-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
       table.styled-table th, table.styled-table td { padding: 8px 10px; text-align: left; vertical-align: top; } /* Fjernet border-bottom */
-      table.styled-table tr { border-bottom: 1px solid #e5e7eb; } /* Lagt til border på raden */
+      table.styled-table tr { border-bottom: 1px solid #e5e7eb; page-break-inside: avoid; } /* Lagt til border på raden */
       table.styled-table thead tr { background: #f3f4f6; font-size: 9.5pt; }
       .status-cell { font-weight: 600; text-transform: uppercase; text-align:center; }
       .status-ok { color:#059669; } .status-byttet { color:#0369a1; } .status-avvik { color:#dc2626; } .status-na { color:#6b7280; }
@@ -1126,6 +1126,7 @@ renderWorkTable(work) {
 
   getRecipientFromCustomerData(customerData) {
     if (!customerData) return '';
+    if (customerData.report_recipient) return customerData.report_recipient;
     const contacts = customerData.contacts || [];
     const match = contacts.find(c => (c.last_name || '').toLowerCase() === 'servfixmail');
     return match?.email || customerData.email || '';
@@ -1238,7 +1239,7 @@ renderWorkTable(work) {
             <tr>
               <td><div class="info-cell"><div class="label">Avtalenummer</div><div class="data">${this.escapeHtml(data.customer_data?.agreement_number || data.customer_data?.agreementId || 'N/A')}</div></div></td>
               <td><div class="info-cell"><div class="label">Besøk nr</div><div class="data">${this.escapeHtml(data.customer_data?.visit_number || 'N/A')}</div></div></td>
-              <td><div class="info-cell"><div class="label">Årstall</div><div class="data">${new Date(data.created_at).getFullYear()}</div></div></td>
+              <td><div class="info-cell"><div class="label">Årstall</div><div class="data">${new Date(data.created_at || data.scheduled_date || Date.now()).getFullYear()}</div></div></td>
             </tr>
             <tr>
               <td><div class="info-cell"><div class="label">Kundenummer</div><div class="data">${this.escapeHtml(data.customer_data?.id || '')}</div></div></td>
@@ -1378,6 +1379,7 @@ renderWorkTable(work) {
         o.customer_name,
         o.description AS order_description,
         o.customer_data,
+        o.created_at,
         o.scheduled_date AS service_date,
         o.service_address_street,
         o.service_address_postal_code,

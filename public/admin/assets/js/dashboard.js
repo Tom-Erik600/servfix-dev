@@ -2,6 +2,9 @@
 
 document.addEventListener('DOMContentLoaded', loadDashboardData);
 
+// Global ordre-data for modal-tilgang
+let dashboardOrders = [];
+
 async function loadDashboardData() {
     try {
         // Hent data fra API
@@ -55,6 +58,9 @@ function populateDashboard(orders, customers, technicians, reports, quotes) {
     technicians = technicians || [];
     reports = reports || [];
     quotes = quotes || [];
+    
+    // Lagre globalt for modal-tilgang
+    dashboardOrders = orders;
     
     // Bygg customer map - sjekk både name og customer_name
     const customerMap = new Map();
@@ -367,7 +373,7 @@ function populateTodaysTable(orders, customerMap, technicianMap) {
         
         return `
         <tr style="${rowStyle}">
-            <td><strong>${orderNumber}</strong></td>
+            <td><strong><a href="#" onclick="openOrderModal('${order.id}'); return false;" style="color:#3b82f6; text-decoration:none; cursor:pointer;">${orderNumber}</a></strong></td>
             <td>${technicianMap.get(technicianId) || '<span style="color: #EF4444;">Ikke tildelt</span>'}</td>
             <td>${customerName}</td>
             <td>${serviceType}</td>
@@ -458,7 +464,7 @@ function populateWeeklyTable(orders, customerMap, technicianMap) {
         
         return `
         <tr style="${rowStyle}">
-            <td><strong>${orderNumber}</strong></td>
+            <td><strong><a href="#" onclick="openOrderModal('${order.id}'); return false;" style="color:#3b82f6; text-decoration:none; cursor:pointer;">${orderNumber}</a></strong></td>
             <td>${technicianMap.get(technicianId) || '<span style="color: #EF4444;">Ikke tildelt</span>'}</td>
             <td>${customerName}</td>
             <td>${serviceType}</td>
@@ -530,7 +536,7 @@ function populateUnfinishedTable(orders, customerMap, technicianMap) {
         
         return `
         <tr>
-            <td><strong>${orderNumber}</strong></td>
+            <td><strong><a href="#" onclick="openOrderModal('${order.id}'); return false;" style="color:#3b82f6; text-decoration:none; cursor:pointer;">${orderNumber}</a></strong></td>
             <td>${technicianMap.get(technicianId) || '<span style="color: #EF4444;">Ikke tildelt</span>'}</td>
             <td>${customerName}</td>
             <td>${serviceType}</td>
@@ -665,7 +671,123 @@ setInterval(loadDashboardData, 5 * 60 * 1000);
 // Global refresh function
 window.reloadDashboard = loadDashboardData;
 
-// Dashboard er klar - all logging er aktivert for debugging
+// === ORDREDETALJ-MODAL ===
+function openOrderModal(orderId) {
+    const order = dashboardOrders.find(o => o.id === orderId);
+    if (!order) return;
+
+    const orderNumber = order.orderNumber || order.order_number || order.id;
+    const customerName = order.customer_name || order.customerName || 'Ukjent kunde';
+    const technicianName = order.technician_name || order.technicianName || 'Ikke tildelt';
+    const serviceType = order.service_type || order.serviceType || 'Service';
+    const description = order.description || '';
+    const scheduledDate = parseDate(order.scheduled_date || order.scheduledDate);
+    const scheduledTime = order.scheduled_time || order.scheduledTime || '';
+    const status = deriveOrderStatus(order);
+    const contactName = order.contact_name || '';
+    const contactPhone = order.contact_phone || '';
+    const contactEmail = order.contact_email || '';
+    const deliveryAddress = order.delivery_address || '';
+
+    const dateDisplay = scheduledDate ? formatDateNorwegian(scheduledDate) : 'Ikke satt';
+    const timeDisplay = scheduledTime ? scheduledTime.slice(0, 5) : '';
+    const dateTimeDisplay = timeDisplay ? `${dateDisplay} kl. ${timeDisplay}` : dateDisplay;
+
+    // Bygg kontaktperson-tekst
+    let contactDisplay = contactName || 'Ingen kontaktperson';
+    const contactDetails = [contactPhone, contactEmail].filter(Boolean);
+    if (contactDetails.length > 0) {
+        contactDisplay += ` (${contactDetails.join(', ')})`;
+    }
+
+    // Bygg anlegg-liste
+    const equipment = order.equipment || [];
+    let equipmentHtml = '';
+    if (equipment.length > 0) {
+        equipmentHtml = equipment.map(eq => {
+            const name = eq.name || 'Ukjent system';
+            const type = eq.type ? ` — ${eq.type}` : '';
+            const statusIcon = eq.serviceStatus === 'completed' ? '✅' : eq.serviceStatus === 'in_progress' ? '🔧' : '⏳';
+            return `<div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #F3F4F6;">
+                <span>${statusIcon}</span>
+                <span style="font-size:13px;">${name}${type}</span>
+            </div>`;
+        }).join('');
+    } else {
+        equipmentHtml = '<span style="color:#9CA3AF; font-size:13px;">Ingen anlegg knyttet</span>';
+    }
+
+    const labelStyle = 'font-size:12px; color:#6B7280; font-weight:500; text-transform:uppercase; letter-spacing:0.5px;';
+    const valueStyle = 'font-size:14px; color:#111827; margin-top:2px;';
+
+    document.getElementById('order-detail-title').textContent = orderNumber;
+    document.getElementById('order-detail-body').innerHTML = `
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div>
+                <div style="${labelStyle}">Status</div>
+                <div style="margin-top:4px;"><span class="status-badge status-${status}">${getStatusText(status)}</span></div>
+            </div>
+            <div>
+                <div style="${labelStyle}">Type</div>
+                <div style="${valueStyle}">${serviceType}</div>
+            </div>
+            <div>
+                <div style="${labelStyle}">Dato</div>
+                <div style="${valueStyle}">${dateTimeDisplay}</div>
+            </div>
+            <div>
+                <div style="${labelStyle}">Tekniker</div>
+                <div style="${valueStyle}">${technicianName}</div>
+            </div>
+        </div>
+        ${description ? `<div>
+            <div style="${labelStyle}">Prosjekt / Beskrivelse</div>
+            <div style="${valueStyle}">${description}</div>
+        </div>` : ''}
+        <div>
+            <div style="${labelStyle}">Kunde</div>
+            <div style="${valueStyle}">${customerName}</div>
+        </div>
+        <div>
+            <div style="${labelStyle}">Kontaktperson</div>
+            <div style="${valueStyle}">${contactDisplay}</div>
+        </div>
+        ${deliveryAddress ? `<div>
+            <div style="${labelStyle}">Adresse</div>
+            <div style="${valueStyle}">${deliveryAddress}</div>
+        </div>` : ''}
+        <div>
+            <div style="${labelStyle}">Anlegg (${equipment.length})</div>
+            <div style="margin-top:4px;">${equipmentHtml}</div>
+        </div>
+    `;
+
+    document.getElementById('order-detail-modal').style.display = 'flex';
+}
+
+function closeOrderModal() {
+    document.getElementById('order-detail-modal').style.display = 'none';
+}
+
+// Lukk modal ved klikk utenfor
+document.addEventListener('click', function(e) {
+    const orderModal = document.getElementById('order-detail-modal');
+    if (e.target === orderModal) {
+        closeOrderModal();
+    }
+    const deleteModal = document.getElementById('delete-order-modal');
+    if (e.target === deleteModal) {
+        closeDeleteModal();
+    }
+});
+
+// Lukk modal med Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeOrderModal();
+        closeDeleteModal();
+    }
+});
 
 // === SLETT ORDRE FUNKSJONALITET ===
 let pendingDeleteOrderId = null;

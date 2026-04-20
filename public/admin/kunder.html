@@ -249,9 +249,12 @@
                     </label>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeContactModal()">Avbryt</button>
-                <button type="button" class="btn btn-primary" onclick="saveContact()">Lagre</button>
+            <div class="modal-footer" style="display: flex; justify-content: space-between;">
+                <button type="button" class="btn btn-danger" id="contact-delete-btn" onclick="deleteContact(document.getElementById('contact-edit-id').value)" style="display: none;">Slett</button>
+                <div style="display: flex; gap: 8px; margin-left: auto;">
+                    <button type="button" class="btn btn-secondary" onclick="closeContactModal()">Avbryt</button>
+                    <button type="button" class="btn btn-primary" onclick="saveContact()">Lagre</button>
+                </div>
             </div>
         </div>
     </div>

@@ -20,6 +20,46 @@ router.use((req, res, next) => {
 });
 router.use(requireTenant);
 
+// POST batch assign/remove cluster on equipment
+router.post('/assign-cluster', async (req, res) => {
+  try {
+    const { equipmentIds, clusterId } = req.body;
+
+    if (!Array.isArray(equipmentIds) || equipmentIds.length === 0) {
+      return res.status(400).json({ error: 'equipmentIds må være en ikke-tom array' });
+    }
+
+    const normalizedIds = equipmentIds
+      .map(id => parseInt(id, 10))
+      .filter(id => Number.isInteger(id));
+
+    if (normalizedIds.length === 0) {
+      return res.status(400).json({ error: 'Ingen gyldige anlegg-IDer oppgitt' });
+    }
+
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    const params = [normalizedIds, clusterId ? parseInt(clusterId, 10) : null];
+
+    const result = await pool.query(
+      `UPDATE equipment
+       SET cluster_id = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ANY($1::int[])
+       RETURNING id, cluster_id`,
+      params
+    );
+
+    res.json({
+      updatedCount: result.rows.length,
+      clusterId: clusterId ? parseInt(clusterId, 10) : null,
+      equipmentIds: result.rows.map(row => row.id)
+    });
+  } catch (error) {
+    console.error('Error assigning cluster to equipment:', error);
+    res.status(500).json({ error: 'Kunne ikke oppdatere cluster for anlegg', details: error.message });
+  }
+});
+
 // DENNE MÅ KOMME FØRST:
 router.get('/:id', async (req, res) => {
   const { id } = req.params;

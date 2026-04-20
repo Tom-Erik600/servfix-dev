@@ -119,6 +119,19 @@
             </div>
         </div>
     </div>
+
+    <!-- Ordredetalj-modal -->
+    <div id="order-detail-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:#fff; border-radius:12px; padding:32px; max-width:560px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.3); max-height:85vh; overflow-y:auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 id="order-detail-title" style="margin:0; font-size:18px; color:#111827;"></h3>
+                <button onclick="closeOrderModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color:#6B7280; padding:4px;">&times;</button>
+            </div>
+            <div id="order-detail-body" style="display:grid; gap:16px;">
+                <!-- Fylles av JS -->
+            </div>
+        </div>
+    </div>
     
     <script src="/admin/assets/js/main.js"></script>
     <script src="/admin/assets/js/dashboard.js"></script>

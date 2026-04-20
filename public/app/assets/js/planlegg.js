@@ -54,12 +54,25 @@
             selectAllEquipmentBtn: document.getElementById('selectAllEquipmentBtn'),
             deselectAllEquipmentBtn: document.getElementById('deselectAllEquipmentBtn'),
             addEquipmentBtn: document.getElementById('addEquipmentBtn'),
+            createClusterBtn: document.getElementById('createClusterBtn'),
+            assignClusterBtn: document.getElementById('assignClusterBtn'),
             customerNotes: document.getElementById('customerNotes'),
+            orderDescriptionSelect: document.getElementById('orderDescriptionSelect'),
             orderDescription: document.getElementById('orderDescription'),
+            visitNumber: document.getElementById('visitNumber'),
+            serviceAddressStreet: document.getElementById('serviceAddressStreet'),
+            serviceAddressPostalCode: document.getElementById('serviceAddressPostalCode'),
+            serviceAddressCity: document.getElementById('serviceAddressCity'),
             scheduledDate: document.getElementById('scheduledDate'),
             timeOptions: document.getElementById('timeOptions'),
             createBtn: document.getElementById('createPlannedOrderBtn'),
             equipmentModal: document.getElementById('equipmentModal'),
+            clusterModal: document.getElementById('clusterModal'),
+            clusterModalTitle: document.getElementById('clusterModalTitle'),
+            clusterModalBody: document.getElementById('clusterModalBody'),
+            clusterModalSave: document.getElementById('clusterModalSave'),
+            clusterModalCancel: document.getElementById('clusterModalCancel'),
+            clusterModalClose: document.getElementById('clusterModalClose'),
             confirmModal: document.getElementById('confirmModal'),
             confirmMessage: document.getElementById('confirmMessage'),
             confirmYes: document.getElementById('confirmYes'),
@@ -153,8 +166,21 @@
             validateForm();
         });
 
-        // Description input
+        // Description input (fritekst-fallback)
         elements.orderDescription?.addEventListener('input', validateForm);
+
+        // Project select endring
+        elements.orderDescriptionSelect?.addEventListener('change', () => {
+            if (elements.orderDescriptionSelect.value === '__manual__') {
+                elements.orderDescriptionSelect.style.display = 'none';
+                elements.orderDescription.style.display = 'block';
+                elements.orderDescription.value = '';
+                elements.orderDescription.focus();
+            } else {
+                elements.orderDescription.value = elements.orderDescriptionSelect.value;
+            }
+            validateForm();
+        });
 
         // Add equipment button
         elements.addEquipmentBtn?.addEventListener('click', () => {
@@ -165,8 +191,257 @@
             showNewEquipmentModal();
         });
 
+        // Cluster buttons
+        elements.createClusterBtn?.addEventListener('click', () => {
+            if (!state.selectedCustomer) {
+                showToast('Velg kunde først', 'error');
+                return;
+            }
+            showClusterModal('create');
+        });
+
+        elements.assignClusterBtn?.addEventListener('click', () => {
+            if (!state.selectedCustomer) {
+                showToast('Velg kunde først', 'error');
+                return;
+            }
+            if (state.selectedEquipmentIds.length === 0) {
+                showToast('Velg minst ett anlegg først', 'error');
+                return;
+            }
+            showClusterModal('assign');
+        });
+
+        // Cluster modal close/cancel
+        elements.clusterModalClose?.addEventListener('click', hideClusterModal);
+        elements.clusterModalCancel?.addEventListener('click', hideClusterModal);
+        elements.clusterModal?.addEventListener('click', (e) => {
+            if (e.target === elements.clusterModal) hideClusterModal();
+        });
+
         elements.selectAllEquipmentBtn?.addEventListener('click', selectAllEquipment);
         elements.deselectAllEquipmentBtn?.addEventListener('click', deselectAllEquipment);
+    }
+
+    // =====================
+    // Project Suggestions (Tripletex)
+    // =====================
+
+    async function loadProjectSuggestions(customer) {
+        const select = elements.orderDescriptionSelect;
+        const textInput = elements.orderDescription;
+        if (!select || !textInput) return;
+
+        try {
+            const customerId = customer.externalId || customer.id;
+            const response = await fetch(`/api/customers/${customerId}/projects`, {
+                credentials: 'include'
+            });
+            const projects = await response.json();
+
+            select.innerHTML = '';
+
+            if (projects.length === 0) {
+                // Ingen prosjekter — gå rett til fritekst
+                select.style.display = 'none';
+                textInput.style.display = 'block';
+                textInput.value = `Service hos ${customer.name}`;
+                return;
+            }
+
+            // Fyll inn prosjekter (nyeste øverst = allerede sortert fra backend)
+            projects.forEach((p, i) => {
+                const opt = document.createElement('option');
+                opt.value = p.displayName;
+                opt.textContent = p.displayName;
+                if (i === 0) opt.selected = true;
+                select.appendChild(opt);
+            });
+
+            // Legg til manuelt-valg nederst
+            const manualOpt = document.createElement('option');
+            manualOpt.value = '__manual__';
+            manualOpt.textContent = '✏️ Skriv inn manuelt...';
+            select.appendChild(manualOpt);
+
+            // Vis dropdown, skjul fritekst
+            select.style.display = 'block';
+            textInput.style.display = 'none';
+            textInput.value = projects[0].displayName;
+
+        } catch (error) {
+            console.error('Kunne ikke laste prosjekter:', error);
+            select.style.display = 'none';
+            textInput.style.display = 'block';
+            textInput.value = `Service hos ${customer.name}`;
+        }
+    }
+
+    // =====================
+    // Cluster Management
+    // =====================
+
+    function showClusterModal(mode) {
+        const customer = state.selectedCustomer;
+        if (!customer) return;
+
+        const title = mode === 'create' ? 'Opprett nytt cluster' : 'Flytt valgte anlegg til cluster';
+        elements.clusterModalTitle.textContent = title;
+
+        if (mode === 'create') {
+            elements.clusterModalBody.innerHTML = `
+                <p style="font-size: 14px; color: #6b7280; margin-bottom: 16px;">Opprett et nytt cluster for kunden. Ingen anlegg flyttes automatisk.</p>
+                <div class="form-group">
+                    <label class="form-label">Clusternavn</label>
+                    <input type="text" id="clusterNameInput" class="form-input" placeholder="F.eks. Industriveien 92 Eidsvoll">
+                </div>
+            `;
+            elements.clusterModalSave.textContent = 'Opprett cluster';
+        } else {
+            elements.clusterModalBody.innerHTML = `
+                <p style="font-size: 14px; color: #6b7280; margin-bottom: 16px;">${state.selectedEquipmentIds.length} valgte anlegg blir oppdatert.</p>
+                <div class="form-group">
+                    <label class="form-label">Velg cluster</label>
+                    <select id="clusterSelect" class="form-input">
+                        <option value="">Laster cluster...</option>
+                    </select>
+                </div>
+                <div class="form-group" id="newClusterNameGroup" style="display: none;">
+                    <label class="form-label">Nytt clusternavn</label>
+                    <input type="text" id="clusterNameInput" class="form-input" placeholder="F.eks. Industriveien 92 Eidsvoll">
+                </div>
+            `;
+            elements.clusterModalSave.textContent = 'Lagre';
+
+            // Last eksisterende clusters
+            loadClustersForSelect(customer);
+        }
+
+        // Sett opp save-handler
+        elements.clusterModalSave.onclick = () => handleClusterModalSave(mode);
+
+        elements.clusterModal.classList.add('active');
+    }
+
+    function hideClusterModal() {
+        elements.clusterModal.classList.remove('active');
+    }
+
+    async function loadClustersForSelect(customer) {
+        try {
+            const customerId = customer.externalId || customer.id;
+            const response = await fetch(`/api/clusters?customerId=${customerId}`, {
+                credentials: 'include'
+            });
+            const clusters = await response.json();
+
+            const select = document.getElementById('clusterSelect');
+            if (!select) return;
+
+            select.innerHTML = `
+                <option value="">Velg cluster...</option>
+                ${clusters.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
+                <option value="__new__">+ Opprett nytt cluster...</option>
+            `;
+
+            select.addEventListener('change', () => {
+                const newNameGroup = document.getElementById('newClusterNameGroup');
+                if (newNameGroup) {
+                    newNameGroup.style.display = select.value === '__new__' ? 'block' : 'none';
+                }
+            });
+        } catch (error) {
+            console.error('Feil ved lasting av clusters:', error);
+            showToast('Kunne ikke laste clusters', 'error');
+        }
+    }
+
+    async function handleClusterModalSave(mode) {
+        const customer = state.selectedCustomer;
+        if (!customer) return;
+
+        const customerId = customer.externalId || customer.id;
+        const nameInput = document.getElementById('clusterNameInput');
+        const select = document.getElementById('clusterSelect');
+
+        try {
+            elements.clusterModalSave.disabled = true;
+            elements.clusterModalSave.textContent = mode === 'create' ? 'Oppretter...' : 'Lagrer...';
+
+            if (mode === 'create') {
+                const clusterName = nameInput?.value?.trim();
+                if (!clusterName) {
+                    showToast('Skriv inn clusternavn', 'error');
+                    return;
+                }
+
+                await createCluster(customerId, clusterName);
+                await loadCustomerEquipment(customerId);
+                hideClusterModal();
+                showToast(`Cluster "${clusterName}" opprettet`, 'success');
+            } else {
+                if (!select?.value) {
+                    showToast('Velg cluster eller opprett nytt', 'error');
+                    return;
+                }
+
+                let clusterId;
+                if (select.value === '__new__') {
+                    const clusterName = nameInput?.value?.trim();
+                    if (!clusterName) {
+                        showToast('Skriv inn clusternavn', 'error');
+                        return;
+                    }
+                    const cluster = await createCluster(customerId, clusterName);
+                    clusterId = cluster.id;
+                } else {
+                    clusterId = select.value;
+                }
+
+                await assignEquipmentToCluster(state.selectedEquipmentIds, clusterId);
+                await loadCustomerEquipment(customerId);
+                hideClusterModal();
+                showToast('Cluster oppdatert', 'success');
+            }
+        } catch (error) {
+            console.error('Cluster feil:', error);
+            showToast(error.message, 'error');
+        } finally {
+            elements.clusterModalSave.disabled = false;
+            elements.clusterModalSave.textContent = mode === 'create' ? 'Opprett cluster' : 'Lagre';
+        }
+    }
+
+    async function createCluster(customerId, name) {
+        const response = await fetch('/api/clusters', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ customerId: parseInt(customerId), name })
+        });
+
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || 'Kunne ikke opprette cluster');
+        }
+
+        return response.json();
+    }
+
+    async function assignEquipmentToCluster(equipmentIds, clusterId) {
+        const response = await fetch('/api/equipment/assign-cluster', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ equipmentIds, clusterId: parseInt(clusterId) })
+        });
+
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || 'Kunne ikke tildele cluster');
+        }
+
+        return response.json();
     }
 
     // =====================
@@ -270,10 +545,10 @@
         // Vis oppdragsdetaljer-seksjonen
         elements.orderDetailsSection.style.display = 'block';
 
-        // Fyll inn beskrivelse og kundenotat
-        if (elements.orderDescription) {
-            elements.orderDescription.value = `Service hos ${customer.name}`;
-        }
+        // Last prosjekter fra Tripletex
+        await loadProjectSuggestions(customer);
+
+        // Fyll inn kundenotat
         if (elements.customerNotes) {
             elements.customerNotes.value = customer.notes || '';
         }
@@ -703,9 +978,15 @@
     // =====================
 
     function validateForm() {
+        const descriptionValue = elements.orderDescription.style.display !== 'none'
+            ? elements.orderDescription.value.trim()
+            : (elements.orderDescriptionSelect.value && elements.orderDescriptionSelect.value !== '__manual__'
+                ? elements.orderDescriptionSelect.value
+                : '');
+
         const isValid = state.selectedCustomer &&
                         state.scheduledDate &&
-                        elements.orderDescription.value.trim().length > 0;
+                        descriptionValue.length > 0;
 
         elements.createBtn.disabled = !isValid;
     }
@@ -731,14 +1012,38 @@
         showCreateOrderLoading();
 
         try {
+            // Hent beskrivelse fra dropdown eller fritekst
+            const description = elements.orderDescription.style.display !== 'none'
+                ? elements.orderDescription.value.trim()
+                : elements.orderDescriptionSelect.value;
+
+            const visitNumber = elements.visitNumber?.value?.trim() || '';
+            const serviceAddressStreet = elements.serviceAddressStreet?.value?.trim() || '';
+            const serviceAddressPostalCode = elements.serviceAddressPostalCode?.value?.trim() || '';
+            const serviceAddressCity = elements.serviceAddressCity?.value?.trim() || '';
+
             const orderData = {
                 customerId: state.selectedCustomer.externalId || state.selectedCustomer.id,
                 customerName: state.selectedCustomer.name,
                 customerData: state.selectedCustomer,
-                description: elements.orderDescription.value.trim(),
+                description: description,
                 serviceType: 'Planlagt service',
                 scheduledDate: state.scheduledDate
             };
+
+            // Legg til besøksnr og serviceadresse i customerData
+            if (visitNumber) {
+                orderData.customerData = { ...orderData.customerData, visit_number: visitNumber };
+            }
+            if (serviceAddressStreet) {
+                orderData.serviceAddressStreet = serviceAddressStreet;
+            }
+            if (serviceAddressPostalCode) {
+                orderData.serviceAddressPostalCode = serviceAddressPostalCode;
+            }
+            if (serviceAddressCity) {
+                orderData.serviceAddressCity = serviceAddressCity;
+            }
 
             // Legg til anlegg hvis valgt
             if (state.selectedEquipmentIds.length > 0) {
@@ -814,6 +1119,13 @@
         elements.customerInfo.classList.remove('active');
         elements.orderDetailsSection.style.display = 'none';
         elements.orderDescription.value = '';
+        elements.orderDescription.style.display = 'none';
+        elements.orderDescriptionSelect.innerHTML = '<option value="">⏳ Laster prosjekter...</option>';
+        elements.orderDescriptionSelect.style.display = 'block';
+        if (elements.visitNumber) elements.visitNumber.value = '';
+        if (elements.serviceAddressStreet) elements.serviceAddressStreet.value = '';
+        if (elements.serviceAddressPostalCode) elements.serviceAddressPostalCode.value = '';
+        if (elements.serviceAddressCity) elements.serviceAddressCity.value = '';
         if (elements.customerNotes) elements.customerNotes.value = '';
         elements.scheduledDate.value = '';
         elements.createBtn.disabled = true;

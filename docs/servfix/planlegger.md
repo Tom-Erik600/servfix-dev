@@ -145,7 +145,10 @@ Teknikeren bruker et enklere grensesnitt uten drag & drop:
    - **Hurtigvalg:** `+ Marker alle` og `- Fjern markering alle`
    - **Nytt anlegg:** Mulighet for nytt anlegg
    - **Kundenotat:** Internt notat (vises ikke på rapport)
-   - **Beskrivelse:** Fritekst, forhåndsutfylt med "Service hos {kundenavn}"
+   - **Beskrivelse:** Dropdown med prosjektforslag fra Tripletex, eller fritekst (forhåndsutfylt med "Service hos {kundenavn}")
+   - **Besøksnummer:** Valgfritt fritekstfelt, lagres i `customer_data.visit_number`
+   - **Serviceadresse:** Gate, postnr og poststed (valgfritt), lagres i `service_address_street/postal_code/city`
+   - **Cluster-admin:** `+ Nytt cluster` og `Flytt til cluster`-knapper for å opprette og administrere cluster direkte fra skjemaet
    - **Dato:** Hurtigvalg (1 uke, 1/3/6 mnd) eller manuelt datovalg, med lokal min-dato
 5. "Planlegg oppdrag"-knapp sender `POST /api/orders`
 6. Etter opprettelse: "Vil du planlegge flere?" (Ja = reset form, Nei = tilbake til hovedmeny)
@@ -179,8 +182,14 @@ Opprett-knappen er deaktivert til:
 
 2. Ved kundevalg:
    - GET /api/equipment?customerId={id}        (kundens anlegg)
+   - GET /api/customers/{id}/projects          (prosjektforslag fra Tripletex)
 
-3. Ved opprettelse:
+3. Ved cluster-administrasjon:
+   - GET /api/clusters?customerId={id}         (eksisterende cluster)
+   - POST /api/clusters                        (opprett nytt cluster)
+   - POST /api/equipment/assign-cluster        (flytt anlegg til cluster)
+
+4. Ved opprettelse:
     - POST /api/orders                          (opprett ordren)
     - PUT /api/customers/{id}/notes             (lagre kundenotat)
     - UI viser loading-overlay/spinner mens oppdraget opprettes
@@ -196,11 +205,12 @@ Opprett-knappen er deaktivert til:
 | Teknikertildeling | Velges via drag | Automatisk (innlogget tekniker) |
 | Kundefilter | Viser alle aktive kunder | Viser alle kunder |
 | Prosjektfaner | Ja, egen prosjektfane mot Tripletex | Nei |
-| Prosjektforslag | Ja (fra Tripletex) | Nei (kun fritekst) |
-| Avtalenummer | Ja (settes automatisk fra Tripletex-prosjekt) | Nei |
-| Besøksnummer | Ja (valgfritt felt i modal) | Nei |
-| Cluster i ordreopprettelse | Ja, gruppering og enkel cluster-adm. | Nei |
-| Cluster-bruk i anleggsvalg | Ja | Ja, kun gruppering og valg |
+| Prosjektforslag | Ja (fra Tripletex) | Ja (fra Tripletex, med fritekst-fallback) |
+| Avtalenummer | Ja (settes automatisk fra Tripletex-prosjekt) | Ja (settes automatisk fra Tripletex-prosjekt) |
+| Besøksnummer | Ja (valgfritt felt i modal) | Ja (valgfritt felt) |
+| Serviceadresse | Ja (gate, postnr, poststed) | Ja (gate, postnr, poststed) |
+| Cluster i ordreopprettelse | Ja, gruppering og enkel cluster-adm. | Ja, opprett og flytt |
+| Cluster-bruk i anleggsvalg | Ja | Ja, gruppering, valg og cluster-admin |
 | Hurtigvalg dato | Nei (kun datepicker) | Ja (1 uke, 1/3/6 mnd) |
 | Service-oversikt | Ja (6-mnd kalender/teknikervisning) | Nei |
 | Anleggsopprettelse | Ja (inline i modal) | Ja (inline i skjema) |
@@ -220,4 +230,4 @@ Opprett-knappen er deaktivert til:
 - **Kundesiden er hovedsted for cluster-vedlikehold** — der vises alle cluster, også tomme, som kollapsede seksjoner med `Øvrige` nederst
 - **Søk med debounce** — begge bruker 300ms debounce på søkeinput
 - **agreement_number settes kun ved prosjektvalg** — fritekstbeskrivelse gir ikke avtalenummer; kun Tripletex-prosjekter setter dette feltet
-- **visit_number er valgfritt** — tomt felt = ingen `visit_number` i `customer_data`; feltet er kun synlig i admin-modalen, ikke i tekniker-appen
+- **visit_number er valgfritt** — tomt felt = ingen `visit_number` i `customer_data`; feltet finnes i både admin-modalen og tekniker-appen

@@ -128,6 +128,42 @@ router.get('/:customerId/addresses', async (req, res) => {
   }
 });
 
+// GET prosjekter for kunde fra Tripletex
+router.get('/:customerId/projects', async (req, res) => {
+  const { customerId } = req.params;
+  console.log(`📁 [CUSTOMERS] GET projects for customer ${customerId}`);
+
+  try {
+    const tripletexService = require('../services/tripletexService');
+    const client = await tripletexService.getApiClient();
+
+    const response = await client.get('/project', {
+      params: {
+        customerId: customerId,
+        isClosed: false,
+        from: 0,
+        count: 20,
+        fields: 'id,name,number,displayName,startDate,endDate,isClosed'
+      }
+    });
+
+    const projects = (response.data.values || []).sort((a, b) => b.id - a.id);
+
+    const result = projects.map(p => ({
+      id: p.id,
+      displayName: p.displayName || p.name || '',
+      number: p.number || null
+    }));
+
+    console.log(`✅ [CUSTOMERS] Found ${result.length} projects for customer ${customerId}`);
+    res.json(result);
+
+  } catch (error) {
+    console.error(`❌ [CUSTOMERS] Error fetching projects:`, error.message);
+    res.json([]); // Tom liste — ikke krasj
+  }
+});
+
 console.log('✅ [CUSTOMERS] Route module loaded');
 
 module.exports = router;

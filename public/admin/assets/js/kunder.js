@@ -1511,6 +1511,7 @@ window.selectCustomer = async function(customerId) {
         document.getElementById('contact-edit-role').value = '';
         document.getElementById('contact-edit-report-recipient').checked = false;
         document.getElementById('contact-edit-title').textContent = 'Ny kontaktperson';
+        document.getElementById('contact-delete-btn').style.display = 'none';
         contactEditModal.classList.add('show');
     };
 
@@ -1526,6 +1527,7 @@ window.selectCustomer = async function(customerId) {
         document.getElementById('contact-edit-role').value = c.role || '';
         document.getElementById('contact-edit-report-recipient').checked = c.is_report_recipient || false;
         document.getElementById('contact-edit-title').textContent = 'Rediger kontaktperson';
+        document.getElementById('contact-delete-btn').style.display = '';
         contactEditModal.classList.add('show');
     };
 

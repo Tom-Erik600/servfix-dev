@@ -48,6 +48,9 @@ router.get('/', async (req, res) => {
     const result = await pool.query(
       `SELECT o.*, t.name as technician_name,
               o.customer_data->>'physicalAddress' as delivery_address,
+              pc.name AS contact_name,
+              pc.phone AS contact_phone,
+              pc.email AS contact_email,
               EXISTS (
                 SELECT 1
                 FROM service_reports sr
@@ -60,6 +63,16 @@ router.get('/', async (req, res) => {
               ) AS has_quotes
        FROM orders o
        LEFT JOIN technicians t ON o.technician_id = t.id
+       LEFT JOIN LATERAL (
+         SELECT cc.name, cc.phone, cc.email
+         FROM customer_contacts cc
+         WHERE cc.customer_id = CASE
+           WHEN o.customer_id::text ~ '^[0-9]+$' THEN o.customer_id::integer
+           ELSE NULL
+         END
+         ORDER BY cc.is_report_recipient DESC, cc.id ASC
+         LIMIT 1
+       ) pc ON true
        ${whereClause}
        ORDER BY o.scheduled_date DESC, o.scheduled_time DESC`,
       queryParams
@@ -78,17 +91,22 @@ router.get('/', async (req, res) => {
             // Hent equipment for denne ordren
             const equipmentResult = await pool.query(
                 `SELECT 
-                    e.id, 
+                    e.id,
+                    e.systemnavn,
+                    e.systemtype,
                     COALESCE(sr.status, 'not_started') as service_status,
                     COALESCE(sr.status, 'not_started') as service_report_status
                 FROM equipment e
                 LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
-                WHERE e.customer_id = $1`,
+                WHERE e.customer_id = $1
+                AND e.status = 'active'`,
                 [order.customer_id, order.id]
             );
 
             equipment = equipmentResult.rows.map(eq => ({
                 id: eq.id,
+                name: eq.systemnavn || 'Ukjent system',
+                type: eq.systemtype || '',
                 serviceStatus: eq.service_status || 'not_started',
                 serviceReportStatus: eq.service_report_status || 'not_started'
             }));
