@@ -22,6 +22,8 @@ router.get('/', async (req, res) => {
              e.plassering, e.betjener, e.location, e.status, e.notater,
              e.has_filters, e.filter_supply, e.filter_exhaust,
              e.filter_drive_supply, e.filter_drive_exhaust,
+             e.filter_supply_text, e.filter_exhaust_text,
+             e.filter_drive_supply_text, e.filter_drive_exhaust_text,
              e.cluster_id, ec.name AS cluster_name,
              e.created_at, e.updated_at
       FROM equipment e
@@ -50,6 +52,10 @@ router.get('/', async (req, res) => {
       filterExhaust: eq.filter_exhaust,
       filterDriveSupply: eq.filter_drive_supply,
       filterDriveExhaust: eq.filter_drive_exhaust,
+      filterSupplyText: eq.filter_supply_text,
+      filterExhaustText: eq.filter_exhaust_text,
+      filterDriveSupplyText: eq.filter_drive_supply_text,
+      filterDriveExhaustText: eq.filter_drive_exhaust_text,
       clusterId: eq.cluster_id || null,
       clusterName: eq.cluster_name || null,
       serviceStatus: 'not_started'
@@ -67,7 +73,8 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { customerId, systemtype, systemnummer, systemnavn, plassering, betjener, location, notater, clusterId,
-            hasFilters, filterSupply, filterExhaust, filterDriveSupply, filterDriveExhaust } = req.body;
+            hasFilters, filterSupply, filterExhaust, filterDriveSupply, filterDriveExhaust,
+            filterSupplyText, filterExhaustText, filterDriveSupplyText, filterDriveExhaustText } = req.body;
 
     // Valider påkrevde felter
     if (!customerId || !systemtype || !systemnummer || !systemnavn || !plassering) {
@@ -81,8 +88,9 @@ router.post('/', async (req, res) => {
     const result = await pool.query(
       `INSERT INTO equipment
         (customer_id, systemtype, systemnummer, systemnavn, plassering, betjener, location, status, notater, cluster_id,
-         has_filters, filter_supply, filter_exhaust, filter_drive_supply, filter_drive_exhaust)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         has_filters, filter_supply, filter_exhaust, filter_drive_supply, filter_drive_exhaust,
+         filter_supply_text, filter_exhaust_text, filter_drive_supply_text, filter_drive_exhaust_text)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
        RETURNING *;`,
       [
         parseInt(customerId),
@@ -99,7 +107,11 @@ router.post('/', async (req, res) => {
         filterSupply || false,
         filterExhaust || false,
         filterDriveSupply || false,
-        filterDriveExhaust || false
+        filterDriveExhaust || false,
+        filterSupplyText || null,
+        filterExhaustText || null,
+        filterDriveSupplyText || null,
+        filterDriveExhaustText || null
       ]
     );
     
@@ -166,7 +178,8 @@ router.put('/:equipmentId', async (req, res) => {
     const {
       systemtype, systemnummer, systemnavn, plassering,
       betjener, location, notater, clusterId,
-      hasFilters, filterSupply, filterExhaust, filterDriveSupply, filterDriveExhaust
+      hasFilters, filterSupply, filterExhaust, filterDriveSupply, filterDriveExhaust,
+      filterSupplyText, filterExhaustText, filterDriveSupplyText, filterDriveExhaustText
     } = req.body;
 
     const pool = await db.getTenantConnection(req.adminTenantId);
@@ -179,8 +192,10 @@ router.put('/:equipmentId', async (req, res) => {
          cluster_id = $8,
          has_filters = $9, filter_supply = $10, filter_exhaust = $11,
          filter_drive_supply = $12, filter_drive_exhaust = $13,
+         filter_supply_text = $14, filter_exhaust_text = $15,
+         filter_drive_supply_text = $16, filter_drive_exhaust_text = $17,
          updated_at = CURRENT_TIMESTAMP
-       WHERE id = $14
+       WHERE id = $18
        RETURNING *;`,
       [
         systemtype, systemnummer, systemnavn, plassering,
@@ -191,6 +206,10 @@ router.put('/:equipmentId', async (req, res) => {
         filterExhaust || false,
         filterDriveSupply || false,
         filterDriveExhaust || false,
+        filterSupplyText || null,
+        filterExhaustText || null,
+        filterDriveSupplyText || null,
+        filterDriveExhaustText || null,
         equipmentId
       ]
     );
