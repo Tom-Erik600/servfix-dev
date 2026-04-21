@@ -61,19 +61,25 @@ router.get('/search', async (req, res) => {
 
     console.log(`✅ [PROJECTS] Fant ${combined.length} prosjekter for søk "${searchTerm}"`);
 
-    const projects = combined.map(p => ({
-      id: p.id,
-      name: p.name || '',
-      number: p.number || '',
-      displayName: p.displayName || p.name || '',
-      startDate: p.startDate || null,
-      endDate: p.endDate || null,
-      isClosed: p.isClosed || false,
-      customer: p.customer ? {
-        id: p.customer.id,
-        name: p.customer.name || p.customer.displayName || ''
-      } : null
-    }));
+    const today = new Date().toISOString().split('T')[0];
+
+    const projects = combined
+      .map(p => ({
+        id: p.id,
+        name: p.name || '',
+        number: p.number || '',
+        displayName: p.displayName || p.name || '',
+        startDate: p.startDate || null,
+        endDate: p.endDate || null,
+        isClosed: p.isClosed || false,
+        customer: p.customer ? {
+          id: p.customer.id,
+          name: p.customer.name || p.customer.displayName || ''
+        } : null
+      }))
+      .filter(p => !p.endDate || p.endDate >= today);
+
+    console.log(`✅ [PROJECTS] ${projects.length} aktive prosjekter returnert (${combined.length - projects.length} filtrert pga. passert sluttdato)`);
 
     res.json(projects);
   } catch (error) {

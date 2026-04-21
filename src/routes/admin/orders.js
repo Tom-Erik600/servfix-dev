@@ -270,6 +270,64 @@ const params = [
     });
   }
 });
+// PUT /api/admin/orders/:id — endre dato/tid/tekniker på eksisterende ordre
+router.put('/:id', async (req, res) => {
+  try {
+    const pool = await db.getTenantConnection(req.adminTenantId);
+    const orderId = req.params.id;
+    const { scheduledDate, scheduledTime, technicianId } = req.body;
+
+    const orderResult = await pool.query(
+      'SELECT id, status FROM orders WHERE id = $1',
+      [orderId]
+    );
+
+    if (orderResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Ordre ikke funnet' });
+    }
+
+    if (orderResult.rows[0].status === 'completed') {
+      return res.status(409).json({ error: 'Kan ikke endre en fullført ordre' });
+    }
+
+    const fields = [];
+    const params = [];
+    let idx = 1;
+
+    if (scheduledDate !== undefined) {
+      fields.push(`scheduled_date = $${idx++}::date`);
+      params.push(scheduledDate);
+    }
+    if (scheduledTime !== undefined) {
+      fields.push(`scheduled_time = $${idx++}`);
+      params.push(scheduledTime);
+    }
+    if (technicianId !== undefined) {
+      fields.push(`technician_id = $${idx++}`);
+      params.push(technicianId || null);
+      if (orderResult.rows[0].status === 'pending' && technicianId) {
+        fields.push(`status = $${idx++}`);
+        params.push('scheduled');
+      }
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ error: 'Ingen felter å oppdatere' });
+    }
+
+    params.push(orderId);
+    const result = await pool.query(
+      `UPDATE orders SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
+      params
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating order:', error);
+    res.status(500).json({ error: 'Kunne ikke oppdatere ordre' });
+  }
+});
+
 // DELETE order - hard delete, kun for pending/scheduled ordrer
 router.delete('/:id', async (req, res) => {
   try {

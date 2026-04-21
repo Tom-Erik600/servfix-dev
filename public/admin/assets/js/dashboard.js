@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', loadDashboardData);
 
 // Global ordre-data for modal-tilgang
 let dashboardOrders = [];
+let dashboardTechnicians = [];
 
 async function loadDashboardData() {
     try {
@@ -61,6 +62,7 @@ function populateDashboard(orders, customers, technicians, reports, quotes) {
     
     // Lagre globalt for modal-tilgang
     dashboardOrders = orders;
+    dashboardTechnicians = technicians;
     
     // Bygg customer map - sjekk både name og customer_name
     const customerMap = new Map();
@@ -760,9 +762,80 @@ function openOrderModal(orderId) {
             <div style="${labelStyle}">Anlegg (${equipment.length})</div>
             <div style="margin-top:4px;">${equipmentHtml}</div>
         </div>
+        ${status !== 'completed' ? `
+        <hr style="border:none;border-top:1px solid #E5E7EB;margin:4px 0;">
+        <div>
+            <div style="${labelStyle};margin-bottom:10px;">Rediger oppdrag</div>
+            <div style="display:grid;gap:10px;">
+                <label style="font-size:13px;color:#374151;">
+                    Dato
+                    <input type="date" id="edit-scheduled-date"
+                        value="${order.scheduled_date ? order.scheduled_date.split('T')[0] : ''}"
+                        style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;">
+                </label>
+                <label style="font-size:13px;color:#374151;">
+                    Tid
+                    <input type="time" id="edit-scheduled-time"
+                        value="${scheduledTime}"
+                        style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;">
+                </label>
+                <label style="font-size:13px;color:#374151;">
+                    Tekniker
+                    <select id="edit-technician-id"
+                        style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;">
+                        <option value="">— Ingen tekniker —</option>
+                        ${dashboardTechnicians.map(t => `<option value="${t.id}" ${t.id == order.technician_id ? 'selected' : ''}>${t.name || ''}</option>`).join('')}
+                    </select>
+                </label>
+                <div id="edit-order-error" style="color:#DC2626;font-size:12px;display:none;"></div>
+                <button onclick="saveOrderEdit('${orderId}')"
+                    style="padding:8px 16px;border:none;border-radius:6px;background:#2563EB;color:#fff;cursor:pointer;font-weight:600;font-size:13px;align-self:flex-start;">
+                    Lagre endringer
+                </button>
+            </div>
+        </div>` : ''}
     `;
 
     document.getElementById('order-detail-modal').style.display = 'flex';
+}
+
+async function saveOrderEdit(orderId) {
+    const date = document.getElementById('edit-scheduled-date')?.value;
+    const time = document.getElementById('edit-scheduled-time')?.value;
+    const technicianId = document.getElementById('edit-technician-id')?.value;
+    const errorEl = document.getElementById('edit-order-error');
+
+    const body = {};
+    if (date) body.scheduledDate = date;
+    if (time !== undefined) body.scheduledTime = time;
+    if (technicianId !== undefined) body.technicianId = technicianId || null;
+
+    try {
+        const res = await fetch(`/api/admin/orders/${orderId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(body)
+        });
+
+        if (res.status === 409) {
+            errorEl.textContent = 'Kan ikke endre en fullført ordre.';
+            errorEl.style.display = 'block';
+            return;
+        }
+        if (!res.ok) {
+            const err = await res.json();
+            errorEl.textContent = err.error || 'Kunne ikke lagre endringer.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        closeOrderModal();
+        loadDashboardData();
+    } catch (e) {
+        errorEl.textContent = 'Nettverksfeil. Prøv igjen.';
+        errorEl.style.display = 'block';
+    }
 }
 
 function closeOrderModal() {

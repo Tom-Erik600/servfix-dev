@@ -328,6 +328,30 @@ router.post('/:reportId/mark-invoiced', async (req, res) => {
   }
 });
 
+// POST /order/:orderId/mark-done — sett ordre som ferdig behandlet (fjerner fra rapportlisten)
+router.post('/order/:orderId/mark-done', async (req, res) => {
+  try {
+    const pool = await db.getTenantConnection(req.adminTenantId);
+    const { orderId } = req.params;
+
+    await pool.query(
+      `UPDATE orders
+       SET pdf_generated = true,
+           pdf_sent_timestamp = COALESCE(pdf_sent_timestamp, NOW()),
+           sent_til_fakturering = true,
+           is_invoiced = true
+       WHERE id = $1`,
+      [orderId]
+    );
+
+    console.log(`✅ [REPORTS] Ordre ${orderId} satt som ferdig behandlet`);
+    res.json({ success: true, message: `Ordre ${orderId} er satt som ferdig` });
+  } catch (error) {
+    console.error('Error marking order as done:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ✅ NYTT ENDPOINT: Fakturer hele ordren
 router.put('/order/:orderId/invoice', async (req, res) => {
   const { orderId } = req.params;

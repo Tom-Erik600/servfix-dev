@@ -147,7 +147,10 @@ router.get('/:customerId/projects', async (req, res) => {
       }
     });
 
-    const projects = (response.data.values || []).sort((a, b) => b.id - a.id);
+    const today = new Date().toISOString().split('T')[0];
+    const projects = (response.data.values || [])
+      .sort((a, b) => b.id - a.id)
+      .filter(p => !p.endDate || p.endDate >= today);
 
     const result = projects.map(p => ({
       id: p.id,
@@ -155,7 +158,7 @@ router.get('/:customerId/projects', async (req, res) => {
       number: p.number || null
     }));
 
-    console.log(`✅ [CUSTOMERS] Found ${result.length} projects for customer ${customerId}`);
+    console.log(`✅ [CUSTOMERS] ${result.length} aktive prosjekter (filtrert på sluttdato)`);
     res.json(result);
 
   } catch (error) {

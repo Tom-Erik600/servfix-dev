@@ -73,7 +73,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         },
         filters: {
             queue: 'need_action',
-            search: ''
+            search: '',
+            showDone: false
         },
         sort: {
             field: 'date',   // 'date' | 'description' | 'customer' | 'technician'
@@ -488,6 +489,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                 return reports.filter(isDone);
             case 'all':
             default:
+                if (!state.filters.showDone) {
+                    return reports.filter((o) => !isDone(o));
+                }
                 return reports;
         }
     }
@@ -602,6 +606,11 @@ document.addEventListener('DOMContentLoaded', async function() {
                                 Rediger PDF Rapport
                             </button>
                         ` : ''}
+                        ${!isDone(order) ? `
+                            <button class="r2-action r2-action-done" type="button" onclick="markOrderDone('${escapeJs(order.order_id)}')" title="Sett ferdig manuelt">
+                                Sett ferdig
+                            </button>
+                        ` : ''}
                     </div>
                 </td>
             </tr>
@@ -693,6 +702,31 @@ document.addEventListener('DOMContentLoaded', async function() {
         const pdfUrl = `/api/admin/reports/${reportId}/pdf`;
         window.open(pdfUrl, '_blank');
         console.log(`📄 Opening PDF for report ${reportId} from order ${orderId}`);
+    };
+
+    window.markOrderDone = async function(orderId) {
+        const ok = confirm(`Sett ordre ${orderId} som ferdig?\n\nDette setter PDF, sending og fakturering til fullført.`);
+        if (!ok) return;
+
+        try {
+            showToast('⏳ Setter ordre som ferdig...', 'info');
+            const response = await fetch(`/api/admin/reports/order/${orderId}/mark-done`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.details || result.error || 'Kunne ikke sette ferdig');
+            }
+
+            showToast(`✅ ${result.message || 'Ordre satt som ferdig'}`, 'success');
+            await loadReports();
+        } catch (error) {
+            console.error('Error marking order done:', error);
+            showToast(`❌ ${error.message}`, 'error');
+        }
     };
 
     window.sendOrderToCustomer = async function(orderId) {
@@ -1289,6 +1323,16 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     window.reloadReports = loadReports;
     window.setSortField = setSortField;
+
+    window.toggleShowDone = function() {
+        state.filters.showDone = !state.filters.showDone;
+        const btn = document.getElementById('toggle-done-btn');
+        if (btn) {
+            btn.textContent = state.filters.showDone ? 'Skjul ferdige' : 'Vis ferdige';
+            btn.classList.toggle('r2-btn-active', state.filters.showDone);
+        }
+        handleFilters();
+    };
 
     console.log('✅ Servicerapporter v2 JS loaded');
 });
