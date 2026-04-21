@@ -483,7 +483,7 @@
         // Hent settings én gang
         let settings = null;
         try {
-            const res = await fetch('/api/images/settings', { credentials: 'include' });
+            const res = await fetch('/api/images/app-settings', { credentials: 'include' });
             if (res.ok) settings = await res.json();
         } catch (e) { /* bruker defaults */ }
 

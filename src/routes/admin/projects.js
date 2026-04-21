@@ -60,6 +60,9 @@ router.get('/search', async (req, res) => {
     }
 
     console.log(`✅ [PROJECTS] Fant ${combined.length} prosjekter for søk "${searchTerm}"`);
+    if (combined.length > 0) {
+      console.log(`🔍 [PROJECTS] Eksempel rådata (første):`, JSON.stringify(combined[0]));
+    }
 
     const today = new Date().toISOString().split('T')[0];
 
