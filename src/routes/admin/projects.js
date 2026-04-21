@@ -77,7 +77,12 @@ router.get('/search', async (req, res) => {
           name: p.customer.name || p.customer.displayName || ''
         } : null
       }))
-      .filter(p => !p.endDate || p.endDate >= today);
+      .filter(p => {
+        if (!p.endDate) return true;
+        // Normaliser til YYYY-MM-DD for sikker sammenligning
+        const end = p.endDate.toString().slice(0, 10);
+        return end >= today;
+      });
 
     console.log(`✅ [PROJECTS] ${projects.length} aktive prosjekter returnert (${combined.length - projects.length} filtrert pga. passert sluttdato)`);
 

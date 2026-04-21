@@ -774,12 +774,6 @@ function openOrderModal(orderId) {
                         style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;">
                 </label>
                 <label style="font-size:13px;color:#374151;">
-                    Tid
-                    <input type="time" id="edit-scheduled-time"
-                        value="${scheduledTime}"
-                        style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;">
-                </label>
-                <label style="font-size:13px;color:#374151;">
                     Tekniker
                     <select id="edit-technician-id"
                         style="display:block;width:100%;box-sizing:border-box;margin-top:3px;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;">
@@ -801,13 +795,11 @@ function openOrderModal(orderId) {
 
 async function saveOrderEdit(orderId) {
     const date = document.getElementById('edit-scheduled-date')?.value;
-    const time = document.getElementById('edit-scheduled-time')?.value;
     const technicianId = document.getElementById('edit-technician-id')?.value;
     const errorEl = document.getElementById('edit-order-error');
 
     const body = {};
     if (date) body.scheduledDate = date;
-    if (time !== undefined) body.scheduledTime = time;
     if (technicianId !== undefined) body.technicianId = technicianId || null;
 
     try {

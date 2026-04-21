@@ -273,7 +273,7 @@ const params = [
 // PUT /api/admin/orders/:id — endre dato/tid/tekniker på eksisterende ordre
 router.put('/:id', async (req, res) => {
   try {
-    const pool = await db.getTenantConnection(req.adminTenantId);
+    const pool = await db.getTenantConnection(req.session.tenantId);
     const orderId = req.params.id;
     const { scheduledDate, scheduledTime, technicianId } = req.body;
 

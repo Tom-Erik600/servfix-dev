@@ -150,7 +150,11 @@ router.get('/:customerId/projects', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const projects = (response.data.values || [])
       .sort((a, b) => b.id - a.id)
-      .filter(p => !p.endDate || p.endDate >= today);
+      .filter(p => {
+        if (!p.endDate) return true;
+        const end = p.endDate.toString().slice(0, 10);
+        return end >= today;
+      });
 
     const result = projects.map(p => ({
       id: p.id,
