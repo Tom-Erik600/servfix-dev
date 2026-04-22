@@ -382,14 +382,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <span class="customer-info-label">Status</span>
                 <span class="customer-info-value">${project.isClosed ? 'Lukket' : 'Aktivt'}</span>
             </div>
-            <div class="customer-info-item">
-                <span class="customer-info-label">Start</span>
-                <span class="customer-info-value">${escapeHtml(project.startDate || '—')}</span>
-            </div>
-            <div class="customer-info-item">
-                <span class="customer-info-label">Slutt</span>
-                <span class="customer-info-value">${escapeHtml(project.endDate || 'Ingen')}</span>
-            </div>
         </div>
     </div>
 `;
