@@ -84,8 +84,7 @@ router.get('/search', async (req, res) => {
       console.log(`🔍 [PROJECTS] Første endDate-verdi: "${projects[0].endDate}" (type: ${typeof projects[0].endDate})`);
     }
 
-    res.json(projects);
-  } catch (error) {
+    res.json(projects);  } catch (error) {
     console.error('❌ [PROJECTS] Feil ved prosjektsøk:', error.message);
     res.status(502).json({
       error: 'Kunne ikke hente prosjekter fra Tripletex',
