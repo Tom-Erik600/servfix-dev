@@ -134,6 +134,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let visibleCustomers = [];
     let currentTab = 'customers';
     let projectSearchResults = [];
+    let showExpiredProjects = false;
 
     // Sett minimumdato til i dag
     const today = new Date().toISOString().split('T')[0];
@@ -345,14 +346,42 @@ document.addEventListener('DOMContentLoaded', async () => {
     function renderProjects(projects) {
         projectList.innerHTML = '';
 
-        updateListHeader('Prosjekter', projects.length);
+        const today = getLocalDateString();
+        const visibleProjects = showExpiredProjects
+            ? projects
+            : projects.filter(p => !p.endDate || p.endDate >= today);
 
-        if (!projects.length) {
-            projectList.innerHTML = '<div class="empty-state"><p>Søk etter prosjekt for å se treff</p></div>';
+        const expiredCount = projects.filter(p => p.endDate && p.endDate < today).length;
+
+        // Toggle-knapp øverst
+        const toggleBar = document.createElement('div');
+        toggleBar.className = 'project-filter-bar';
+        toggleBar.innerHTML = `
+            <label class="expired-toggle-label">
+                <input type="checkbox" id="show-expired-toggle" ${showExpiredProjects ? 'checked' : ''}>
+                Vis utgåtte prosjekter${expiredCount > 0 ? ` (${expiredCount})` : ''}
+            </label>
+        `;
+        projectList.appendChild(toggleBar);
+
+        document.getElementById('show-expired-toggle')?.addEventListener('change', (e) => {
+            showExpiredProjects = e.target.checked;
+            renderProjects(projectSearchResults);
+        });
+
+        updateListHeader('Prosjekter', visibleProjects.length);
+
+        if (!visibleProjects.length) {
+            const empty = document.createElement('div');
+            empty.className = 'empty-state';
+            empty.innerHTML = projects.length
+                ? '<p>Ingen aktive prosjekter. Kryss av «Vis utgåtte» for å se alle.</p>'
+                : '<p>Søk etter prosjekt for å se treff</p>';
+            projectList.appendChild(empty);
             return;
         }
 
-        projects.forEach(project => {
+        visibleProjects.forEach(project => {
             const projectCard = document.createElement('div');
             projectCard.className = 'modern-customer-card project-card project-search-card';
             projectCard.dataset.cardType = 'project';

@@ -79,13 +79,9 @@ router.get('/search', async (req, res) => {
         } : null
       }));
 
-    const today = new Date().toISOString().split('T')[0];
+    console.log(`✅ [PROJECTS] ${projects.length} prosjekter returnert for søk "${searchTerm}"`);
 
-    const filtered = projects.filter(p => !p.endDate || p.endDate >= today);
-
-    console.log(`✅ [PROJECTS] ${filtered.length} aktive prosjekter returnert (${projects.length - filtered.length} filtrert pga. passert sluttdato)`);
-
-    res.json(filtered);  } catch (error) {
+    res.json(projects);  } catch (error) {
     console.error('❌ [PROJECTS] Feil ved prosjektsøk:', error.message);
     res.status(502).json({
       error: 'Kunne ikke hente prosjekter fra Tripletex',
