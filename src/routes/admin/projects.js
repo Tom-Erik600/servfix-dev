@@ -64,8 +64,6 @@ router.get('/search', async (req, res) => {
       console.log(`🔍 [PROJECTS] Eksempel rådata (første):`, JSON.stringify(combined[0]));
     }
 
-    const today = new Date().toISOString().split('T')[0];
-
     const projects = combined
       .map(p => ({
         id: p.id,
@@ -81,21 +79,12 @@ router.get('/search', async (req, res) => {
         } : null
       }));
 
-    // DEBUG: logg alle endDate-verdier for å se format fra Tripletex
-    console.log(`🔍 [PROJECTS] endDate-verdier:`, projects.map(p => ({ name: p.name, endDate: p.endDate })));
-    console.log(`🔍 [PROJECTS] today:`, today);
+    console.log(`✅ [PROJECTS] ${projects.length} prosjekter returnert for søk "${searchTerm}"`);
+    if (projects.length > 0) {
+      console.log(`🔍 [PROJECTS] Første endDate-verdi: "${projects[0].endDate}" (type: ${typeof projects[0].endDate})`);
+    }
 
-    const filtered = projects.filter(p => {
-      if (!p.endDate) return true;
-      const end = p.endDate.toString().slice(0, 10);
-      const keep = end >= today;
-      if (!keep) console.log(`🚫 [PROJECTS] Filtrert bort: ${p.name} (endDate: ${p.endDate}, end: ${end})`);
-      return keep;
-    });
-
-    console.log(`✅ [PROJECTS] ${filtered.length} aktive prosjekter returnert (${combined.length - filtered.length} filtrert pga. passert sluttdato)`);
-
-    res.json(filtered);
+    res.json(projects);
   } catch (error) {
     console.error('❌ [PROJECTS] Feil ved prosjektsøk:', error.message);
     res.status(502).json({
