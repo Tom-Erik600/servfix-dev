@@ -357,7 +357,10 @@ class UnifiedPDFGenerator {
   async inlineAllImages(data) {
     const collect = [];
     (data.documentation_photos || []).forEach(p => p?.url && collect.push(p));
-    (data.equipmentSections || []).forEach(sec => (sec.checkpoints || []).forEach(cp => (cp.images || []).forEach(img => img?.url && collect.push(img))));
+    (data.equipmentSections || []).forEach(sec => {
+      (sec.checkpoints || []).forEach(cp => (cp.images || []).forEach(img => img?.url && collect.push(img)));
+      (sec.photos || []).forEach(p => p?.url && collect.push(p));
+    });
     (data.avvik || []).forEach(a => (a.images || []).forEach(img => img?.url && collect.push(img)));
     
     console.log(`🖼️ Converting ${collect.length} images to base64...`);
@@ -514,13 +517,20 @@ class UnifiedPDFGenerator {
             const reportSystemData = Object.keys(rawSysData).length > 0 ? rawSysData : rawSysFields;
             const templateSystemFields = template.systemFields || [];
 
+            // Hent overallComment og photos per anlegg
+            const sectionComment = report.checklist_data?.overallComment || '';
+            const sectionPhotos = (report.photos || [])
+              .map(url => typeof url === 'string' ? { url, caption: '' } : url);
+
             result.equipmentSections.push({
               name: sectionName,
               system_ref: systemRef,
               checkpoints: filtered,
               driftSchedule: driftSchedule,
               systemData: reportSystemData,
-              templateSystemFields: templateSystemFields
+              templateSystemFields: templateSystemFields,
+              overallComment: sectionComment,
+              photos: sectionPhotos,
             });
           }
         });
@@ -696,8 +706,8 @@ class UnifiedPDFGenerator {
 
   renderChecklistResults(data) {
     if (!data.equipmentSections || !data.equipmentSections.length) return '';
-    
-    return data.equipmentSections.map(section => {
+
+    const sectionsHtml = data.equipmentSections.map(section => {
       const rows = section.checkpoints.map(cp => {
         const statusClass = `status-${(cp.status || '').toLowerCase()}`;
         
@@ -729,14 +739,23 @@ class UnifiedPDFGenerator {
           </tr>`;
       }).join('');
 
-      // ============ NYT TILLEGG: DRIFTSTIDER =============
       const driftScheduleHtml = section.driftSchedule ? this.renderDriftSchedule(section.driftSchedule) : '';
-const productsHtml = (data.products_used && data.products_used.length > 0) ? this.renderProductsTable(data.products_used) : '';
-const workHtml = (data.additional_work && data.additional_work.length > 0) ? this.renderWorkTable(data.additional_work) : '';
-      // ==================================================
-
-      // Bygg systemfelter-HTML for denne seksjonen
       const sectionSystemFieldsHtml = this.renderSectionSystemFields(section);
+
+      // Kommentar per anlegg
+      const commentHtml = section.overallComment
+        ? `<div class="equipment-comment" style="margin-top: 16px;">${this.escapeHtml(section.overallComment).replace(/\n/g, '<br>')}</div>`
+        : '';
+
+      // Bilder per anlegg
+      const photosHtml = (section.photos && section.photos.length > 0)
+        ? `<div class="photos-grid" style="margin-top: 12px;">${section.photos.map(photo =>
+            `<div class="photo-container">
+              <img src="${photo.url}" class="photo" alt="${this.escapeHtml(photo.caption || 'Bilde')}"/>
+              ${photo.caption ? `<span class="image-caption">${this.escapeHtml(photo.caption)}</span>` : ''}
+            </div>`
+          ).join('')}</div>`
+        : '';
 
       return `
         <div class="checklist-section">
@@ -747,16 +766,22 @@ const workHtml = (data.additional_work && data.additional_work.length > 0) ? thi
               <tr>
                 <th>Sjekkpunkt</th>
                 <th style="text-align:center;">Status</th>
-                <th >Merknad / Dokumentasjon</th>
+                <th>Merknad / Dokumentasjon</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
           </table>
           ${driftScheduleHtml}
-${productsHtml}
-${workHtml}
+          ${commentHtml}
+          ${photosHtml}
         </div>`;
     }).join('');
+
+    // Produkter og arbeid vises én gang etter alle anlegg
+    const productsHtml = (data.products_used && data.products_used.length > 0) ? this.renderProductsTable(data.products_used) : '';
+    const workHtml = (data.additional_work && data.additional_work.length > 0) ? this.renderWorkTable(data.additional_work) : '';
+
+    return sectionsHtml + productsHtml + workHtml;
   }
 
 renderDriftSchedule(schedule) {
@@ -870,28 +895,12 @@ renderWorkTable(work) {
 }
 
   generateSummarySection(data, settings) {
-  const hasContent = data.overallComment || 
-                     (data.documentation_photos && data.documentation_photos.length > 0);
-
-  if (!hasContent) return '';
-
-  const commentHtml = data.overallComment 
-    ? `<p style="margin: 0 0 20px 0; line-height: 1.6;">${this.escapeHtml(data.overallComment)}</p>` 
-    : '';
-  
-  const photosHtml = (data.documentation_photos && data.documentation_photos.length > 0) 
-    ? `<div class="photos-grid">${data.documentation_photos.map(photo => 
-        `<div class="photo-container">
-          <img src="${photo.url}" class="photo" alt="${this.escapeHtml(photo.caption || 'Bilde')}"/>
-        </div>`
-      ).join('')}</div>` 
-    : '';
+  if (!data.overallComment) return '';
 
   return `
     <section class="section">
-      <h2 class="section-header">Oppsummering og utførte arbeider</h2>
-      ${commentHtml}
-      ${photosHtml}
+      <h2 class="section-header">Oppsummering</h2>
+      <p style="margin: 0; line-height: 1.6;">${this.escapeHtml(data.overallComment).replace(/\n/g, '<br>')}</p>
     </section>`;
 }
 
