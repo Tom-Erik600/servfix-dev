@@ -1223,7 +1223,6 @@ renderWorkTable(work) {
 
     const equipmentOverview = this.renderEquipmentOverviewTable(data);
     const avvikTable = this.renderAvvikTable(data, settings);
-    const summarySection = this.generateSummarySection(data, settings);
     const checklistSections = this.renderChecklistResults(data);
     const signSection = this.generateSignSection(data, settings);
 
@@ -1281,9 +1280,6 @@ renderWorkTable(work) {
         ${checklistSections}
         ` : ''}
         
-        ${summarySection ? '<div class="page-break"></div>' : ''}
-        
-        ${summarySection}
       </div></body></html>`;
   }
 
