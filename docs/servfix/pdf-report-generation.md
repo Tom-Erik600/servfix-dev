@@ -83,6 +83,52 @@ When modifying PDF generation:
 6. Validate GCS path and upload logic.
 7. Ensure no breaking changes to existing PDF formats without explicit decision.
 
+## Service report PDF structure (unifiedPdfGenerator.js)
+
+A service report PDF is generated from one order, which may contain one or many equipment units (anlegg). The PDF is structured as follows:
+
+### 1. Header
+Customer name, order number, service date. Background color from `reportHeadingColor`.
+
+### 2. Customer info table
+Agreement number, technician, address, service address.
+
+### 3. System overview (Systemoversikt)
+Table listing all equipment units on the order: system type, system number, location (plassering), betjener.
+
+### 4. Deviation table (Avvikstabell)
+All deviations across all equipment units collected in one table: deviation ID, equipment name, system number, component, comment.
+- **Images**: shown inline below each deviation row only if `largeAvvikImages = true` in tenant settings.
+
+### 5. Checklist details — repeated per equipment unit
+For each equipment unit (anlegg):
+- Equipment name as heading (system number + name)
+- System fields from template (e.g. model, serial number)
+- Checklist table: Sjekkpunkt | Status | Merknad/Dokumentasjon
+  - **Deviation images** (avvik_images): shown inline in the Merknad column on the correct checklist row. Always shown regardless of settings.
+- Drift schedule (driftstider): start/stop per weekday, if registered
+- Overall comment (`overallComment`) for this equipment unit, if present
+- General equipment photos (`report.photos`) for this equipment unit, if present
+
+### 6. Products used (Produkter brukt)
+Shown once after all equipment sections. Name, quantity, price, total.
+
+### 7. Additional work (Utførte tilleggsarbeider)
+Shown once after all equipment sections. Description, hours, hourly rate, total.
+
+### 8. Signature
+Technician name, date, company sign-off.
+
+## Image handling summary
+
+| Image type | Source | Where shown | Condition |
+|---|---|---|---|
+| Deviation images | `avvik_images` table | Inline in checklist row (Merknad column) | Always |
+| Deviation images (large) | `avvik_images` table | Below deviation row in avvik table | `largeAvvikImages = true` in settings |
+| General equipment photos | `service_reports.photos` | Below comment, per equipment unit | Always, if present |
+
+All images are converted to base64 data URIs before HTML rendering via `inlineAllImages()`. External URLs are never used in the rendered PDF.
+
 ## Test scenarios
 Critical scenarios to cover:
 - Generate PDF with all required data present.
@@ -92,6 +138,10 @@ Critical scenarios to cover:
 - Generate PDF in multi-tenant context (ensure strict isolation).
 - Bulk regeneration with partial failures (must return per-report results).
 - Order completion where PDF generation fails (order must still complete).
+- Generate PDF with multiple equipment units — verify comment, photos, driftstider appear under each unit separately.
+- Generate PDF with `largeAvvikImages = true` — verify images appear in avvik table.
+- Generate PDF with `largeAvvikImages = false` — verify images do NOT appear in avvik table.
+- Generate PDF with products and additional work — verify they appear only once after all equipment sections.
 
 ## Notes
 - All four generators follow the same pattern: `init() → fetch data → process → inline images → generate HTML → render PDF → upload → update DB → close()`.
