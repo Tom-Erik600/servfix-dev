@@ -366,19 +366,18 @@ function populateTodaysTable(orders, customerMap, technicianMap) {
         const rowStyle = isCompleted ? 'opacity: 0.7;' : '';
         const orderNumber = order.orderNumber || order.order_number || order.id;
         const customerId = order.customerId || order.customer_id;
-        const technicianId = order.technicianId || order.technician_id;
-        const serviceType = order.serviceType || order.service_type || 'Service';
         const scheduledDate = parseDate(order.scheduledDate || order.scheduled_date);
         const dateDisplay = scheduledDate ? formatDateNorwegian(scheduledDate) : 'Ikke satt';
         const customerName = customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde';
+        const anleggstype = getAnleggstype(order);
         const deleteBtn = renderDeleteButton(order, orderNumber, customerName);
         
         return `
         <tr style="${rowStyle}">
             <td><strong><a href="#" onclick="openOrderModal('${order.id}'); return false;" style="color:#3b82f6; text-decoration:none; cursor:pointer;">${orderNumber}</a></strong></td>
-            <td>${technicianMap.get(technicianId) || '<span style="color: #EF4444;">Ikke tildelt</span>'}</td>
             <td>${customerName}</td>
-            <td>${serviceType}</td>
+            <td>${order.description || '—'}</td>
+            <td>${anleggstype}</td>
             <td>${dateDisplay}</td>
             <td><span class="status-badge status-${deriveOrderStatus(order) || 'pending'}">${getStatusText(deriveOrderStatus(order))}</span></td>
             <td>${deleteBtn}</td>
@@ -457,19 +456,18 @@ function populateWeeklyTable(orders, customerMap, technicianMap) {
         const rowStyle = isCompleted ? 'opacity: 0.7;' : '';
         const orderNumber = order.orderNumber || order.order_number || order.id;
         const customerId = order.customerId || order.customer_id;
-        const technicianId = order.technicianId || order.technician_id;
-        const serviceType = order.serviceType || order.service_type || 'Service';
         const scheduledDate = parseDate(order.scheduledDate || order.scheduled_date);
         const dateDisplay = scheduledDate ? formatDateNorwegian(scheduledDate) : 'Ikke satt';
         const customerName = customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde';
+        const anleggstype = getAnleggstype(order);
         const deleteBtn = renderDeleteButton(order, orderNumber, customerName);
         
         return `
         <tr style="${rowStyle}">
             <td><strong><a href="#" onclick="openOrderModal('${order.id}'); return false;" style="color:#3b82f6; text-decoration:none; cursor:pointer;">${orderNumber}</a></strong></td>
-            <td>${technicianMap.get(technicianId) || '<span style="color: #EF4444;">Ikke tildelt</span>'}</td>
             <td>${customerName}</td>
-            <td>${serviceType}</td>
+            <td>${order.description || '—'}</td>
+            <td>${anleggstype}</td>
             <td>${dateDisplay}</td>
             <td><span class="status-badge status-${deriveOrderStatus(order) || 'pending'}">${getStatusText(deriveOrderStatus(order))}</span></td>
             <td>${deleteBtn}</td>
@@ -529,19 +527,18 @@ function populateUnfinishedTable(orders, customerMap, technicianMap) {
     tbody.innerHTML = unfinishedOrders.map(order => {
         const orderNumber = order.orderNumber || order.order_number || order.id;
         const customerId = order.customerId || order.customer_id;
-        const technicianId = order.technicianId || order.technician_id;
-        const serviceType = order.serviceType || order.service_type || 'Service';
         const scheduledDate = parseDate(order.scheduledDate || order.scheduled_date);
         const dateDisplay = scheduledDate ? formatDateNorwegian(scheduledDate) : 'Ikke satt';
         const customerName = customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde';
+        const anleggstype = getAnleggstype(order);
         const deleteBtn = renderDeleteButton(order, orderNumber, customerName);
         
         return `
         <tr>
             <td><strong><a href="#" onclick="openOrderModal('${order.id}'); return false;" style="color:#3b82f6; text-decoration:none; cursor:pointer;">${orderNumber}</a></strong></td>
-            <td>${technicianMap.get(technicianId) || '<span style="color: #EF4444;">Ikke tildelt</span>'}</td>
             <td>${customerName}</td>
-            <td>${serviceType}</td>
+            <td>${order.description || '—'}</td>
+            <td>${anleggstype}</td>
             <td>${dateDisplay}</td>
             <td><span class="status-badge status-${deriveOrderStatus(order) || 'pending'}">${getStatusText(deriveOrderStatus(order))}</span></td>
             <td>${deleteBtn}</td>
@@ -549,6 +546,13 @@ function populateUnfinishedTable(orders, customerMap, technicianMap) {
     `}).join('');
 }
 
+
+// Hjelpefunksjon: hent unike systemtyper fra equipment, fallback til service_type
+function getAnleggstype(order) {
+    const unikeTyper = [...new Set((order.equipment || []).map(eq => eq.type).filter(Boolean))];
+    if (unikeTyper.length > 0) return unikeTyper.join(', ');
+    return order.service_type || order.serviceType || '—';
+}
 
 // Hjelpefunksjon for å parse datoer robust
 function parseDate(dateValue) {
@@ -788,6 +792,11 @@ function openOrderModal(orderId) {
                 </button>
             </div>
         </div>` : ''}
+        <hr style="border:none;border-top:1px solid #E5E7EB;margin:4px 0;">
+        <button onclick="closeOrderModal()"
+            style="padding:8px 16px;border:1px solid #D1D5DB;border-radius:6px;background:#fff;color:#374151;cursor:pointer;font-weight:500;font-size:13px;align-self:flex-start;">
+            Lukk
+        </button>
     `;
 
     document.getElementById('order-detail-modal').style.display = 'flex';

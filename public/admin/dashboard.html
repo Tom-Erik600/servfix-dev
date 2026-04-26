@@ -44,60 +44,87 @@
                 </div>
             </div>
 
-            <!-- DAGENS SERVICEOPPDRAG - OPPDATERTE KOLONNER -->
+            <!-- DAGENS SERVICEOPPDRAG -->
             <div class="card main-card" id="dagens-oppdrag">
                 <h2>Dagens serviceoppdrag</h2>
-                <table>
+                <table class="dashboard-table">
+                    <colgroup>
+                        <col class="col-ordrenr">
+                        <col class="col-kunde">
+                        <col class="col-beskrivelse">
+                        <col class="col-anleggstype">
+                        <col class="col-dato">
+                        <col class="col-status">
+                        <col class="col-slett">
+                    </colgroup>
                     <thead>
                         <tr>
                             <th>Ordrenr</th>
-                            <th>Tekniker</th>
                             <th>Kunde</th>
-                            <th>Type</th>
+                            <th>Beskrivelse/Prosjekt</th>
+                            <th>Anleggstype</th>
                             <th>Dato</th>
                             <th>Status</th>
-                            <th style="width: 70px;"></th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="dagens-oppdrag-liste"></tbody>
                 </table>
             </div>
 
-            <!-- DENNE UKENS OPPDRAG - OPPDATERTE KOLONNER -->
+            <!-- DENNE UKENS OPPDRAG -->
             <div class="card main-card" id="ukens-oppdrag" style="margin-top: 24px;">
                 <h2>Denne ukens oppdrag</h2>
-                <table>
+                <table class="dashboard-table">
+                    <colgroup>
+                        <col class="col-ordrenr">
+                        <col class="col-kunde">
+                        <col class="col-beskrivelse">
+                        <col class="col-anleggstype">
+                        <col class="col-dato">
+                        <col class="col-status">
+                        <col class="col-slett">
+                    </colgroup>
                     <thead>
                         <tr>
                             <th>Ordrenr</th>
-                            <th>Tekniker</th>
                             <th>Kunde</th>
-                            <th>Type</th>
+                            <th>Beskrivelse/Prosjekt</th>
+                            <th>Anleggstype</th>
                             <th>Dato</th>
                             <th>Status</th>
-                            <th style="width: 70px;"></th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="ukens-oppdrag-liste"></tbody>
                 </table>
             </div>
 
-            <!-- NY: UFERDIGE OPPDRAG SEKSJON -->
+            <!-- UFERDIGE OPPDRAG -->
             <div class="card main-card" id="uferdige-oppdrag" style="margin-top: 24px;">
                 <h2>Uferdige oppdrag</h2>
                 <p style="color: #6B7280; font-size: 14px; margin-bottom: 15px;">
                     Oppdrag som er startet på men ikke ferdigstilt, eller som skulle vært utført men ikke er påbegynt
                 </p>
-                <table>
+                <table class="dashboard-table">
+                    <colgroup>
+                        <col class="col-ordrenr">
+                        <col class="col-kunde">
+                        <col class="col-beskrivelse">
+                        <col class="col-anleggstype">
+                        <col class="col-dato">
+                        <col class="col-status">
+                        <col class="col-slett">
+                    </colgroup>
                     <thead>
                         <tr>
                             <th>Ordrenr</th>
-                            <th>Tekniker</th>
                             <th>Kunde</th>
-                            <th>Type</th>
+                            <th>Beskrivelse/Prosjekt</th>
+                            <th>Anleggstype</th>
                             <th>Dato</th>
                             <th>Status</th>
-                            <th style="width: 70px;"></th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="uferdige-oppdrag-liste"></tbody>
@@ -125,7 +152,6 @@
         <div style="background:#fff; border-radius:12px; padding:32px; max-width:560px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.3); max-height:85vh; overflow-y:auto;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                 <h3 id="order-detail-title" style="margin:0; font-size:18px; color:#111827;"></h3>
-                <button onclick="closeOrderModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color:#6B7280; padding:4px;">&times;</button>
             </div>
             <div id="order-detail-body" style="display:grid; gap:16px;">
                 <!-- Fylles av JS -->

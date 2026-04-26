@@ -395,6 +395,25 @@ table {
     border-collapse: collapse; 
 }
 
+/* Dashboard-tabeller: faste kolonnebredder på tvers av alle 3 tabeller */
+.dashboard-table {
+    table-layout: fixed;
+}
+
+.dashboard-table .col-ordrenr    { width: 110px; }
+.dashboard-table .col-kunde      { width: 18%; }
+.dashboard-table .col-beskrivelse { width: 24%; }
+.dashboard-table .col-anleggstype { width: 20%; }
+.dashboard-table .col-dato       { width: 100px; }
+.dashboard-table .col-status     { width: 110px; }
+.dashboard-table .col-slett      { width: 60px; }
+
+.dashboard-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 th, td { 
     text-align: left; 
     padding: 12px 8px; 
