@@ -707,7 +707,7 @@ class UnifiedPDFGenerator {
   renderChecklistResults(data) {
     if (!data.equipmentSections || !data.equipmentSections.length) return '';
 
-    const sectionsHtml = data.equipmentSections.map(section => {
+    const sectionsHtml = data.equipmentSections.map((section, index) => {
       const rows = section.checkpoints.map(cp => {
         const statusClass = `status-${(cp.status || '').toLowerCase()}`;
         
@@ -757,8 +757,12 @@ class UnifiedPDFGenerator {
           ).join('')}</div>`
         : '';
 
+      const commentAndPhotosHtml = (commentHtml || photosHtml)
+        ? `<div class="avoid-break">${commentHtml}${photosHtml}</div>`
+        : '';
+
       return `
-        <div class="checklist-section">
+        <div class="checklist-section${index > 0 ? ' page-break' : ''}">
           <h3 class="checklist-section-header">${this.escapeHtml(section.name)}</h3>
           ${sectionSystemFieldsHtml}
           <table class="styled-table">
@@ -772,8 +776,7 @@ class UnifiedPDFGenerator {
             <tbody>${rows}</tbody>
           </table>
           ${driftScheduleHtml}
-          ${commentHtml}
-          ${photosHtml}
+          ${commentAndPhotosHtml}
         </div>`;
     }).join('');
 
@@ -809,7 +812,7 @@ renderDriftSchedule(schedule) {
   const headers = dayLabels.map(label => `<th style="width: 14.28%; text-align: center;">${label}</th>`).join('');
   
   return `
-    <div style="margin-top: 20px;">
+    <div style="margin-top: 20px;" class="avoid-break">
       <h4 style="color: #0B5FAE; font-size: 11pt; margin-bottom: 10px;">Driftstider</h4>
       <table class="styled-table drift-schedule-table" style="table-layout: fixed; width: 100%;">
         <thead>
@@ -951,6 +954,11 @@ renderWorkTable(work) {
       .section-subheader { font-size: 12pt; margin: 12px 0 6px 0; }
       .avoid-break { page-break-inside: avoid; }
       .page-break { page-break-before: always; }
+      table.styled-table { orphans: 3; widows: 3; }
+      .drift-schedule-table { page-break-inside: avoid; }
+      .equipment-comment { page-break-inside: avoid; }
+      .photos-grid { page-break-inside: avoid; }
+      .avvik-images-inline { page-break-inside: avoid; }
       /* === KUNDEINFO-TABELL (ENKEL TABELL-MODELL) === */
       .main-info-table {
         width: 100%;

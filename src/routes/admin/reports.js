@@ -43,6 +43,9 @@ router.get('/', async (req, res) => {
           o.description as order_description,
           o.customer_name,
           o.customer_id,
+          o.customer_data->>'physicalAddress' as delivery_address,
+          pc.name AS contact_name,
+          pc.phone AS contact_phone,
           o.scheduled_date,
           o.service_type,
           o.created_at as order_date,
@@ -56,8 +59,25 @@ router.get('/', async (req, res) => {
           o.invoice_date,
           o.invoice_comment,
           MIN(sr.created_at) as first_service_date,
-           o.scheduled_date as last_service_date,
+          o.scheduled_date as last_service_date,
           t.name as technician_name,
+          -- Tell avvik på tvers av alle rapporter for denne ordren (regex-basert, trygg mot ugyldige JSON-strukturer)
+          (
+            SELECT COUNT(*)::int
+            FROM service_reports sr2
+            WHERE sr2.order_id = sr.order_id
+              AND sr2.checklist_data IS NOT NULL
+              AND sr2.checklist_data::text ~ '"status"\s*:\s*"[Aa]vvik"'
+          ) as avvik_count,
+          -- Tell rapporter uten avvik (alle sjekkpunkter ok)
+          (
+            SELECT COUNT(*)::int
+            FROM service_reports sr2
+            WHERE sr2.order_id = sr.order_id
+              AND sr2.checklist_data IS NOT NULL
+              AND sr2.checklist_data::text !~ '"status"\s*:\s*"[Aa]vvik"'
+              AND sr2.checklist_data::text ~ '"status"\s*:\s*"[Oo][Kk]"'
+          ) as ok_count,
           -- Concatenate alle anlegg med komma
           STRING_AGG(DISTINCT e.systemnavn, ', ' ORDER BY e.systemnavn) as equipment_names,
           STRING_AGG(DISTINCT e.systemtype, ', ' ORDER BY e.systemtype) as equipment_types,
@@ -76,9 +96,20 @@ router.get('/', async (req, res) => {
         LEFT JOIN orders o ON sr.order_id = o.id
         LEFT JOIN equipment e ON sr.equipment_id::varchar = e.id::varchar
         LEFT JOIN technicians t ON o.technician_id = t.id
+        LEFT JOIN LATERAL (
+          SELECT cc.name, cc.phone
+          FROM customer_contacts cc
+          WHERE cc.customer_id = CASE
+            WHEN o.customer_id::text ~ '^[0-9]+$' THEN o.customer_id::integer
+            ELSE NULL
+          END
+          ORDER BY cc.is_report_recipient DESC, cc.id ASC
+          LIMIT 1
+        ) pc ON true
         ${whereClause}
-        GROUP BY sr.order_id, o.description, o.customer_name, o.customer_id, o.scheduled_date, 
-                 o.service_type, o.created_at, t.name,
+        GROUP BY sr.order_id, o.description, o.customer_name, o.customer_id,
+                 o.customer_data->>'physicalAddress', pc.name, pc.phone,
+                 o.scheduled_date, o.service_type, o.created_at, t.name,
                  o.pdf_path, o.pdf_generated, o.sent_til_fakturering, o.pdf_sent_timestamp,
                  o.is_invoiced, o.invoice_number, o.invoice_date, o.invoice_comment
         ORDER BY o.scheduled_date DESC NULLS LAST, MAX(sr.created_at) DESC

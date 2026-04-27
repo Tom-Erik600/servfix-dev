@@ -522,28 +522,67 @@ document.addEventListener('DOMContentLoaded', async function() {
         const hasEmail = !!order.customer_email;
         const sent = isSent(order);
         const invoiced = isInvoiced(order);
-        const isHasteordre = order.service_type === 'Hasteordre';
 
         const priorityClass = getPriorityClass(order);
-        const serviceDate = order.scheduled_date ? formatDate(order.scheduled_date) : '—';
-        const reportDate = formatDate(order.last_service_date);
-        const ageText = formatAge(order.last_service_date || order.order_date);
 
-        const technician = order.technician_name
-            ? order.technician_name.split(' ').map((n) => n[0]).join('').toUpperCase()
-            : 'N/A';
+        // Datoer
+        const plannedDate = order.scheduled_date ? formatDate(order.scheduled_date) : '—';
+        const reportDate = order.first_service_date ? formatDate(order.first_service_date) : '—';
+        const ageText = formatAge(order.first_service_date || order.scheduled_date);
 
-        const customer = order.customer_name || 'Ukjent kunde';
+        // Oppdrag-kolonne
         const description = orderDescription(order);
+        const customer = order.customer_name || 'Ukjent kunde';
+        const address = order.delivery_address || '';
 
-        const rawEquipNames = order.equipment_names || '';
-        const equipCount = order.equipment_count || 0;
-        const equipParts = rawEquipNames ? rawEquipNames.split(',').map(s => s.trim()).filter(Boolean) : [];
-        const MAX_EQUIP = 2;
-        const equipmentLine = equipParts.length > MAX_EQUIP
-            ? equipParts.slice(0, MAX_EQUIP).join(', ') + ` … og ${equipParts.length - MAX_EQUIP} til`
-            : (rawEquipNames || 'Ukjent anlegg');
-        const equipMeta = equipCount > 1 ? `${equipCount} anlegg` : (order.equipment_types || '');
+        // Tekniker
+        const technician = order.technician_name || '—';
+        const contactName = order.contact_name;
+        const contactPhone = order.contact_phone;
+        const customerEmail = order.customer_email;
+
+        let contactHtml = '';
+        if (contactName || contactPhone) {
+            contactHtml += `<div class="r2-contact">${escapeHtml(contactName || '')} · ${escapeHtml(contactPhone || '')}</div>`;
+        }
+        if (customerEmail) {
+            contactHtml += `<div class="r2-contact">${escapeHtml(customerEmail)}</div>`;
+        }
+
+        // Anlegg — totalt antall øverst, deretter maks 3, så ...
+        const eqItems = (order.equipment_items || []).filter(e => e && e.name);
+        const eqTotal = eqItems.length;
+        let anleggHtml = '';
+        if (eqTotal === 0) {
+            anleggHtml = '<span class="r2-muted">—</span>';
+        } else {
+            const maxShow = 3;
+            anleggHtml = `<div class="r2-equip-count">${eqTotal} anlegg</div>`;
+            anleggHtml += eqItems.slice(0, maxShow).map(e => {
+                const type = e.type ? ` (${escapeHtml(e.type)})` : '';
+                return `<div class="r2-equip-name">${escapeHtml(e.name)}<span class="r2-equip-type">${type}</span></div>`;
+            }).join('');
+            if (eqTotal > maxShow) {
+                anleggHtml += `<div class="r2-equip-more">...</div>`;
+            }
+        }
+
+        // Oversikt
+        const avvikCount = order.avvik_count || 0;
+        const okCount = order.ok_count || 0;
+        let oversiktHtml = '';
+        if (avvikCount > 0 || okCount > 0) {
+            if (avvikCount > 0) oversiktHtml += `<span class="r2-badge r2-badge-avvik">${avvikCount} avvik</span>`;
+            if (okCount > 0) oversiktHtml += `<span class="r2-badge r2-badge-ok">${okCount} ok</span>`;
+        } else if (order.report_ids && order.report_ids.length > 0) {
+            oversiktHtml = '<span class="r2-muted">—</span>';
+        } else {
+            oversiktHtml = '<span class="r2-muted">—</span>';
+        }
+
+        const avvikBadge = avvikCount > 0
+            ? `<span class="r2-avvik-badge">${avvikCount} avvik</span>`
+            : '';
 
         const reportIdsJson = JSON.stringify(order.report_ids || []).replace(/"/g, '&quot;');
 
@@ -555,18 +594,18 @@ document.addEventListener('DOMContentLoaded', async function() {
             <tr class="r2-row ${priorityClass}">
                 <td>
                     <div class="r2-main">
-                        <div class="title">${escapeHtml(customer)}</div>
-                        <div class="meta">${escapeHtml(equipmentLine)}${equipMeta ? ` · ${escapeHtml(equipMeta)}` : ''}</div>
-                        <div class="meta">Ordre ${escapeHtml(order.order_id || 'N/A')}${isHasteordre ? ' · Hasteordre' : ''}</div>
-                        ${isHasteordre ? `<div class="r2-badges"><span class="r2-badge neutral">⚡ HASTEORDRE</span></div>` : ''}
+                        <div class="title r2-clickable" onclick="openRapportDetailModal('${escapeJs(order.order_id)}')">${escapeHtml(description)}</div>
+                        <div class="meta">${escapeHtml(customer)}</div>
+                        ${address ? `<div class="meta">${escapeHtml(address)}</div>` : ''}
+                        <div class="meta">Ordre ${escapeHtml(formatOrderNumber(order.order_id))}</div>
+                        ${avvikBadge}
                     </div>
                 </td>
 
                 <td>
                     <div class="r2-main">
-                        <div class="title">${reportDate}</div>
-                        <div class="meta">Rapport</div>
-                        <div class="meta">Service: ${serviceDate}</div>
+                        <div class="r2-date-row"><span class="r2-date-label">Planlagt</span><span class="title">${plannedDate}</span></div>
+                        <div class="r2-date-row"><span class="r2-date-label">Rapport</span><span class="meta">${reportDate}</span></div>
                         <div class="meta">${escapeHtml(ageText)}</div>
                     </div>
                 </td>
@@ -574,7 +613,24 @@ document.addEventListener('DOMContentLoaded', async function() {
                 <td>
                     <div class="r2-main">
                         <div class="title">${escapeHtml(technician)}</div>
-                        <div class="meta">${escapeHtml(order.technician_name || '')}</div>
+                    </div>
+                </td>
+
+                <td>
+                    <div class="r2-main">
+                        ${contactHtml || '<span class="r2-muted">—</span>'}
+                    </div>
+                </td>
+
+                <td>
+                    <div class="r2-main">
+                        ${anleggHtml}
+                    </div>
+                </td>
+
+                <td>
+                    <div class="r2-main">
+                        ${oversiktHtml}
                     </div>
                 </td>
 
@@ -603,7 +659,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     <div class="r2-actions">
                         ${hasPDF ? `
                             <button class="r2-action" type="button" onclick="editReport('${escapeJs(order.order_id)}', ${reportIdsJson})" title="Rediger PDF Rapport">
-                                Rediger PDF Rapport
+                                Rediger
                             </button>
                         ` : ''}
                         ${!isDone(order) ? `
@@ -666,6 +722,15 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     function orderDescription(order) {
         return order.order_description || order.description || order.order_id || 'Uten beskrivelse';
+    }
+
+    function formatOrderNumber(orderId) {
+        if (!orderId) return '—';
+        const parts = String(orderId).split('-');
+        if (parts.length >= 3) {
+            return `SO-${parts[1]}-${parts[2].slice(-6)}`;
+        }
+        return orderId;
     }
 
     function formatDate(dateString) {
@@ -753,6 +818,115 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Expose for inline handlers
     window.openCustomerForOrder = openCustomerForOrder;
+
+    // --- Rapport-detaljmodal ---
+    window.openRapportDetailModal = async function(orderId) {
+        const order = state.reports.find(o => String(o.order_id) === String(orderId));
+        if (!order) return;
+
+        const modal = document.getElementById('rapport-detail-modal');
+        const body = document.getElementById('rapport-detail-body');
+        const title = document.getElementById('rapport-detail-title');
+
+        title.textContent = orderDescription(order);
+        const orderNumber = formatOrderNumber(order.order_id);
+        const orderNrEl = document.getElementById('rapport-detail-ordernr');
+        if (orderNrEl) orderNrEl.textContent = orderNumber;
+
+        const plannedDate = order.scheduled_date ? formatDate(order.scheduled_date) : '—';
+        const reportDate = order.first_service_date ? formatDate(order.first_service_date) : '—';
+        const address = order.delivery_address || '—';
+        const contact = [order.contact_name, order.contact_phone].filter(Boolean).join(' · ') || '—';
+        const avvikCount = order.avvik_count || 0;
+
+        const labelStyle = 'font-size:12px;color:#6B7280;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;';
+        const valueStyle = 'font-size:14px;color:#111827;margin-top:2px;';
+
+        const equipItems = Array.isArray(order.equipment_items) ? order.equipment_items.filter(e => e && e.name) : [];
+        const equipHtml = equipItems.length > 0
+            ? equipItems.map(e => `<div style="padding:4px 0;font-size:13px;color:#374151;">${escapeHtml(e.name)}${e.type ? `<span style="color:#9CA3AF;"> — ${escapeHtml(e.type)}</span>` : ''}</div>`).join('')
+            : '<span style="color:#9CA3AF;font-size:13px;">Ingen anlegg registrert</span>';
+
+        body.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div>
+                    <div style="${labelStyle}">Planlagt dato</div>
+                    <div style="${valueStyle}">${plannedDate}</div>
+                </div>
+                <div>
+                    <div style="${labelStyle}">Rapport opprettet</div>
+                    <div style="${valueStyle}">${reportDate}</div>
+                </div>
+                <div>
+                    <div style="${labelStyle}">Kunde</div>
+                    <div style="${valueStyle}">${escapeHtml(order.customer_name || '—')}</div>
+                </div>
+                <div>
+                    <div style="${labelStyle}">Tekniker</div>
+                    <div style="${valueStyle}">${escapeHtml(order.technician_name || '—')}</div>
+                </div>
+            </div>
+            <div>
+                <div style="${labelStyle}">Adresse</div>
+                <div style="${valueStyle}">${escapeHtml(address)}</div>
+            </div>
+            <div>
+                <div style="${labelStyle}">Kontaktperson</div>
+                <div style="${valueStyle}">${escapeHtml(contact)}</div>
+            </div>
+            <div>
+                <div style="${labelStyle}">Anlegg (${equipItems.length})</div>
+                <div style="margin-top:4px;">${equipHtml}</div>
+            </div>
+            <hr style="border:none;border-top:1px solid #E5E7EB;margin:4px 0;">
+            <div id="rapport-avvik-section">
+                <div style="${labelStyle}">Avvik</div>
+                <div id="rapport-avvik-body" style="margin-top:6px;">
+                    ${avvikCount === 0
+                        ? '<span style="color:#059669;font-size:13px;">Ingen avvik registrert</span>'
+                        : `<span style="color:#9CA3AF;font-size:13px;">Laster avvik (${avvikCount})...</span>`
+                    }
+                </div>
+            </div>
+        `;
+
+        modal.style.display = 'flex';
+
+        if (avvikCount > 0 && order.report_ids && order.report_ids.length > 0) {
+            loadAvvikForModal(order.report_ids, labelStyle);
+        }
+    };
+
+    async function loadAvvikForModal(reportIds, labelStyle) {
+        const avvikBody = document.getElementById('rapport-avvik-body');
+        if (!avvikBody) return;
+        try {
+            const reportId = reportIds[0];
+            const res = await fetch(`/api/admin/reports/${reportId}`, { credentials: 'include' });
+            if (!res.ok) throw new Error('Kunne ikke hente avvik');
+            const data = await res.json();
+            const items = (data.checklist_items || []).filter(i => i.status && i.status.toLowerCase() === 'avvik');
+
+            if (items.length === 0) {
+                avvikBody.innerHTML = '<span style="color:#059669;font-size:13px;">Ingen avvik funnet i sjekklisten</span>';
+                return;
+            }
+
+            avvikBody.innerHTML = items.map(item => `
+                <div style="padding:8px 10px;border-left:3px solid #DC2626;background:#FFF7F7;border-radius:0 6px 6px 0;margin-bottom:8px;">
+                    <div style="font-size:13px;font-weight:600;color:#111827;">${escapeHtml(item.label || item.item_id || '—')}</div>
+                    ${item.equipment_name ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">${escapeHtml(item.equipment_name)}</div>` : ''}
+                    ${item.comment ? `<div style="font-size:13px;color:#374151;margin-top:4px;">${escapeHtml(item.comment)}</div>` : ''}
+                </div>
+            `).join('');
+        } catch (err) {
+            avvikBody.innerHTML = '<span style="color:#9CA3AF;font-size:13px;">Kunne ikke laste avvik</span>';
+        }
+    }
+
+    window.closeRapportDetailModal = function() {
+        document.getElementById('rapport-detail-modal').style.display = 'none';
+    };
 
     // --- Edit modal logic: reused from original (kept minimal here) ---
     window.editReport = async function(orderId, reportIds) {
