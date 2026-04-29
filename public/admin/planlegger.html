@@ -99,8 +99,11 @@
                 <h2>📊 Service-oversikt</h2>
                 <div class="overview-controls">
                     <div class="view-toggle">
-                        <button class="view-btn active" data-view="calendar" id="btn-calendar-view">
-                            📅 Kunde
+                        <button class="view-btn active" data-view="load" id="btn-load-view">
+                            📊 Belastning
+                        </button>
+                        <button class="view-btn" data-view="calendar" id="btn-calendar-view">
+                            🗓 Årsmatrise
                         </button>
                         <button class="view-btn" data-view="technician" id="btn-technician-view">
                             👷 Tekniker
@@ -147,12 +150,30 @@
                         <span class="stat-label">Teknikere</span>
                     </div>
                 </div>
+                <div class="stat-item" id="stat-kunder-wrapper">
+                    <span class="stat-icon">👥</span>
+                    <div class="stat-content">
+                        <span class="stat-value" id="stat-kunder">0</span>
+                        <span class="stat-label">Kunder</span>
+                    </div>
+                </div>
+                <div class="stat-item" id="stat-utilization-wrapper">
+                    <span class="stat-icon">📈</span>
+                    <div class="stat-content">
+                        <span class="stat-value" id="stat-utilization">0 %</span>
+                        <span class="stat-label">Snitt utnyttelse</span>
+                    </div>
+                </div>
             </div>
 
             <!-- Modal Body -->
             <div class="overview-body">
+                <div class="load-grid-view" id="load-grid-view">
+                    <!-- Fylles dynamisk med JavaScript -->
+                </div>
+
                 <!-- Kalender-visning (Kunde) -->
-                <div class="calendar-grid-view" id="calendar-grid-view">
+                <div class="calendar-grid-view" id="calendar-grid-view" style="display: none;">
                     <!-- Fylles dynamisk med JavaScript -->
                 </div>
 

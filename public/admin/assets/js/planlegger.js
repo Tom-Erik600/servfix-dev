@@ -1833,11 +1833,12 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
 // ===== SERVICE-OVERSIKT MODAL =====
 
 // State for oversikt-modal
+const MONTHLY_CAPACITY = 30; // TODO: flytt til tenant-settings i iterasjon 2
 const overviewState = {
     currentStartMonth: new Date(),
     orders: [],
     technicians: [],
-    currentView: 'calendar' // 'calendar' eller 'technician'
+    currentView: 'load' // 'load', 'calendar' eller 'technician'
 };
 
 // Norske månedsnavn
@@ -1880,23 +1881,31 @@ function initOverviewModal() {
 
     // Periode-navigasjon
     prevBtn.addEventListener('click', () => {
-        overviewState.currentStartMonth.setMonth(overviewState.currentStartMonth.getMonth() - 6);
+        if (overviewState.currentView === 'load') {
+            const y = overviewState.currentStartMonth.getFullYear();
+            overviewState.currentStartMonth = new Date(y - 1, 0, 1);
+        } else {
+            overviewState.currentStartMonth = new Date(overviewState.currentStartMonth);
+            overviewState.currentStartMonth.setMonth(overviewState.currentStartMonth.getMonth() - 6);
+        }
         loadOverviewData();
     });
 
     nextBtn.addEventListener('click', () => {
-        overviewState.currentStartMonth.setMonth(overviewState.currentStartMonth.getMonth() + 6);
+        if (overviewState.currentView === 'load') {
+            const y = overviewState.currentStartMonth.getFullYear();
+            overviewState.currentStartMonth = new Date(y + 1, 0, 1);
+        } else {
+            overviewState.currentStartMonth = new Date(overviewState.currentStartMonth);
+            overviewState.currentStartMonth.setMonth(overviewState.currentStartMonth.getMonth() + 6);
+        }
         loadOverviewData();
     });
 
     // Visningsbytte
-    calendarViewBtn.addEventListener('click', () => {
-        switchOverviewView('calendar');
-    });
-
-    technicianViewBtn.addEventListener('click', () => {
-        switchOverviewView('technician');
-    });
+    document.getElementById('btn-load-view').addEventListener('click', () => switchOverviewView('load'));
+    calendarViewBtn.addEventListener('click', () => switchOverviewView('calendar'));
+    technicianViewBtn.addEventListener('click', () => switchOverviewView('technician'));
 
     // ESC for å lukke
     document.addEventListener('keydown', (e) => {
@@ -1915,14 +1924,15 @@ function openOverviewModal() {
     // Reset til nåværende måned
     overviewState.currentStartMonth = new Date();
     overviewState.currentStartMonth.setDate(1);
-    overviewState.currentView = 'calendar';
+    overviewState.currentView = 'load';
 
     // Reset view buttons
-    document.getElementById('btn-calendar-view').classList.add('active');
-    document.getElementById('btn-technician-view').classList.remove('active');
-    document.getElementById('calendar-grid-view').style.display = 'grid';
+    document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('btn-load-view').classList.add('active');
+    document.getElementById('load-grid-view').style.display = 'block';
+    document.getElementById('calendar-grid-view').style.display = 'none';
     document.getElementById('technician-list-view').style.display = 'none';
-    document.getElementById('technician-legend').style.display = 'flex';
+    document.getElementById('technician-legend').style.display = 'none';
 
     modal.classList.add('show');
     document.body.style.overflow = 'hidden';
@@ -1940,14 +1950,20 @@ function closeOverviewModal() {
 // Last data for oversikten
 async function loadOverviewData() {
     try {
-        // Beregn datoområde (6 måneder)
-        const startDate = new Date(overviewState.currentStartMonth);
-        const endDate = new Date(startDate);
-        endDate.setMonth(endDate.getMonth() + 6);
-        endDate.setDate(0); // Siste dag i måneden
-
-        const dateFrom = startDate.toISOString().split('T')[0];
-        const dateTo = endDate.toISOString().split('T')[0];
+        // Beregn datoområde
+        let dateFrom, dateTo;
+        if (overviewState.currentView === 'load') {
+            const year = overviewState.currentStartMonth.getFullYear();
+            dateFrom = `${year}-01-01`;
+            dateTo = `${year}-12-31`;
+        } else {
+            const startDate = new Date(overviewState.currentStartMonth);
+            const endDate = new Date(startDate);
+            endDate.setMonth(endDate.getMonth() + 6);
+            endDate.setDate(0); // Siste dag i måneden
+            dateFrom = startDate.toISOString().split('T')[0];
+            dateTo = endDate.toISOString().split('T')[0];
+        }
 
         // Hent data parallelt
         const [ordersResponse, techniciansResponse] = await Promise.all([
@@ -1969,8 +1985,13 @@ async function loadOverviewData() {
         // Oppdater UI
         updatePeriodIndicator();
         updateOverviewStatistics();
-        renderCurrentView();
         renderTechnicianLegend();
+        if (overviewState.currentView === 'load') {
+            document.getElementById('technician-legend').style.display = 'none';
+            renderLoadView();
+        } else {
+            renderCurrentView();
+        }
 
     } catch (error) {
         console.error('Feil ved lasting av oversiktsdata:', error);
@@ -1980,6 +2001,16 @@ async function loadOverviewData() {
 
 // Oppdater periode-indikator
 function updatePeriodIndicator() {
+    const prevBtn = document.getElementById('prev-period-btn');
+    const nextBtn = document.getElementById('next-period-btn');
+    if (overviewState.currentView === 'load') {
+        const year = overviewState.currentStartMonth.getFullYear();
+        document.getElementById('period-title').textContent = year.toString();
+        prevBtn.textContent = `← ${year - 1}`;
+        nextBtn.textContent = `${year + 1} →`;
+        prevBtn.disabled = false;
+        return;
+    }
     const titleEl = document.getElementById('period-title');
     const startMonth = overviewState.currentStartMonth;
     const endMonth = new Date(startMonth);
@@ -1991,7 +2022,6 @@ function updatePeriodIndicator() {
     titleEl.textContent = `${startText} - ${endText}`;
 
     // Deaktiver "Forrige" hvis vi er på nåværende måned eller før
-    const prevBtn = document.getElementById('prev-period-btn');
     const now = new Date();
     now.setDate(1);
     now.setHours(0,0,0,0);
@@ -2021,27 +2051,22 @@ function updateOverviewStatistics() {
 function switchOverviewView(view) {
     overviewState.currentView = view;
 
-    const calendarBtn = document.getElementById('btn-calendar-view');
-    const technicianBtn = document.getElementById('btn-technician-view');
-    const calendarView = document.getElementById('calendar-grid-view');
-    const technicianView = document.getElementById('technician-list-view');
-    const legend = document.getElementById('technician-legend');
+    document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(`btn-${view}-view`).classList.add('active');
 
-    if (view === 'calendar') {
-        calendarBtn.classList.add('active');
-        technicianBtn.classList.remove('active');
-        calendarView.style.display = 'grid';
-        technicianView.style.display = 'none';
-        legend.style.display = 'flex';
-    } else {
-        calendarBtn.classList.remove('active');
-        technicianBtn.classList.add('active');
-        calendarView.style.display = 'none';
-        technicianView.style.display = 'flex';
-        legend.style.display = 'none';
+    document.getElementById('load-grid-view').style.display = 'none';
+    document.getElementById('calendar-grid-view').style.display = 'none';
+    document.getElementById('technician-list-view').style.display = 'none';
+
+    if (view === 'load') {
+        document.getElementById('load-grid-view').style.display = 'block';
+    } else if (view === 'calendar') {
+        document.getElementById('calendar-grid-view').style.display = 'grid';
+    } else if (view === 'technician') {
+        document.getElementById('technician-list-view').style.display = 'flex';
     }
 
-    renderCurrentView();
+    loadOverviewData();
 }
 
 // Render gjeldende visning
@@ -2051,6 +2076,108 @@ function renderCurrentView() {
     } else {
         renderTechnicianView();
     }
+}
+
+// Render belastnings-visning
+function renderLoadView() {
+    const year = overviewState.currentStartMonth.getFullYear();
+    const orders = overviewState.orders;
+    const techs = overviewState.technicians;
+
+    // Tell ordrer per måned (0 = januar)
+    const counts = new Array(12).fill(0);
+    orders.forEach(order => {
+        if (!order.scheduled_date) return;
+        const d = new Date(order.scheduled_date);
+        if (d.getFullYear() === year) counts[d.getMonth()]++;
+    });
+
+    // Tell unike kunder
+    const customerSet = new Set();
+    orders.forEach(order => {
+        if (order.customer_id) customerSet.add(order.customer_id);
+    });
+    const statKunder = document.getElementById('stat-kunder');
+    if (statKunder) statKunder.textContent = customerSet.size;
+
+    // Bygg månedskort
+    let cardsHTML = '';
+    const peakMonthData = [];
+
+    counts.forEach((count, i) => {
+        const pct = MONTHLY_CAPACITY > 0 ? Math.round((count / MONTHLY_CAPACITY) * 100) : 0;
+        let cls = 'low';
+        if (pct >= 95) cls = 'high';
+        else if (pct >= 70) cls = 'medium';
+        const isPeak = pct >= 95;
+        const barWidth = Math.min(pct, 100);
+
+        cardsHTML += `<div class="load-month-card ${cls}${isPeak ? ' peak' : ''}">
+            <div class="load-month-name">${escapeHtmlOverview(monthNames[i])}</div>
+            <div class="load-month-count-row">
+                <span class="load-month-count">${count}</span>
+                <span class="load-month-pct">${pct}%</span>
+            </div>
+            <div class="load-month-bar">
+                <div class="load-month-bar-fill" style="width:${barWidth}%"></div>
+            </div>
+        </div>`;
+
+        if (isPeak) peakMonthData.push({ name: monthNames[i], index: i, count, pct });
+    });
+
+    // Bygg peak-panel for ALLE måneder over 95%
+    let peakPanelsHTML = '';
+    peakMonthData.forEach(pm => {
+        const pmCustomers = new Set();
+        const techCounts = {};
+        techs.forEach(t => { techCounts[t.id] = 0; });
+
+        orders.forEach(order => {
+            if (!order.scheduled_date) return;
+            const d = new Date(order.scheduled_date);
+            if (d.getFullYear() === year && d.getMonth() === pm.index) {
+                if (order.customer_id) pmCustomers.add(order.customer_id);
+                if (order.technician_id != null && techCounts[order.technician_id] !== undefined) {
+                    techCounts[order.technician_id]++;
+                }
+            }
+        });
+
+        const techItems = techs
+            .filter(t => techCounts[t.id] > 0)
+            .sort((a, b) => techCounts[b.id] - techCounts[a.id])
+            .map(t => `<div class="load-peak-tech">
+                <span class="load-peak-tech-name">${escapeHtmlOverview(t.name)}</span>
+                <span class="load-peak-tech-count">${techCounts[t.id]} oppdrag</span>
+            </div>`).join('');
+
+        peakPanelsHTML += `<div class="load-peak-panel">
+            <h4>⚠ ${escapeHtmlOverview(pm.name)} — overbelastet (${pm.pct}%)</h4>
+            <div class="load-peak-meta">${pm.count} oppdrag · ${pmCustomers.size} kunder</div>
+            <div class="load-peak-grid">${techItems}</div>
+        </div>`;
+    });
+
+    // Legg alt inn i containeren
+    document.getElementById('load-grid-view').innerHTML = `
+        <div class="load-section-header">
+            <span>Belastning per måned</span>
+            <div class="load-legend">
+                <span class="load-legend-item low">under 70 %</span>
+                <span class="load-legend-item medium">70–95 %</span>
+                <span class="load-legend-item high">over 95 %</span>
+            </div>
+        </div>
+        <div class="load-cards-grid">${cardsHTML}</div>
+        ${peakPanelsHTML}
+    `;
+
+    // Oppdater snitt-utnyttelse
+    const totalOrders = counts.reduce((a, b) => a + b, 0);
+    const avgPct = Math.round((totalOrders / (MONTHLY_CAPACITY * 12)) * 100);
+    const statEl = document.getElementById('stat-utilization');
+    if (statEl) statEl.textContent = avgPct + ' %';
 }
 
 // Render kalender-visning
