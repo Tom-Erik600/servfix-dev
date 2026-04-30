@@ -2003,9 +2003,11 @@ async function loadOverviewData() {
 function updatePeriodIndicator() {
     const prevBtn = document.getElementById('prev-period-btn');
     const nextBtn = document.getElementById('next-period-btn');
+    const subtitleEl = document.getElementById('period-subtitle');
     if (overviewState.currentView === 'load') {
         const year = overviewState.currentStartMonth.getFullYear();
         document.getElementById('period-title').textContent = year.toString();
+        if (subtitleEl) subtitleEl.textContent = 'Hele året';
         prevBtn.textContent = `← ${year - 1}`;
         nextBtn.textContent = `${year + 1} →`;
         prevBtn.disabled = false;
@@ -2020,6 +2022,7 @@ function updatePeriodIndicator() {
     const endText = `${monthNames[endMonth.getMonth()]} ${endMonth.getFullYear()}`;
 
     titleEl.textContent = `${startText} - ${endText}`;
+    if (subtitleEl) subtitleEl.textContent = 'Viser 6 måneder';
 
     // Deaktiver "Forrige" hvis vi er på nåværende måned eller før
     const now = new Date();
