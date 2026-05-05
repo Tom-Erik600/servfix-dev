@@ -28,6 +28,7 @@ let appState = {
     currentPeriod: new Date(today),
     expandedCardKey: null,
     orders: [],
+    availableOrders: [],
     equipment: [],
     customers: new Map(),
     technicians: new Map(),
@@ -94,6 +95,8 @@ const AirTechAPI = {
         }
     },
     getOrders: () => AirTechAPI.request('/orders'),
+    getAvailable: () => AirTechAPI.request('/orders/available'),
+    claimOrder: (id) => AirTechAPI.request(`/orders/${id}/claim`, { method: 'POST' }),
     getCustomers: () => AirTechAPI.request('/customers'),
     getTechnicians: () => AirTechAPI.request('/technicians'),
     getEquipment: () => AirTechAPI.request('/equipment')
@@ -146,9 +149,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // LEGG TIL DENNE LINJEN:
         updateHeaderInfo();
 
-        // Hent ordre
-        const [orders] = await Promise.all([
-            AirTechAPI.getOrders()
+        // Hent ordre og ledige oppdrag
+        const [orders, availableOrders] = await Promise.all([
+            AirTechAPI.getOrders(),
+            AirTechAPI.getAvailable()
         ]);
         
         // Konverter og lagre ordre
@@ -174,6 +178,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 description: order.description || null
             };
         });
+
+        appState.availableOrders = availableOrders || [];
 
         // Oppdater UI
         renderAll();
@@ -213,9 +219,12 @@ window.addEventListener('pageshow', async (event) => {
         
         if (!isIndexPage) return;
         
-        // Reload ordre
+        // Reload ordre og ledige oppdrag
         try {
-            const orders = await AirTechAPI.getOrders();
+            const [orders, availableOrders] = await Promise.all([
+                AirTechAPI.getOrders(),
+                AirTechAPI.getAvailable()
+            ]);
             
             // Oppdater state med nye ordre
             appState.orders = orders.map(order => {
@@ -239,6 +248,7 @@ window.addEventListener('pageshow', async (event) => {
                     description: order.description || null
                 };
             });
+            appState.availableOrders = availableOrders || [];
             
             // Re-render UI
             renderAll();
@@ -258,8 +268,44 @@ function renderAll() {
     
     renderCalendar();
     updateStatusCards();
+    updateAvailableCard();
     updateNavigationText();
     updateHeaderInfo(); // <-- LEGG TIL DENNE LINJEN
+    updateSectionVisibility();
+}
+
+function updateSectionVisibility() {
+    const sections = [
+        { card: document.querySelector('.orders-card'),   countId: 'selected-date-count' },
+        { card: document.querySelector('.upcoming-card'), countId: 'upcoming-count' },
+        { card: document.querySelector('.ongoing-card'),  countId: 'unfinished-count' },
+        { card: document.querySelector('.available-card'), countId: 'available-count' },
+    ];
+
+    let allEmpty = true;
+    sections.forEach(({ card, countId }) => {
+        if (!card) return;
+        const count = parseInt(document.getElementById(countId)?.textContent || '0', 10);
+        card.style.display = count === 0 ? 'none' : '';
+        if (count > 0) allEmpty = false;
+    });
+
+    const container = document.getElementById('status-cards-container');
+    if (!container) return;
+
+    let emptyMsg = document.getElementById('no-orders-message');
+    if (allEmpty) {
+        if (!emptyMsg) {
+            emptyMsg = document.createElement('div');
+            emptyMsg.id = 'no-orders-message';
+            emptyMsg.innerHTML = '<div class="placeholder-text" style="text-align:center;padding:32px 16px;"><strong>Ingen oppdrag akkurat nå</strong><br><span style="font-size:13px;color:#9ca3af;margin-top:4px;display:block;">Du er oppdatert. Sjekk tilbake senere.</span></div>';
+            container.appendChild(emptyMsg);
+        } else {
+            emptyMsg.style.display = '';
+        }
+    } else if (emptyMsg) {
+        emptyMsg.style.display = 'none';
+    }
 }
 
 
@@ -319,6 +365,93 @@ function updateStatusCards() {
     updateCard('unfinished', unfinishedOrders);
 }
 
+function updateAvailableCard() {
+    const countEl = document.getElementById('available-count');
+    const containerEl = document.getElementById('available-orders');
+    if (!countEl || !containerEl) return;
+
+    const orders = appState.availableOrders || [];
+    countEl.textContent = orders.length;
+
+    if (orders.length === 0) {
+        containerEl.innerHTML = '<div class="placeholder-text">Ingen ledige oppdrag</div>';
+        return;
+    }
+
+    containerEl.innerHTML = orders.map(order => {
+        const _d = order.scheduled_date ? new Date(order.scheduled_date + 'T12:00:00') : null;
+        const dato = (_d && !isNaN(_d))
+            ? _d.toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })
+            : null;
+        const adresse = [order.service_address_street, order.service_address_city].filter(Boolean).join(', ') || '';
+        const beskrivelse = order.description || order.service_type || '';
+        return `
+        <div class="order-card" style="cursor:default;">
+            <div class="order-card-header">
+                <span class="order-customer">${order.customer_name || 'Ukjent kunde'}</span>
+                ${dato ? `<span class="order-date">${dato}</span>` : ''}
+            </div>
+            ${adresse ? `<div class="order-address">${adresse}</div>` : ''}
+            ${beskrivelse ? `<div class="order-type">${beskrivelse}</div>` : ''}
+            <button class="open-order-btn claim-order-btn" data-order-id="${order.id}"
+                style="margin-top:8px;width:100%;padding:6px 12px;background:var(--primary-color,#2563eb);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">
+                Plukk oppdrag
+            </button>
+        </div>`;
+    }).join('');
+
+    // Fjern gammel handler
+    if (containerEl._claimHandler) {
+        containerEl.removeEventListener('click', containerEl._claimHandler);
+    }
+
+    const claimHandler = async (e) => {
+        const btn = e.target.closest('.claim-order-btn');
+        if (!btn) return;
+        const orderId = btn.dataset.orderId;
+        btn.disabled = true;
+        btn.textContent = 'Plukker...';
+        try {
+            await AirTechAPI.claimOrder(orderId);
+            // Refresh begge lister
+            const [orders, availableOrders] = await Promise.all([
+                AirTechAPI.getOrders(),
+                AirTechAPI.getAvailable()
+            ]);
+            appState.orders = orders.map(order => ({
+                ...order,
+                scheduledDate: toISODateString(order.scheduled_date || order.scheduledDate),
+                scheduledTime: order.scheduled_time || order.scheduledTime || null,
+                serviceType: order.service_type || order.serviceType || 'Service',
+                customerId: order.customer_id || order.customerId || null,
+                customerName: order.customer_name || order.customerName || 'Ukjent Kunde',
+                customerData: order.customer_data || order.customerData || null,
+                technicianId: order.technician_id || order.technicianId || null,
+                orderNumber: order.order_number || order.orderNumber || order.id,
+                status: order.status || 'scheduled',
+                description: order.description || null
+            }));
+            appState.availableOrders = availableOrders || [];
+            renderAll();
+            showToast('Oppdrag plukket!', 'success');
+        } catch (error) {
+            if (error.message && error.message.includes('409') || error.message === 'Oppdrag allerede tatt') {
+                showToast('Oppdraget er allerede tatt', 'error');
+            } else {
+                showToast('Kunne ikke plukke oppdrag', 'error');
+            }
+            // Refresh available-listen uansett
+            try {
+                appState.availableOrders = await AirTechAPI.getAvailable();
+                updateAvailableCard();
+            } catch (_) {}
+        }
+    };
+
+    containerEl._claimHandler = claimHandler;
+    containerEl.addEventListener('click', claimHandler);
+}
+
 function updateCard(type, orders) {
     const countEl = document.getElementById(`${type}-count`);
     const containerEl = document.getElementById(`${type}-orders`);
@@ -361,7 +494,8 @@ function updateCard(type, orders) {
         const placeholderTexts = {
             'selected-date': 'Ingen ordre for valgt dag',
             'upcoming': 'Ingen kommende ordre',
-            'unfinished': 'Ingen uferdige ordre'
+            'unfinished': 'Ingen uferdige ordre',
+            'available': 'Ingen ledige oppdrag'
         };
         containerEl.innerHTML = `<div class="placeholder-text">${placeholderTexts[type] || 'Ingen ordre'}</div>`;
     }
@@ -553,10 +687,18 @@ function createCalendarDay(date, isMonthView = false) {
     if (isMonthView && date.getMonth() !== appState.currentPeriod.getMonth()) {
         classes.push('other-month');
     }
-    
+
+    // Pool-oppdrag på denne datoen (grå prikk)
+    const hasPoolOrders = (appState.availableOrders || []).some(o => o.scheduled_date === dateStr);
+
+    // Posisjonér to prikker side ved side hvis begge finnes
+    const ownIndicatorStyle = (hasPoolOrders && indicatorClass) ? 'left:3px;right:auto;' : '';
+    const poolIndicatorStyle = (hasPoolOrders && indicatorClass) ? 'right:3px;left:auto;background-color:#9ca3af;' : 'background-color:#9ca3af;';
+
     return `<div class="${classes.join(' ')}" data-date="${dateStr}">
         <span class="day-number">${date.getDate()}</span>
-        ${indicatorClass ? `<span class="service-indicator ${indicatorClass}"></span>` : ''}
+        ${indicatorClass ? `<span class="service-indicator ${indicatorClass}"${ownIndicatorStyle ? ` style="${ownIndicatorStyle}"` : ''}></span>` : ''}
+        ${hasPoolOrders ? `<span class="service-indicator" style="${poolIndicatorStyle}"></span>` : ''}
     </div>`;
 }
 

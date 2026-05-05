@@ -103,6 +103,54 @@ async function enrichOrdersWithContacts(orders, tenantId) {
   });
 }
 
+// ── Pool-tekniker: Hent ledige oppdrag (technician_id IS NULL) ────
+router.get('/available', async (req, res) => {
+  try {
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    const result = await pool.query(
+      `SELECT id, customer_name, description, service_type, scheduled_date,
+              service_address_street, service_address_postal_code, service_address_city
+         FROM orders
+        WHERE technician_id IS NULL
+          AND status = 'pending'
+        ORDER BY scheduled_date NULLS LAST, id`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching available orders:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Pool-tekniker: Plukk et ledig oppdrag (atomisk claim) ─────────
+router.post('/:id/claim', async (req, res) => {
+  const { id } = req.params;
+  const technicianId = req.session.technicianId;
+
+  try {
+    const pool = await db.getTenantConnection(req.session.tenantId);
+    const result = await pool.query(
+      `UPDATE orders
+          SET technician_id = $1,
+              status        = 'scheduled',
+              updated_at    = NOW()
+        WHERE id = $2
+          AND technician_id IS NULL
+        RETURNING *`,
+      [technicianId, id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(409).json({ error: 'Oppdrag allerede tatt' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error claiming order:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Hent alle ordrer for pålogget tekniker
 router.get('/', async (req, res) => {
   try {
