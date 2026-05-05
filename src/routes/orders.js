@@ -104,15 +104,31 @@ async function enrichOrdersWithContacts(orders, tenantId) {
 }
 
 // ── Pool-tekniker: Hent ledige oppdrag (technician_id IS NULL) ────
+// ?range=today (default) | tomorrow | week | month
+// Pool-oppdrag uten scheduled_date (NULL) vises alltid uansett range.
 router.get('/available', async (req, res) => {
   try {
     const pool = await db.getTenantConnection(req.session.tenantId);
+
+    const validRanges = ['today', 'tomorrow', 'week', 'month'];
+    const range = validRanges.includes(req.query.range) ? req.query.range : 'today';
+
+    // Bygger dategrense som SQL-uttrykk (whitelisted, ingen injeksjonsrisiko)
+    const cutoffMap = {
+      today:    'CURRENT_DATE',
+      tomorrow: "CURRENT_DATE + INTERVAL '1 day'",
+      week:     "CURRENT_DATE + INTERVAL '7 days'",
+      month:    "CURRENT_DATE + INTERVAL '1 month'",
+    };
+    const cutoff = cutoffMap[range];
+
     const result = await pool.query(
       `SELECT id, customer_name, description, service_type, scheduled_date,
               service_address_street, service_address_postal_code, service_address_city
          FROM orders
         WHERE technician_id IS NULL
           AND status = 'pending'
+          AND (scheduled_date IS NULL OR scheduled_date <= ${cutoff})
         ORDER BY scheduled_date NULLS LAST, id`
     );
     res.json(result.rows);

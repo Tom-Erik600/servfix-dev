@@ -849,3 +849,37 @@ main {
 .month-day.selected .service-indicator { 
     background-color: white; 
 }
+
+/* Pool-filter-knapper i "Ledige oppdrag"-seksjonen */
+.pool-filter-bar {
+    display: flex;
+    gap: 6px;
+    padding: 8px 16px;
+    border-bottom: 1px solid #f1f3f4;
+    flex-wrap: wrap;
+}
+.pool-filter-btn {
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid #dee2e6;
+    background: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    color: #6c757d;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.pool-filter-btn.active {
+    background: #1d4ed8;
+    color: #fff;
+    border-color: #1d4ed8;
+}
+.pool-filter-btn:hover:not(.active) {
+    background: #f1f3f4;
+    border-color: #adb5bd;
+}
+
+/* Pool-oppdrag-kort: "Plukk"-knapp nederst */
+.pool-claim-row {
+    padding: 0 10px 10px;
+}

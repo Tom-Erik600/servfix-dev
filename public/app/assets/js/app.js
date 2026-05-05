@@ -28,6 +28,11 @@ let appState = {
     currentPeriod: new Date(today),
     expandedCardKey: null,
     orders: [],
+    // allAvailableOrders: alle pool-oppdrag for inneværende måned (brukes til kalender-prikker)
+    // Strategi: henter alltid ?range=month fra backend og filtrerer klient-side.
+    // Dette gir én API-kall og forenkler logikken.
+    allAvailableOrders: [],
+    // availableOrders: filtrert subset basert på valgt pool_filter_range (brukes til liste-visning)
     availableOrders: [],
     equipment: [],
     customers: new Map(),
@@ -95,12 +100,48 @@ const AirTechAPI = {
         }
     },
     getOrders: () => AirTechAPI.request('/orders'),
-    getAvailable: () => AirTechAPI.request('/orders/available'),
+    getAvailable: (range = 'today') => AirTechAPI.request('/orders/available?range=' + encodeURIComponent(range)),
     claimOrder: (id) => AirTechAPI.request(`/orders/${id}/claim`, { method: 'POST' }),
     getCustomers: () => AirTechAPI.request('/customers'),
     getTechnicians: () => AirTechAPI.request('/technicians'),
     getEquipment: () => AirTechAPI.request('/equipment')
 };
+
+// ── Pool-filter helpers ───────────────────────────────────────────
+const POOL_RANGES = ['today', 'tomorrow', 'week', 'month'];
+
+function getPoolFilterRange() {
+    const stored = sessionStorage.getItem('pool_filter_range');
+    return POOL_RANGES.includes(stored) ? stored : 'today';
+}
+
+function setPoolFilterRange(range) {
+    if (!POOL_RANGES.includes(range)) range = 'today';
+    sessionStorage.setItem('pool_filter_range', range);
+}
+
+/**
+ * Filtrerer pool-oppdrag klient-side basert på valgt range.
+ * Pool-oppdrag uten scheduled_date (NULL) vises alltid uansett range.
+ */
+function filterPoolOrders(allOrders, range) {
+    const base = new Date();
+    base.setHours(0, 0, 0, 0);
+
+    const cutoffs = {
+        today:    new Date(base),
+        tomorrow: new Date(base.getTime() + 1 * 86400000),
+        week:     new Date(base.getTime() + 7 * 86400000),
+        month:    new Date(base.getFullYear(), base.getMonth() + 1, base.getDate()),
+    };
+    const cutoff = cutoffs[range] || cutoffs.today;
+
+    return allOrders.filter(o => {
+        if (!o.scheduled_date) return true; // Alltid vis oppdrag uten dato
+        const d = new Date(o.scheduled_date + 'T12:00:00');
+        return d <= cutoff;
+    });
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
     // SJEKK 1: Er vi på riktig side?
@@ -149,10 +190,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // LEGG TIL DENNE LINJEN:
         updateHeaderInfo();
 
-        // Hent ordre og ledige oppdrag
-        const [orders, availableOrders] = await Promise.all([
+        // Hent ordre og ledige oppdrag (alltid month for å ha full data til kalender-prikker)
+        const [orders, allAvailableOrders] = await Promise.all([
             AirTechAPI.getOrders(),
-            AirTechAPI.getAvailable()
+            AirTechAPI.getAvailable('month')
         ]);
         
         // Konverter og lagre ordre
@@ -179,7 +220,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             };
         });
 
-        appState.availableOrders = availableOrders || [];
+        appState.allAvailableOrders = allAvailableOrders || [];
+        appState.availableOrders = filterPoolOrders(appState.allAvailableOrders, getPoolFilterRange());
 
         // Oppdater UI
         renderAll();
@@ -219,11 +261,11 @@ window.addEventListener('pageshow', async (event) => {
         
         if (!isIndexPage) return;
         
-        // Reload ordre og ledige oppdrag
+        // Reload ordre og ledige oppdrag (alltid month for kalender-prikker)
         try {
-            const [orders, availableOrders] = await Promise.all([
+            const [orders, allAvailableOrders] = await Promise.all([
                 AirTechAPI.getOrders(),
-                AirTechAPI.getAvailable()
+                AirTechAPI.getAvailable('month')
             ]);
             
             // Oppdater state med nye ordre
@@ -248,7 +290,8 @@ window.addEventListener('pageshow', async (event) => {
                     description: order.description || null
                 };
             });
-            appState.availableOrders = availableOrders || [];
+            appState.allAvailableOrders = allAvailableOrders || [];
+            appState.availableOrders = filterPoolOrders(appState.allAvailableOrders, getPoolFilterRange());
             
             // Re-render UI
             renderAll();
@@ -275,20 +318,29 @@ function renderAll() {
 }
 
 function updateSectionVisibility() {
-    const sections = [
+    // Vanlige seksjoner: skjul hvis tom
+    const otherSections = [
         { card: document.querySelector('.orders-card'),   countId: 'selected-date-count' },
         { card: document.querySelector('.upcoming-card'), countId: 'upcoming-count' },
         { card: document.querySelector('.ongoing-card'),  countId: 'unfinished-count' },
-        { card: document.querySelector('.available-card'), countId: 'available-count' },
     ];
 
     let allEmpty = true;
-    sections.forEach(({ card, countId }) => {
+    otherSections.forEach(({ card, countId }) => {
         if (!card) return;
         const count = parseInt(document.getElementById(countId)?.textContent || '0', 10);
         card.style.display = count === 0 ? 'none' : '';
         if (count > 0) allEmpty = false;
     });
+
+    // Available-card: skjul kun hvis det overhodet ikke finnes pool-oppdrag (på tvers av alle perioder).
+    // Hvis filteret returnerte 0 men allAvailableOrders har noe, vises seksjonen med hjelpemelding.
+    const availableCard = document.querySelector('.available-card');
+    if (availableCard) {
+        const hasAnyPoolOrders = (appState.allAvailableOrders || []).length > 0;
+        availableCard.style.display = hasAnyPoolOrders ? '' : 'none';
+        if (hasAnyPoolOrders) allEmpty = false;
+    }
 
     const container = document.getElementById('status-cards-container');
     if (!container) return;
@@ -373,8 +425,20 @@ function updateAvailableCard() {
     const orders = appState.availableOrders || [];
     countEl.textContent = orders.length;
 
+    // Synkroniser aktiv filter-knapp med sessionStorage
+    const currentRange = getPoolFilterRange();
+    document.querySelectorAll('.pool-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.range === currentRange);
+    });
+
     if (orders.length === 0) {
-        containerEl.innerHTML = '<div class="placeholder-text">Ingen ledige oppdrag</div>';
+        const allEmpty = (appState.allAvailableOrders || []).length === 0;
+        if (allEmpty) {
+            containerEl.innerHTML = '<div class="placeholder-text">Ingen ledige oppdrag akkurat nå</div>';
+        } else {
+            // Det finnes oppdrag i en bredere periode — hjelp brukeren
+            containerEl.innerHTML = '<div class="placeholder-text">Ingen ledige oppdrag i denne perioden — prøv +1 uke eller +1 mnd</div>';
+        }
         return;
     }
 
@@ -383,24 +447,38 @@ function updateAvailableCard() {
         const dato = (_d && !isNaN(_d))
             ? _d.toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })
             : null;
-        const adresse = [order.service_address_street, order.service_address_city].filter(Boolean).join(', ') || '';
-        const beskrivelse = order.description || order.service_type || '';
+
+        // Tittel og undertekst
+        const title = order.description || order.service_type || 'Service';
+        const subtitle = order.customer_name || 'Ukjent kunde';
+
+        // Kort ordrenummer (siste 6 tegn av ID-segmentet)
+        const parts = (order.id || '').split('-');
+        const shortId = parts.length >= 3 ? parts[2].slice(-6) : (order.id || '').slice(-6);
+
         return `
-        <div class="order-card" style="cursor:default;">
-            <div class="order-card-header">
-                <span class="order-customer">${order.customer_name || 'Ukjent kunde'}</span>
-                ${dato ? `<span class="order-date">${dato}</span>` : ''}
+        <div class="order-card status-pending">
+            <div class="order-card-header" style="cursor:default;">
+                <div class="order-status-indicator" style="background:#9ca3af;"></div>
+                <div class="order-info">
+                    <div class="order-title">${title}</div>
+                    <div class="order-subtitle">${subtitle}</div>
+                </div>
+                <div class="order-meta">
+                    ${dato ? `<div class="order-time">${dato}</div>` : ''}
+                    <div class="order-number">#${shortId}</div>
+                </div>
             </div>
-            ${adresse ? `<div class="order-address">${adresse}</div>` : ''}
-            ${beskrivelse ? `<div class="order-type">${beskrivelse}</div>` : ''}
-            <button class="open-order-btn claim-order-btn" data-order-id="${order.id}"
-                style="margin-top:8px;width:100%;padding:6px 12px;background:var(--primary-color,#2563eb);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">
-                Plukk oppdrag
-            </button>
+            <div class="pool-claim-row">
+                <button class="action-btn primary claim-order-btn" data-order-id="${order.id}"
+                    style="width:100%;padding:8px;font-size:13px;">
+                    Ta oppdraget
+                </button>
+            </div>
         </div>`;
     }).join('');
 
-    // Fjern gammel handler
+    // Event-delegering for claim-knapp (fjern gammel handler først)
     if (containerEl._claimHandler) {
         containerEl.removeEventListener('click', containerEl._claimHandler);
     }
@@ -413,10 +491,10 @@ function updateAvailableCard() {
         btn.textContent = 'Plukker...';
         try {
             await AirTechAPI.claimOrder(orderId);
-            // Refresh begge lister
-            const [orders, availableOrders] = await Promise.all([
+            // Refresh begge lister — hent alltid med month
+            const [orders, allAvailableOrders] = await Promise.all([
                 AirTechAPI.getOrders(),
-                AirTechAPI.getAvailable()
+                AirTechAPI.getAvailable('month')
             ]);
             appState.orders = orders.map(order => ({
                 ...order,
@@ -431,19 +509,22 @@ function updateAvailableCard() {
                 status: order.status || 'scheduled',
                 description: order.description || null
             }));
-            appState.availableOrders = availableOrders || [];
+            appState.allAvailableOrders = allAvailableOrders || [];
+            appState.availableOrders = filterPoolOrders(appState.allAvailableOrders, getPoolFilterRange());
             renderAll();
             showToast('Oppdrag plukket!', 'success');
         } catch (error) {
-            if (error.message && error.message.includes('409') || error.message === 'Oppdrag allerede tatt') {
+            if (error.message && (error.message.includes('409') || error.message === 'Oppdrag allerede tatt')) {
                 showToast('Oppdraget er allerede tatt', 'error');
             } else {
                 showToast('Kunne ikke plukke oppdrag', 'error');
             }
             // Refresh available-listen uansett
             try {
-                appState.availableOrders = await AirTechAPI.getAvailable();
+                appState.allAvailableOrders = await AirTechAPI.getAvailable('month');
+                appState.availableOrders = filterPoolOrders(appState.allAvailableOrders, getPoolFilterRange());
                 updateAvailableCard();
+                updateSectionVisibility();
             } catch (_) {}
         }
     };
@@ -619,6 +700,22 @@ function setupEventListeners() {
     if (calendarControls) {
         calendarControls.addEventListener('click', handleCalendarControls);
     }
+
+    // Pool-filter-knapper
+    const filterBar = document.getElementById('pool-filter-bar');
+    if (filterBar) {
+        filterBar.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.pool-filter-btn');
+            if (!btn) return;
+            const newRange = btn.dataset.range;
+            if (!POOL_RANGES.includes(newRange)) return;
+
+            setPoolFilterRange(newRange);
+            appState.availableOrders = filterPoolOrders(appState.allAvailableOrders, newRange);
+            updateAvailableCard();
+            updateSectionVisibility();
+        });
+    }
     
     // Lucide ikoner
     if (typeof lucide !== 'undefined') {
@@ -688,8 +785,9 @@ function createCalendarDay(date, isMonthView = false) {
         classes.push('other-month');
     }
 
-    // Pool-oppdrag på denne datoen (grå prikk)
-    const hasPoolOrders = (appState.availableOrders || []).some(o => o.scheduled_date === dateStr);
+    // Pool-oppdrag på denne datoen (grå prikk) — bruker allAvailableOrders (full måneds-data)
+    // slik at kalender-prikker ikke påvirkes av valgt filter (kjent begrensning: kun innenfor 1 mnd)
+    const hasPoolOrders = (appState.allAvailableOrders || []).some(o => o.scheduled_date === dateStr);
 
     // Posisjonér to prikker side ved side hvis begge finnes
     const ownIndicatorStyle = (hasPoolOrders && indicatorClass) ? 'left:3px;right:auto;' : '';
