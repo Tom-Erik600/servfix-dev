@@ -1068,11 +1068,11 @@ renderWorkTable(work) {
 .styled-table.equipment-overview th:nth-child(5) { width: 35%; }  /* Betjener - økt fra ~25% */
 
 /* Kolonne-bredder for avvik-tabell */
-.avvik-table th:nth-child(1) { width: 5%; }   /* Avvik ID */
+.avvik-table th:nth-child(1) { width: 3%; }   /* Avvik ID */
 .avvik-table th:nth-child(2) { width: 15%; }  /* Anlegg */
 .avvik-table th:nth-child(3) { width: 12%; }  /* Systemnummer */
 .avvik-table th:nth-child(4) { width: 13%; }  /* Komponent */
-.avvik-table th:nth-child(5) { width: 55%; }  /* Kommentar - økt for bedre lesbarhet */
+.avvik-table th:nth-child(5) { width: 57%; }  /* Kommentar */
       .equipment-summary { margin: 20px 0; }
 
 /* Produkter tabell */

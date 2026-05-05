@@ -847,6 +847,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             ? equipItems.map(e => `<div style="padding:4px 0;font-size:13px;color:#374151;">${escapeHtml(e.name)}${e.type ? `<span style="color:#9CA3AF;"> — ${escapeHtml(e.type)}</span>` : ''}</div>`).join('')
             : '<span style="color:#9CA3AF;font-size:13px;">Ingen anlegg registrert</span>';
 
+        const hasReports = Array.isArray(order.report_ids) && order.report_ids.length > 0;
+
         body.innerHTML = `
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                 <div>
@@ -882,9 +884,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             <div id="rapport-avvik-section">
                 <div style="${labelStyle}">Avvik</div>
                 <div id="rapport-avvik-body" style="margin-top:6px;">
-                    ${avvikCount === 0
-                        ? '<span style="color:#059669;font-size:13px;">Ingen avvik registrert</span>'
-                        : `<span style="color:#9CA3AF;font-size:13px;">Laster avvik (${avvikCount})...</span>`
+                    ${hasReports
+                        ? '<span style="color:#9CA3AF;font-size:13px;">Laster avvik...</span>'
+                        : '<span style="color:#9CA3AF;font-size:13px;">Ingen rapport funnet</span>'
                     }
                 </div>
             </div>
@@ -892,17 +894,17 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         modal.style.display = 'flex';
 
-        if (avvikCount > 0 && order.report_ids && order.report_ids.length > 0) {
-            loadAvvikForModal(order.report_ids, labelStyle);
+        if (hasReports) {
+            loadAvvikForModal(order.report_ids);
         }
     };
 
-    async function loadAvvikForModal(reportIds, labelStyle) {
+    async function loadAvvikForModal(reportIds) {
         const avvikBody = document.getElementById('rapport-avvik-body');
         if (!avvikBody) return;
         try {
             const reportId = reportIds[0];
-            const res = await fetch(`/api/admin/reports/${reportId}`, { credentials: 'include' });
+            const res = await fetch(`/api/admin/reports/${reportId}/edit-data`, { credentials: 'include' });
             if (!res.ok) throw new Error('Kunne ikke hente avvik');
             const data = await res.json();
             const items = (data.checklist_items || []).filter(i => i.status && i.status.toLowerCase() === 'avvik');
