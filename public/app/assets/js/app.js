@@ -123,23 +123,28 @@ function setPoolFilterRange(range) {
 /**
  * Filtrerer pool-oppdrag klient-side basert på valgt range.
  * Pool-oppdrag uten scheduled_date (NULL) vises alltid uansett range.
+ * Bruker ISO-datostreng-sammenligning (YYYY-MM-DD) for å unngå tidssone-problemer
+ * og feil ved midnatt vs. noon-timestamp-sammenligning.
  */
 function filterPoolOrders(allOrders, range) {
-    const base = new Date();
-    base.setHours(0, 0, 0, 0);
-
-    const cutoffs = {
-        today:    new Date(base),
-        tomorrow: new Date(base.getTime() + 1 * 86400000),
-        week:     new Date(base.getTime() + 7 * 86400000),
-        month:    new Date(base.getFullYear(), base.getMonth() + 1, base.getDate()),
+    const addDays = (date, days) => {
+        const d = new Date(date);
+        d.setDate(d.getDate() + days);
+        return toISODateString(d);
     };
-    const cutoff = cutoffs[range] || cutoffs.today;
+
+    const todayStr = toISODateString(new Date());
+    const cutoffStr = {
+        today:    todayStr,
+        tomorrow: addDays(new Date(), 1),
+        week:     addDays(new Date(), 7),
+        month:    toISODateString(new Date(new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate())),
+    }[range] || todayStr;
 
     return allOrders.filter(o => {
         if (!o.scheduled_date) return true; // Alltid vis oppdrag uten dato
-        const d = new Date(o.scheduled_date + 'T12:00:00');
-        return d <= cutoff;
+        // String-sammenligning fungerer korrekt for YYYY-MM-DD format
+        return o.scheduled_date <= cutoffStr;
     });
 }
 
