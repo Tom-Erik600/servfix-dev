@@ -143,8 +143,9 @@ function filterPoolOrders(allOrders, range) {
 
     return allOrders.filter(o => {
         if (!o.scheduled_date) return true; // Alltid vis oppdrag uten dato
-        // String-sammenligning fungerer korrekt for YYYY-MM-DD format
-        return o.scheduled_date <= cutoffStr;
+        // Normaliser til YYYY-MM-DD (pg returnerer DATE som ISO-streng med tid)
+        const dateOnly = o.scheduled_date.slice(0, 10);
+        return dateOnly <= cutoffStr;
     });
 }
 
@@ -448,18 +449,20 @@ function updateAvailableCard() {
     }
 
     containerEl.innerHTML = orders.map(order => {
-        const _d = order.scheduled_date ? new Date(order.scheduled_date + 'T12:00:00') : null;
+        const _d = order.scheduled_date ? new Date(order.scheduled_date.slice(0, 10) + 'T12:00:00') : null;
         const dato = (_d && !isNaN(_d))
-            ? _d.toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })
+            ? _d.toLocaleDateString('no-NO', { weekday: 'short', day: 'numeric', month: 'short' })
             : null;
 
         // Tittel og undertekst
         const title = order.description || order.service_type || 'Service';
         const subtitle = order.customer_name || 'Ukjent kunde';
 
-        // Kort ordrenummer (siste 6 tegn av ID-segmentet)
+        // Kort ordrenummer: SO-ÅÅÅÅ-XXXXXX (siste 6 siffer av ID-segmentet)
         const parts = (order.id || '').split('-');
-        const shortId = parts.length >= 3 ? parts[2].slice(-6) : (order.id || '').slice(-6);
+        const orderNum = parts.length >= 3
+            ? `SO-${parts[1]}-${parts[2].slice(-6)}`
+            : (order.id || '').slice(-6);
 
         return `
         <div class="order-card status-pending">
@@ -470,8 +473,8 @@ function updateAvailableCard() {
                     <div class="order-subtitle">${subtitle}</div>
                 </div>
                 <div class="order-meta">
-                    ${dato ? `<div class="order-time">${dato}</div>` : ''}
-                    <div class="order-number">#${shortId}</div>
+                    <div class="order-time">${dato || '<span style="color:#9ca3af;font-size:11px;">Ingen dato</span>'}</div>
+                    <div class="order-number">${orderNum}</div>
                 </div>
             </div>
             <div class="pool-claim-row">
@@ -792,7 +795,10 @@ function createCalendarDay(date, isMonthView = false) {
 
     // Pool-oppdrag på denne datoen (grå prikk) — bruker allAvailableOrders (full måneds-data)
     // slik at kalender-prikker ikke påvirkes av valgt filter (kjent begrensning: kun innenfor 1 mnd)
-    const hasPoolOrders = (appState.allAvailableOrders || []).some(o => o.scheduled_date === dateStr);
+    // Normaliser til YYYY-MM-DD (pg serialiserer DATE som full ISO-streng)
+    const hasPoolOrders = (appState.allAvailableOrders || []).some(o =>
+        o.scheduled_date && o.scheduled_date.slice(0, 10) === dateStr
+    );
 
     // Posisjonér to prikker side ved side hvis begge finnes
     const ownIndicatorStyle = (hasPoolOrders && indicatorClass) ? 'left:3px;right:auto;' : '';
