@@ -21,9 +21,10 @@
             </div>
 
             <!-- Bedriftsinformasjon -->
-            <div class="card">
-                <div class="card-header">
+            <div class="card collapsible" data-collapsed="true">
+                <div class="card-header" onclick="toggleSection(this)">
                     <h2>🏢 Bedriftsinformasjon</h2>
+                    <span class="collapse-icon">▼</span>
                 </div>
                 <div class="card-body">
                     <div class="form-grid">
@@ -59,9 +60,10 @@
             </div>
 
             <!-- Logo-opplasting -->
-            <div class="card">
-                <div class="card-header">
+            <div class="card collapsible" data-collapsed="true">
+                <div class="card-header" onclick="toggleSection(this)">
                     <h2>🖼️ Bedriftslogo</h2>
+                    <span class="collapse-icon">▼</span>
                 </div>
                 <div class="card-body">
                     <p style="margin-bottom: 20px; color: var(--text-light);">
@@ -104,9 +106,10 @@
             </div>
 
             <!-- Rapport-innstillinger -->
-            <div class="card">
-                <div class="card-header">
+            <div class="card collapsible" data-collapsed="true">
+                <div class="card-header" onclick="toggleSection(this)">
                     <h2>📄 Rapport-innstillinger</h2>
+                    <span class="collapse-icon">▼</span>
                 </div>
                 <div class="card-body">
                     <div class="form-group">
@@ -181,9 +184,10 @@
             </div>
 
             <!-- HMS-innstillinger -->
-            <div class="card">
-                <div class="card-header">
+            <div class="card collapsible" data-collapsed="true">
+                <div class="card-header" onclick="toggleSection(this)">
                     <h2>🛡️ HMS-modul</h2>
+                    <span class="collapse-icon">▼</span>
                 </div>
                 <div class="card-body">
                     <p style="color: var(--text-light); margin-bottom: 16px;">Konfigurer HMS-funksjonalitet for tekniker-appen.</p>
@@ -211,13 +215,20 @@
                             </label>
                         </div>
                     </div>
+
+                    <div style="text-align: center; margin-top: 24px;">
+                        <button type="button" class="btn btn-primary btn-large" id="save-hms-settings">
+                            💾 Lagre HMS-innstillinger
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <!-- Tilbud-innstillinger -->
-            <div class="card">
-                <div class="card-header">
+            <div class="card collapsible" data-collapsed="true">
+                <div class="card-header" onclick="toggleSection(this)">
                     <h2>📄 Tilbud-innstillinger</h2>
+                    <span class="collapse-icon">▼</span>
                 </div>
                 <div class="card-body">
                     <div class="form-group">
@@ -260,12 +271,55 @@
                 </div>
             </div>
 
-            <!-- Lagre alle innstillinger -->
-            <div class="card">
-                <div class="card-body" style="text-align: center;">
-                    <button type="button" class="btn btn-primary btn-large" id="save-all-settings">
-                        💾 Lagre alle innstillinger
-                    </button>
+            <!-- Planlegger-innstillinger -->
+            <div class="card collapsible" data-collapsed="true">
+                <div class="card-header" onclick="toggleSection(this)">
+                    <h2>📅 Planlegger</h2>
+                    <span class="collapse-icon">▼</span>
+                </div>
+                <div class="card-body">
+                    <p style="color: var(--text-light); margin-bottom: 16px;">Konfigurer hvilke planlegger-funksjoner som skal være tilgjengelige.</p>
+
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <div class="setting-title">👥 Vis "Felles"-tekniker (pool)</div>
+                                <div class="setting-description">Viser pool-kortet i planleggeren der oppdrag kan parkeres uten tildelt tekniker</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="show-pool-technician-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="setting-item disabled">
+                            <div class="setting-info">
+                                <div class="setting-title">📆 Vis Periode-fane <span style="font-size:11px; color:var(--text-light); font-weight:normal;">(kommer snart)</span></div>
+                                <div class="setting-description">Aktiverer periode-visning for langsiktig planlegging</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="show-periode-tab-toggle" disabled>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="setting-item disabled">
+                            <div class="setting-info">
+                                <div class="setting-title">⚠️ Vis Avvik-modul <span style="font-size:11px; color:var(--text-light); font-weight:normal;">(kommer snart)</span></div>
+                                <div class="setting-description">Aktiverer avvik-håndtering i planleggeren</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="show-avvik-module-toggle" disabled>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style="text-align: center; margin-top: 24px;">
+                        <button type="button" class="btn btn-primary btn-large" id="save-planlegger-settings">
+                            💾 Lagre planlegger-innstillinger
+                        </button>
+                    </div>
                 </div>
             </div>
         </main>
@@ -360,8 +414,9 @@
                 // KRITISK FIX: Legg til event listeners for lagre-knapper
                 document.getElementById('save-company-info')?.addEventListener('click', saveCompanyInfo);
                 document.getElementById('save-report-settings')?.addEventListener('click', saveReportSettings);
-                document.getElementById('save-all-settings')?.addEventListener('click', saveAllSettings);
-                
+                document.getElementById('save-hms-settings')?.addEventListener('click', saveHmsSettings);
+                document.getElementById('save-planlegger-settings')?.addEventListener('click', savePlanleggerSettings);
+
                 console.log('✅ Event listeners satt opp for alle lagre-knapper');
             }            
             async function loadAllSettings() {
@@ -434,6 +489,15 @@
                     document.getElementById('sja-order-toggle').checked =
                         currentSettings.hmsSettings.sjaPerOrderEnabled !== false;
                 }
+
+                // Module flags (Planlegger)
+                const flags = currentSettings.module_flags || {};
+                const poolToggle = document.getElementById('show-pool-technician-toggle');
+                if (poolToggle) poolToggle.checked = flags.show_pool_technician === true;
+                const periodeToggle = document.getElementById('show-periode-tab-toggle');
+                if (periodeToggle) periodeToggle.checked = flags.show_periode_tab === true;
+                const avvikToggle = document.getElementById('show-avvik-module-toggle');
+                if (avvikToggle) avvikToggle.checked = flags.show_avvik_module === true;
 
                 // Logo
                 if (currentSettings.logo?.url) {
@@ -668,43 +732,66 @@ async function saveCompanyInfo() {
             }
             
             async function saveAllSettings() {
+                console.warn('saveAllSettings is deprecated; use per-section save buttons.');
+            }
+
+            // Kollapsbare seksjoner
+            function toggleSection(headerEl) {
+                const card = headerEl.closest('.card.collapsible');
+                if (!card) return;
+                const isCollapsed = card.getAttribute('data-collapsed') === 'true';
+                card.setAttribute('data-collapsed', isCollapsed ? 'false' : 'true');
+            }
+            window.toggleSection = toggleSection;
+
+            // HMS save
+            async function saveHmsSettings() {
                 try {
-                    showLoading(true, 'Lagrer innstillinger...');
-                    
-                    const allSettings = {
-                        companyInfo: {
-                            name: companyNameInput.value.trim(),
-                            address: companyAddressInput.value.trim(),
-                            phone: companyPhoneInput.value.trim(),
-                            email: companyEmailInput.value.trim(),
-                            cvr: companyCvrInput.value.trim()
-                        },
-                        reportSettings: {
-                            senderEmail: senderEmailInput.value.trim(),
-                            autoSend: autoSendToggle.checked,
-                            copyAdmin: copyAdminToggle.checked,
-                            largeAvvikImages: largeAvvikImagesToggle.checked
-                        },
-                        quoteSettings: {
-                            forbeholdText: forbeholdTextInput.value.trim(),
-                            includeForbehold: includeForbeholdToggle.checked
-                        },
-                        hmsSettings: {
-                            hmsMenuEnabled: document.getElementById('hms-menu-toggle').checked,
-                            sjaPerOrderEnabled: document.getElementById('sja-order-toggle').checked
-                        }
+                    showLoading(true, 'Lagrer HMS-innstillinger...');
+                    const hmsSettings = {
+                        hmsMenuEnabled: document.getElementById('hms-menu-toggle').checked,
+                        sjaPerOrderEnabled: document.getElementById('sja-order-toggle').checked
                     };
-                    
                     const response = await fetch('/api/images/save-settings', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'include',
-                        body: JSON.stringify(allSettings)
+                        body: JSON.stringify({ hmsSettings })
                     });
-                    
                     if (response.ok) {
-                        showToast('Alle innstillinger lagret!', 'success');
-                        currentSettings = { ...currentSettings, ...allSettings };
+                        showToast('HMS-innstillinger lagret!', 'success');
+                        currentSettings.hmsSettings = hmsSettings;
+                    } else {
+                        const error = await response.json();
+                        throw new Error(error.error || 'Kunne ikke lagre');
+                    }
+                } catch (error) {
+                    showToast('Feil ved lagring: ' + error.message, 'error');
+                } finally {
+                    showLoading(false);
+                }
+            }
+
+            // Planlegger save (module_flags)
+            async function savePlanleggerSettings() {
+                try {
+                    showLoading(true, 'Lagrer planlegger-innstillinger...');
+                    const module_flags = {
+                        show_pool_technician: document.getElementById('show-pool-technician-toggle').checked,
+                        show_periode_tab: document.getElementById('show-periode-tab-toggle').checked,
+                        show_avvik_module: document.getElementById('show-avvik-module-toggle').checked
+                    };
+                    const response = await fetch('/api/images/save-settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ module_flags })
+                    });
+                    if (response.ok) {
+                        showToast('Planlegger-innstillinger lagret!', 'success');
+                        currentSettings.module_flags = { ...(currentSettings.module_flags || {}), ...module_flags };
+                        // Invalider frontend-cache slik at planleggeren henter ny verdi neste gang
+                        try { sessionStorage.removeItem('tenant_flags'); } catch (e) {}
                     } else {
                         const error = await response.json();
                         throw new Error(error.error || 'Kunne ikke lagre');
@@ -761,7 +848,8 @@ async function saveCompanyInfo() {
             window.saveCompanyInfo = saveCompanyInfo;
             window.saveReportSettings = saveReportSettings;
             window.saveQuoteSettings = saveQuoteSettings;
-            window.saveAllSettings = saveAllSettings;
+            window.saveHmsSettings = saveHmsSettings;
+            window.savePlanleggerSettings = savePlanleggerSettings;
         });
     </script>
 </body>

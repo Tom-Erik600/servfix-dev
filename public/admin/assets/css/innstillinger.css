@@ -681,3 +681,53 @@
         font-size: 14px;
     }
 }
+
+/* ── Kollapsbare kort ──────────────────────────────────────────── */
+.card.collapsible > .card-header {
+    cursor: pointer;
+    user-select: none;
+    justify-content: space-between;
+}
+
+.collapse-icon {
+    font-size: 13px;
+    color: #94a3b8;
+    flex-shrink: 0;
+    transition: transform 0.3s ease;
+    margin-left: 8px;
+}
+
+.card.collapsible[data-collapsed="false"] .collapse-icon {
+    transform: rotate(180deg);
+}
+
+.card.collapsible > .card-body {
+    overflow: hidden;
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    transition: max-height 0.35s ease, padding-top 0.2s ease, padding-bottom 0.2s ease;
+}
+
+.card.collapsible[data-collapsed="false"] > .card-body {
+    max-height: 3000px;
+    padding-top: 28px;
+    padding-bottom: 28px;
+}
+
+/* Deaktiverte toggle-brytere (fremtidige moduler) */
+.toggle-switch input:disabled + .toggle-slider {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.toggle-switch:has(input:disabled) {
+    cursor: not-allowed;
+}
+
+/* Planlegger-seksjon info-tekst */
+.setting-section-info {
+    color: #64748b;
+    font-size: 14px;
+    margin-bottom: 20px;
+    line-height: 1.5;
+}

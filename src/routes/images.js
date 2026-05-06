@@ -48,19 +48,33 @@ async function uploadToGCS(buffer, filePath, mimetype) {
   });
 }
 
+// ── In-memory cache for tenant settings (unngår GCS-kall på hvert request) ──
+const _settingsCache = new Map(); // tenantId → { value, expiresAt }
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutter
+
 // Helper: Load tenant settings from JSON file in GCS
 async function loadTenantSettings(tenantId) {
+  // Sjekk cache først
+  const cached = _settingsCache.get(tenantId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
   try {
     const settingsPath = `tenants/${tenantId}/assets/settings.json`;
     const file = bucket.file(settingsPath);
     const [exists] = await file.exists();
     
+    let settings;
     if (exists) {
       const [contents] = await file.download();
-      return JSON.parse(contents.toString());
+      settings = JSON.parse(contents.toString());
     } else {
-      return getDefaultSettings(tenantId);
+      settings = getDefaultSettings(tenantId);
     }
+
+    _settingsCache.set(tenantId, { value: settings, expiresAt: Date.now() + CACHE_TTL_MS });
+    return settings;
   } catch (error) {
     console.error('Error loading tenant settings:', error);
     return getDefaultSettings(tenantId);
@@ -69,6 +83,8 @@ async function loadTenantSettings(tenantId) {
 
 // Helper: Save tenant settings to JSON file in GCS
 async function saveTenantSettings(tenantId, settings) {
+  // Invalider cache ved skriving
+  _settingsCache.delete(tenantId);
   try {
     const settingsPath = `tenants/${tenantId}/assets/settings.json`;
     const file = bucket.file(settingsPath);
@@ -129,6 +145,16 @@ function getDefaultSettings(tenantId) {
     hmsSettings: {
       hmsMenuEnabled: true,
       sjaPerOrderEnabled: true
+    },
+    quoteSettings: {
+      forbeholdText: 'Vi forbeholder oss prisendringer ved endringer hos underleverandører eller store valuta endringer!',
+      includeForbehold: true
+    },
+    module_flags: {
+      show_pool_technician: false,
+      show_periode_tab: false,
+      show_avvik_module: false,
+      show_enkel_tab: false
     },
     lastUpdated: new Date().toISOString()
   };
@@ -304,6 +330,13 @@ router.post('/save-settings', requireAdmin, async (req, res) => {
       updatedSettings.hmsSettings = {
         ...currentSettings.hmsSettings,
         ...settingsUpdate.hmsSettings
+      };
+    }
+
+    if (settingsUpdate.module_flags) {
+      updatedSettings.module_flags = {
+        ...(currentSettings.module_flags || {}),
+        ...settingsUpdate.module_flags
       };
     }
 
@@ -1199,3 +1232,4 @@ router.post('/cleanup', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.loadTenantSettings = loadTenantSettings;

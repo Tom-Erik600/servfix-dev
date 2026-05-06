@@ -135,6 +135,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentTab = 'customers';
     let projectSearchResults = [];
     let showExpiredProjects = false;
+    let tenantFlags = {};
+
+    // Hent tenant-flags (modul-på/av) — sessionStorage-cache for å unngå unødvendige kall
+    async function loadTenantFlags() {
+        try {
+            const cached = sessionStorage.getItem('tenant_flags');
+            if (cached) {
+                tenantFlags = JSON.parse(cached);
+                return;
+            }
+        } catch (e) { /* ignore */ }
+        try {
+            const res = await fetch('/api/tenant/flags', { credentials: 'include' });
+            if (res.ok) {
+                const data = await res.json();
+                tenantFlags = data.flags || data || {};
+                try { sessionStorage.setItem('tenant_flags', JSON.stringify(tenantFlags)); } catch (e) {}
+            } else {
+                tenantFlags = {};
+            }
+        } catch (err) {
+            console.warn('Kunne ikke hente tenant-flags:', err);
+            tenantFlags = {};
+        }
+    }
+    await loadTenantFlags();
 
     // Sett minimumdato til i dag
     const today = new Date().toISOString().split('T')[0];
@@ -184,29 +210,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     function renderTechnicians(technicians) {
         technicianList.innerHTML = '';
 
-        // ── Felles / pool-kort — alltid øverst ──────────────────────
-        const fellesCard = document.createElement('div');
-        fellesCard.className = 'technician-card';
-        fellesCard.style.cssText = 'background:#f9fafb;border:2px dashed #9ca3af;';
-        fellesCard.draggable = true;
-        fellesCard.dataset.technicianId = '__pool__';
-        fellesCard.innerHTML = `
-            <div class="technician-avatar" style="background-color:#9ca3af;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                    <circle cx="9" cy="7" r="4"/>
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                </svg>
-            </div>
-            <div>
-                <strong>Felles</strong>
-                <div style="font-size:11px;color:#6b7280;font-weight:400;margin-top:2px;">Pool — alle kan plukke</div>
-            </div>
-        `;
-        fellesCard.addEventListener('dragstart', handleDragStart);
-        fellesCard.addEventListener('dragend', handleDragEnd);
-        technicianList.appendChild(fellesCard);
+        // ── Felles / pool-kort — kun hvis tenant har show_pool_technician = true ──
+        if (tenantFlags.show_pool_technician === true) {
+            const fellesCard = document.createElement('div');
+            fellesCard.className = 'technician-card';
+            fellesCard.style.cssText = 'background:#f9fafb;border:2px dashed #9ca3af;';
+            fellesCard.draggable = true;
+            fellesCard.dataset.technicianId = '__pool__';
+            fellesCard.innerHTML = `
+                <div class="technician-avatar" style="background-color:#9ca3af;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                </div>
+                <div>
+                    <strong>Felles</strong>
+                    <div style="font-size:11px;color:#6b7280;font-weight:400;margin-top:2px;">Pool — alle kan plukke</div>
+                </div>
+            `;
+            fellesCard.addEventListener('dragstart', handleDragStart);
+            fellesCard.addEventListener('dragend', handleDragEnd);
+            technicianList.appendChild(fellesCard);
+        }
 
         if (technicians.length === 0) {
             const empty = document.createElement('div');
