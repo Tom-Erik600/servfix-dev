@@ -53,11 +53,15 @@ const _settingsCache = new Map(); // tenantId → { value, expiresAt }
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutter
 
 // Helper: Load tenant settings from JSON file in GCS
-async function loadTenantSettings(tenantId) {
+// bypassCache=true brukes for endepunkter der staleness ikke kan tolereres
+// (f.eks. /api/tenant/flags som styrer UI-visning umiddelbart etter lagring)
+async function loadTenantSettings(tenantId, { bypassCache = false } = {}) {
   // Sjekk cache først
-  const cached = _settingsCache.get(tenantId);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.value;
+  if (!bypassCache) {
+    const cached = _settingsCache.get(tenantId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
   }
 
   try {

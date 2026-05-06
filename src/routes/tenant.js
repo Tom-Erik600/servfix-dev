@@ -20,7 +20,9 @@ router.use((req, res, next) => {
 // Frontend cacher i sessionStorage under 'tenant_flags'
 router.get('/flags', async (req, res) => {
   try {
-    const settings = await loadTenantSettings(req.session.tenantId);
+    // Bypass cache: flagg må være ferskeste mulige (admin endrer dem live)
+    const settings = await loadTenantSettings(req.session.tenantId, { bypassCache: true });
+    res.set('Cache-Control', 'no-store');
     res.json(settings.module_flags || {});
   } catch (err) {
     console.error('Error fetching tenant flags:', err);

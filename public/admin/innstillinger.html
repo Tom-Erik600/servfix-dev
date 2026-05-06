@@ -790,8 +790,6 @@ async function saveCompanyInfo() {
                     if (response.ok) {
                         showToast('Planlegger-innstillinger lagret!', 'success');
                         currentSettings.module_flags = { ...(currentSettings.module_flags || {}), ...module_flags };
-                        // Invalider frontend-cache slik at planleggeren henter ny verdi neste gang
-                        try { sessionStorage.removeItem('tenant_flags'); } catch (e) {}
                     } else {
                         const error = await response.json();
                         throw new Error(error.error || 'Kunne ikke lagre');

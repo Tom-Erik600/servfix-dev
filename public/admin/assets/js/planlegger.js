@@ -137,28 +137,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     let showExpiredProjects = false;
     let tenantFlags = {};
 
-    // Hent tenant-flags (modul-på/av) — sessionStorage-cache for å unngå unødvendige kall
+    // Hent tenant-flags (modul-på/av). Ikke cachet — sessionStorage er per-tab og
+    // vil bli stale når admin endrer flagg i en annen tab. Endpoint er billig.
     async function loadTenantFlags() {
         try {
-            const cached = sessionStorage.getItem('tenant_flags');
-            if (cached) {
-                tenantFlags = JSON.parse(cached);
-                return;
-            }
-        } catch (e) { /* ignore */ }
-        try {
-            const res = await fetch('/api/tenant/flags', { credentials: 'include' });
+            const res = await fetch('/api/tenant/flags', { credentials: 'include', cache: 'no-store' });
             if (res.ok) {
                 const data = await res.json();
-                tenantFlags = data.flags || data || {};
-                try { sessionStorage.setItem('tenant_flags', JSON.stringify(tenantFlags)); } catch (e) {}
+                tenantFlags = (data && typeof data === 'object') ? (data.flags || data) : {};
             } else {
+                console.warn('GET /api/tenant/flags returnerte', res.status);
                 tenantFlags = {};
             }
         } catch (err) {
             console.warn('Kunne ikke hente tenant-flags:', err);
             tenantFlags = {};
         }
+        console.log('🚩 tenantFlags:', tenantFlags);
     }
     await loadTenantFlags();
 
