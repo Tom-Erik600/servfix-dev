@@ -169,30 +169,6 @@ router.get('/:customerId/projects', async (req, res) => {
   }
 });
 
-    const today = new Date().toISOString().split('T')[0];
-    const projects = (response.data.values || [])
-      .sort((a, b) => b.id - a.id)
-      .filter(p => {
-        if (!p.endDate) return true;
-        const end = p.endDate.toString().slice(0, 10);
-        return end >= today;
-      });
-
-    const result = projects.map(p => ({
-      id: p.id,
-      displayName: p.displayName || p.name || '',
-      number: p.number || null
-    }));
-
-    console.log(`✅ [CUSTOMERS] ${result.length} aktive prosjekter (filtrert på sluttdato)`);
-    res.json(result);
-
-  } catch (error) {
-    console.error(`❌ [CUSTOMERS] Error fetching projects:`, error.message);
-    res.json([]); // Tom liste — ikke krasj
-  }
-});
-
 console.log('✅ [CUSTOMERS] Route module loaded');
 
 module.exports = router;

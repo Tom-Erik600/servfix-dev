@@ -160,7 +160,14 @@ function getDefaultSettings(tenantId) {
       show_avvik_module: false,
       show_enkel_tab: false,
       show_avansert_tab: true,
-      default_tab: 'avansert'
+      default_tab: 'avansert',
+      enable_pdf_generation: true,
+      enable_avvik_in_service: true,
+      enable_deviations_management: false,
+      enable_incidents: false,
+      enable_hms_sja: true,
+      enable_hms_ros: true,
+      enable_notifications: false
     },
     app_menu: getDefaultAppMenuSettings(),
     lastUpdated: new Date().toISOString()

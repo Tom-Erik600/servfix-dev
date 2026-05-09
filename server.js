@@ -343,6 +343,7 @@ setupSession().then(() => {
       app.use('/api/admin/clusters', require('./src/routes/admin/clusters'));
       app.use('/api/admin/projects', require('./src/routes/admin/projects'));
       app.use('/api/admin/recurring-orders', require('./src/routes/admin/recurring-orders'));
+      app.use('/api/admin/module-flags', require('./src/routes/admin/module-flags'));
       // Tripletex routes hvis tilgjengelig
       try {
         app.use('/api/tripletex', require('./src/routes/tripletex'));

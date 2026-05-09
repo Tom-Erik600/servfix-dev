@@ -458,22 +458,6 @@ router.get('/:customerId/projects', async (req, res) => {
   }
 });
 
-    const projects = openProjects.sort((a, b) => b.id - a.id); // Nyeste først
-
-    const result = projects.map(p => ({
-      id: p.id,
-      displayName: p.displayName || p.name || ''
-    }));
-
-    console.log(`✅ [ADMIN CUSTOMERS] Found ${result.length} projects for customer ${customerId}`);
-    res.json(result);
-
-  } catch (error) {
-    console.error(`❌ [ADMIN CUSTOMERS] Error fetching projects:`, error.message);
-    res.json([]); // Tom liste — ikke krasj modalen
-  }
-});
-
 console.log('✅ [ADMIN CUSTOMERS] Route module loaded');
 
 module.exports = router;
