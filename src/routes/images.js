@@ -195,7 +195,8 @@ router.get('/app-settings', async (req, res) => {
     if (!tenantId) {
       return res.status(400).json({ error: 'Kunne ikke identifisere bedrift' });
     }
-    const settings = await loadTenantSettings(tenantId);
+    // bypassCache: admin kan endre settings live — tekniker-siden må alltid se ferskeste data
+    const settings = await loadTenantSettings(tenantId, { bypassCache: true });
     res.json({
       hmsSettings: settings.hmsSettings ?? { hmsMenuEnabled: true, sjaPerOrderEnabled: true },
       app_menu: {
