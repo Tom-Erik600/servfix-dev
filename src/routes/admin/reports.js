@@ -602,6 +602,7 @@ router.get('/:reportId/edit-data', async (req, res) => {
         displayName: templateItems[itemId] || itemData.label || itemId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
         status: itemData.status || 'N/A',
         comment: comment,  // ✅ Bruker kommentar fra riktig sted
+        severity: itemData.severity || null,  // NYTT: alvorlighetsgrad for ok_avvik_severity
         images: itemData.images || [],
         hasCommentField: hasCommentField  // ✅ Kun vis textarea hvis nødvendig
       };

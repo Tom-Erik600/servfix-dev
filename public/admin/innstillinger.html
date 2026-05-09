@@ -224,6 +224,99 @@
                 </div>
             </div>
 
+            <!-- App-meny -->
+            <div class="card collapsible" data-collapsed="true">
+                <div class="card-header" onclick="toggleSection(this)">
+                    <h2>📱 App-meny</h2>
+                    <span class="collapse-icon">▼</span>
+                </div>
+                <div class="card-body">
+                    <p style="color: var(--text-light); margin-bottom: 16px;">Konfigurer hvilke menyvalg som vises på teknikerens hovedmeny, og overstyr tekstene ved behov.</p>
+
+                    <div style="border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; margin-bottom: 20px;">
+                        <div style="background: var(--bg-light); padding: 10px 16px; font-size: 12px; font-weight: 600; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border-color);">
+                            Menyvalg
+                        </div>
+
+                        <div class="setting-item" style="border-bottom: 1px solid var(--border-color); padding: 12px 16px; gap: 16px;">
+                            <div class="setting-info">
+                                <div class="setting-title">Planlagte service</div>
+                                <div class="setting-description">Teknikerens tildelte serviceordre</div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:flex-end;">
+                                <input type="text" id="app-menu-title-planned-service" class="form-input" style="width: 220px;" placeholder="Planlagte service">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="app-menu-visible-planned-service">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="setting-item" style="border-bottom: 1px solid var(--border-color); padding: 12px 16px; gap: 16px;">
+                            <div class="setting-info">
+                                <div class="setting-title">Planlegg oppdrag</div>
+                                <div class="setting-description">Opprett fremtidige serviceoppdrag fra appen</div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:flex-end;">
+                                <input type="text" id="app-menu-title-planlegg-oppdrag" class="form-input" style="width: 220px;" placeholder="Planlegg oppdrag">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="app-menu-visible-planlegg-oppdrag">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="setting-item" style="border-bottom: 1px solid var(--border-color); padding: 12px 16px; gap: 16px;">
+                            <div class="setting-info">
+                                <div class="setting-title">Opprett hasteordre</div>
+                                <div class="setting-description">Akutte serviceoppdrag som må utføres umiddelbart</div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:flex-end;">
+                                <input type="text" id="app-menu-title-hasteordre" class="form-input" style="width: 220px;" placeholder="Opprett hasteordre">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="app-menu-visible-hasteordre">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="setting-item" style="border-bottom: 1px solid var(--border-color); padding: 12px 16px; gap: 16px;">
+                            <div class="setting-info">
+                                <div class="setting-title">Søk ordre</div>
+                                <div class="setting-description">Finn og overta andre ordre</div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:flex-end;">
+                                <input type="text" id="app-menu-title-search-orders" class="form-input" style="width: 220px;" placeholder="Søk ordre">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="app-menu-visible-search-orders">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="setting-item" style="padding: 12px 16px; gap: 16px;">
+                            <div class="setting-info">
+                                <div class="setting-title">HMS</div>
+                                <div class="setting-description">Sikker Jobb Analyse og risikovurdering</div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:flex-end;">
+                                <input type="text" id="app-menu-title-hms" class="form-input" style="width: 220px;" placeholder="HMS">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="app-menu-visible-hms">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="text-align: center; margin-top: 24px;">
+                        <button type="button" class="btn btn-primary btn-large" id="save-app-menu-settings">
+                            💾 Lagre app-meny
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Tilbud-innstillinger -->
             <div class="card collapsible" data-collapsed="true">
                 <div class="card-header" onclick="toggleSection(this)">
@@ -278,9 +371,10 @@
                     <span class="collapse-icon">▼</span>
                 </div>
                 <div class="card-body">
-                    <p style="color: var(--text-light); margin-bottom: 16px;">Konfigurer hvilke planlegger-funksjoner som skal være tilgjengelige.</p>
+                    <p style="color: var(--text-light); margin-bottom: 16px;">Konfigurer hvilke planlegger-faner som skal være tilgjengelige. Har du kun én aktiv fane vises den direkte uten tab-linje. Velg hvilken fane som åpnes som standard.</p>
 
-                    <div class="settings-grid">
+                    <!-- Pool-tekniker -->
+                    <div class="settings-grid" style="margin-bottom: 20px;">
                         <div class="setting-item">
                             <div class="setting-info">
                                 <div class="setting-title">👥 Vis "Felles"-tekniker (pool)</div>
@@ -291,18 +385,70 @@
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
+                    </div>
 
-                        <div class="setting-item disabled">
-                            <div class="setting-info">
-                                <div class="setting-title">📆 Vis Periode-fane <span style="font-size:11px; color:var(--text-light); font-weight:normal;">(kommer snart)</span></div>
-                                <div class="setting-description">Aktiverer periode-visning for langsiktig planlegging</div>
-                            </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="show-periode-tab-toggle" disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
+                    <!-- Fane-konfigurasjon -->
+                    <div style="border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; margin-bottom: 20px;">
+                        <div style="background: var(--bg-light); padding: 10px 16px; font-size: 12px; font-weight: 600; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border-color);">
+                            Aktive faner &amp; standard
                         </div>
 
+                        <!-- Enkel -->
+                        <div class="setting-item" style="border-bottom: 1px solid var(--border-color); padding: 12px 16px;">
+                            <div class="setting-info">
+                                <div class="setting-title">🟢 Enkel</div>
+                                <div class="setting-description">Dra tekniker til kunde — velg dato, anlegg og beskrivelse</div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:16px;">
+                                <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-light); cursor:pointer;">
+                                    <input type="radio" name="default-tab-radio" value="enkel" id="default-tab-enkel">
+                                    Standard
+                                </label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="show-enkel-tab-toggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Avansert -->
+                        <div class="setting-item" style="border-bottom: 1px solid var(--border-color); padding: 12px 16px;">
+                            <div class="setting-info">
+                                <div class="setting-title">🔵 Avansert</div>
+                                <div class="setting-description">Full planlegger med kunder, prosjekter og detaljert oversikt</div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:16px;">
+                                <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-light); cursor:pointer;">
+                                    <input type="radio" name="default-tab-radio" value="avansert" id="default-tab-avansert">
+                                    Standard
+                                </label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="show-avansert-tab-toggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Periode -->
+                        <div class="setting-item" style="padding: 12px 16px;">
+                            <div class="setting-info">
+                                <div class="setting-title">📆 Periode</div>
+                                <div class="setting-description">Langsiktig planlegging — generer serviceoppdrag for en hel periode</div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:16px;">
+                                <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-light); cursor:pointer;">
+                                    <input type="radio" name="default-tab-radio" value="periode" id="default-tab-periode">
+                                    Standard
+                                </label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="show-periode-tab-toggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-grid" style="margin-bottom: 20px;">
                         <div class="setting-item disabled">
                             <div class="setting-info">
                                 <div class="setting-title">⚠️ Vis Avvik-modul <span style="font-size:11px; color:var(--text-light); font-weight:normal;">(kommer snart)</span></div>
@@ -415,6 +561,7 @@
                 document.getElementById('save-company-info')?.addEventListener('click', saveCompanyInfo);
                 document.getElementById('save-report-settings')?.addEventListener('click', saveReportSettings);
                 document.getElementById('save-hms-settings')?.addEventListener('click', saveHmsSettings);
+                document.getElementById('save-app-menu-settings')?.addEventListener('click', saveAppMenuSettings);
                 document.getElementById('save-planlegger-settings')?.addEventListener('click', savePlanleggerSettings);
 
                 console.log('✅ Event listeners satt opp for alle lagre-knapper');
@@ -490,20 +637,53 @@
                         currentSettings.hmsSettings.sjaPerOrderEnabled !== false;
                 }
 
+                populateAppMenuFields();
+
                 // Module flags (Planlegger)
                 const flags = currentSettings.module_flags || {};
                 const poolToggle = document.getElementById('show-pool-technician-toggle');
                 if (poolToggle) poolToggle.checked = flags.show_pool_technician === true;
+                const enkelToggle = document.getElementById('show-enkel-tab-toggle');
+                if (enkelToggle) enkelToggle.checked = flags.show_enkel_tab === true;
+                const avansertToggle = document.getElementById('show-avansert-tab-toggle');
+                if (avansertToggle) avansertToggle.checked = flags.show_avansert_tab !== false; // default true
                 const periodeToggle = document.getElementById('show-periode-tab-toggle');
                 if (periodeToggle) periodeToggle.checked = flags.show_periode_tab === true;
                 const avvikToggle = document.getElementById('show-avvik-module-toggle');
                 if (avvikToggle) avvikToggle.checked = flags.show_avvik_module === true;
+                // Default-tab radio
+                const defaultTab = flags.default_tab || 'avansert';
+                const defaultRadio = document.getElementById(`default-tab-${defaultTab}`);
+                if (defaultRadio) defaultRadio.checked = true;
 
                 // Logo
                 if (currentSettings.logo?.url) {
                     currentLogoUrl = currentSettings.logo.url;
                     showCurrentLogo();
                 }
+            }
+
+            function getDefaultAppMenuSettings() {
+                return {
+                    planned_service: { visible: true, title: 'Planlagte service' },
+                    planlegg_oppdrag: { visible: true, title: 'Planlegg oppdrag' },
+                    hasteordre: { visible: true, title: 'Opprett hasteordre' },
+                    search_orders: { visible: true, title: 'Søk ordre' },
+                    hms: { visible: true, title: 'HMS' }
+                };
+            }
+
+            function populateAppMenuFields() {
+                const defaults = getDefaultAppMenuSettings();
+                const menu = currentSettings.app_menu || {};
+                Object.keys(defaults).forEach(key => {
+                    const item = { ...defaults[key], ...(menu[key] || {}) };
+                    const suffix = key.replace(/_/g, '-');
+                    const visibleInput = document.getElementById(`app-menu-visible-${suffix}`);
+                    const titleInput = document.getElementById(`app-menu-title-${suffix}`);
+                    if (visibleInput) visibleInput.checked = item.visible !== false;
+                    if (titleInput) titleInput.value = item.title || defaults[key].title;
+                });
             }
             
             function showCurrentLogo() {
@@ -772,14 +952,54 @@ async function saveCompanyInfo() {
                 }
             }
 
+            async function saveAppMenuSettings() {
+                try {
+                    showLoading(true, 'Lagrer app-meny...');
+                    const defaults = getDefaultAppMenuSettings();
+                    const app_menu = Object.keys(defaults).reduce((acc, key) => {
+                        const suffix = key.replace(/_/g, '-');
+                        const visibleInput = document.getElementById(`app-menu-visible-${suffix}`);
+                        const titleInput = document.getElementById(`app-menu-title-${suffix}`);
+                        acc[key] = {
+                            visible: visibleInput ? visibleInput.checked : defaults[key].visible,
+                            title: titleInput?.value.trim() || defaults[key].title
+                        };
+                        return acc;
+                    }, {});
+
+                    const response = await fetch('/api/images/save-settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ app_menu })
+                    });
+
+                    if (response.ok) {
+                        showToast('App-meny lagret!', 'success');
+                        currentSettings.app_menu = app_menu;
+                    } else {
+                        const error = await response.json();
+                        throw new Error(error.error || 'Kunne ikke lagre');
+                    }
+                } catch (error) {
+                    showToast('Feil ved lagring: ' + error.message, 'error');
+                } finally {
+                    showLoading(false);
+                }
+            }
+
             // Planlegger save (module_flags)
             async function savePlanleggerSettings() {
                 try {
                     showLoading(true, 'Lagrer planlegger-innstillinger...');
+                    const selectedDefault = document.querySelector('input[name="default-tab-radio"]:checked');
                     const module_flags = {
                         show_pool_technician: document.getElementById('show-pool-technician-toggle').checked,
+                        show_enkel_tab: document.getElementById('show-enkel-tab-toggle').checked,
+                        show_avansert_tab: document.getElementById('show-avansert-tab-toggle').checked,
                         show_periode_tab: document.getElementById('show-periode-tab-toggle').checked,
-                        show_avvik_module: document.getElementById('show-avvik-module-toggle').checked
+                        show_avvik_module: document.getElementById('show-avvik-module-toggle').checked,
+                        default_tab: selectedDefault ? selectedDefault.value : 'avansert',
                     };
                     const response = await fetch('/api/images/save-settings', {
                         method: 'POST',
@@ -847,6 +1067,7 @@ async function saveCompanyInfo() {
             window.saveReportSettings = saveReportSettings;
             window.saveQuoteSettings = saveQuoteSettings;
             window.saveHmsSettings = saveHmsSettings;
+            window.saveAppMenuSettings = saveAppMenuSettings;
             window.savePlanleggerSettings = savePlanleggerSettings;
         });
     </script>

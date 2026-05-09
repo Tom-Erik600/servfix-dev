@@ -811,6 +811,20 @@
 .status-badge.status-n\/a,
 .status-badge.status-na { background: #f3f4f6; color: #6b7280; }
 
+/* NYTT: Alvorlighetsgrad-badge for ok_avvik_severity */
+.severity-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+.severity-badge.severity-low    { background: #d1fae5; color: #065f46; }
+.severity-badge.severity-medium { background: #fef3c7; color: #92400e; }
+.severity-badge.severity-high   { background: #fee2e2; color: #991b1b; }
+
 .item-content {
     margin-top: 12px;
 }

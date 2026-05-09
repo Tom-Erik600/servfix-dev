@@ -1,5 +1,7 @@
+const { performance } = require('perf_hooks');
 const db = require('../config/database');
-const tripletexService = require('./tripletexService');
+const tripletexShim = require('./tripletexService'); // shim — provides withClient + helpers
+const { withClient } = require('./integrations/tripletex/provider');
 
 /**
  * Importerer kunder fra Tripletex til lokal customers-tabell.
@@ -28,18 +30,18 @@ class CustomerImportService {
    * Henter alle kunder fra Tripletex med paginering.
    * Samme paginering som i customers.js-ruten.
    */
-  async fetchAllCustomersFromTripletex() {
+  async fetchAllCustomersFromTripletex(tenantId) {
     const allCustomers = [];
     const pageSize = 100;
     let currentPage = 0;
     let hasMore = true;
 
     while (hasMore) {
-      console.log(`  📄 Henter side ${currentPage + 1} (fra: ${currentPage * pageSize})`);
+      console.log(`  🔄 Henter side ${currentPage + 1} (fra: ${currentPage * pageSize})`);
 
-      const customers = await tripletexService.getCustomers({
+      const customers = await tripletexShim.getCustomers(tenantId, {
         from: currentPage * pageSize,
-        count: pageSize
+        count: pageSize,
       });
 
       allCustomers.push(...customers);
@@ -50,6 +52,7 @@ class CustomerImportService {
     console.log(`  ✅ Hentet ${allCustomers.length} kunder fra Tripletex`);
     return allCustomers;
   }
+
 
   /**
    * Hovedmetode: Importer alle kunder fra Tripletex til lokal DB.
@@ -64,11 +67,11 @@ class CustomerImportService {
     console.log(`\n🔄 Starter kundeimport for tenant: ${tenantId}`);
 
     // 1. Hent alle kunder fra Tripletex
-    const tripletexCustomers = await this.fetchAllCustomersFromTripletex();
+    const tripletexCustomers = await this.fetchAllCustomersFromTripletex(tenantId);
 
     for (const tc of tripletexCustomers) {
       try {
-        await this.importSingleCustomer(pool, tc, stats);
+        await this.importSingleCustomer(tenantId, pool, tc, stats);
       } catch (error) {
         const msg = `Kunde ${tc.id} (${tc.name}): ${error.message}`;
         console.error(`  ❌ ${msg}`);
@@ -85,13 +88,13 @@ class CustomerImportService {
    * Ved re-import: UPSERT basert på (external_source, external_id).
    * Overskriver IKKE felt som er endret lokalt.
    */
-  async importSingleCustomer(pool, tc, stats) {
+  async importSingleCustomer(tenantId, pool, tc, stats) {
     const externalId = String(tc.id);
 
     // Hent begge adresser parallelt (2 API-kall → 1 runde)
     const [physicalAddr, postalAddr] = await Promise.all([
-      tc.physicalAddress?.id ? tripletexService.getAddress(tc.physicalAddress.id) : null,
-      tc.postalAddress?.id ? tripletexService.getAddress(tc.postalAddress.id) : null
+      tc.physicalAddress?.id ? tripletexShim.getAddress(tenantId, tc.physicalAddress.id) : null,
+      tc.postalAddress?.id ? tripletexShim.getAddress(tenantId, tc.postalAddress.id) : null,
     ]);
     const physicalAddress = this.formatAddress(physicalAddr);
     const postalAddress = this.formatAddress(postalAddr);
@@ -146,7 +149,7 @@ class CustomerImportService {
       stats.updated++;
 
       // Oppdater servfixmail-kontakt også for eksisterende kunder
-      await this.importServfixmailContact(pool, tc.id, row.id, stats);
+      await this.importServfixmailContact(tenantId, pool, tc.id, row.id, stats);
 
       return row.id;
     }
@@ -178,7 +181,7 @@ class CustomerImportService {
     stats.imported++;
 
     // Hent servfixmail-kontakt fra Tripletex og lagre som rapport-mottaker
-    await this.importServfixmailContact(pool, tc.id, customerId, stats);
+    await this.importServfixmailContact(tenantId, pool, tc.id, customerId, stats);
 
     return customerId;
   }
@@ -195,7 +198,7 @@ class CustomerImportService {
 
     console.log(`\n🔍 Starter import-preview for tenant: ${tenantId}`);
 
-    const tripletexCustomers = await this.fetchAllCustomersFromTripletex();
+    const tripletexCustomers = await this.fetchAllCustomersFromTripletex(tenantId);
     result.total = tripletexCustomers.length;
 
     // Hent alle lokale kunder i én query
@@ -289,7 +292,7 @@ class CustomerImportService {
 
     console.log(`\n🔄 Starter selektiv import: ${selectedNew.size} nye, ${selectedUpdated.size} oppdateringer`);
 
-    const tripletexCustomers = await this.fetchAllCustomersFromTripletex();
+    const tripletexCustomers = await this.fetchAllCustomersFromTripletex(tenantId);
 
     // Filtrer til kun valgte kunder
     const selectedCustomers = tripletexCustomers.filter(tc => {
@@ -315,7 +318,7 @@ class CustomerImportService {
 
       await Promise.all(batch.map(async (tc) => {
         try {
-          await this.importSingleCustomer(pool, tc, stats);
+          await this.importSingleCustomer(tenantId, pool, tc, stats);
         } catch (error) {
           const msg = `Kunde ${tc.id} (${tc.name}): ${error.message}`;
           console.error(`  ❌ ${msg}`);
@@ -331,9 +334,9 @@ class CustomerImportService {
   /**
    * Henter servfixmail-kontakt fra Tripletex og lagrer i customer_contacts.
    */
-  async importServfixmailContact(pool, tripletexCustomerId, localCustomerId, stats) {
+  async importServfixmailContact(tenantId, pool, tripletexCustomerId, localCustomerId, stats) {
     try {
-      const contact = await tripletexService.getServfixmailContact(tripletexCustomerId);
+      const contact = await tripletexShim.getServfixmailContact(tenantId, tripletexCustomerId);
 
       if (contact && contact.email) {
         await pool.query(
@@ -355,6 +358,55 @@ class CustomerImportService {
     } catch (error) {
       console.log(`    ⚠️  Kunne ikke hente servfixmail-kontakt: ${error.message}`);
     }
+  }
+
+  /**
+   * Instrumented variant of importFromTripletex for timing measurements.
+   * Used by scripts/measure-import-duration.js (Q3-ii blocker check).
+   *
+   * Returns stats + timing breakdown:
+   *   { ...stats, totalMs, fetchMs, perCustomerMs: { median, p95, all } }
+   *
+   * Does NOT change any production behaviour — it wraps the same logic
+   * with performance.now() bookmarks around each phase.
+   *
+   * @param {string} tenantId
+   */
+  async importFromTripletexInstrumented(tenantId) {
+    const pool = await db.getTenantConnection(tenantId);
+    const stats = { imported: 0, updated: 0, skipped: 0, contacts_created: 0, errors: [] };
+    const perCustomerMs = [];
+
+    console.log(`\n🔬 [instrumented] Starter kundeimport for tenant: ${tenantId}`);
+
+    const t0 = performance.now();
+    const tripletexCustomers = await this.fetchAllCustomersFromTripletex(tenantId);
+    const fetchMs = performance.now() - t0;
+
+    console.log(`  ⏱  fetchAllCustomers: ${fetchMs.toFixed(0)} ms (${tripletexCustomers.length} kunder)`);
+
+    for (const tc of tripletexCustomers) {
+      const tCustomer = performance.now();
+      try {
+        await this.importSingleCustomer(tenantId, pool, tc, stats);
+      } catch (error) {
+        const msg = `Kunde ${tc.id} (${tc.name}): ${error.message}`;
+        console.error(`  ❌ ${msg}`);
+        stats.errors.push(msg);
+      }
+      perCustomerMs.push(performance.now() - tCustomer);
+    }
+
+    const totalMs = performance.now() - t0;
+
+    const sorted = [...perCustomerMs].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)] || 0;
+    const p95 = sorted[Math.floor(sorted.length * 0.95)] || sorted[sorted.length - 1] || 0;
+
+    console.log(`\n✅ [instrumented] Import ferdig: total=${totalMs.toFixed(0)}ms fetch=${fetchMs.toFixed(0)}ms per-customer median=${median.toFixed(0)}ms p95=${p95.toFixed(0)}ms`);
+    console.log(`   stats:`, stats);
+
+    return { ...stats, totalMs, fetchMs, perCustomerMs: { median, p95, all: perCustomerMs } };
   }
 }
 

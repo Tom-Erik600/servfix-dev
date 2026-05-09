@@ -113,6 +113,32 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+/* Ferdigstilt service — lysegrønn markering */
+.service-history-order.completed {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border-color: #86efac;
+}
+
+.service-history-order.completed::before {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+}
+
+.service-history-order.completed:hover {
+    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+    border-color: #4ade80;
+}
+
+/* Avvik-indikator — liten rød firkant nede til høyre */
+.avvik-indicator {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    width: 10px;
+    height: 10px;
+    background: #ef4444;
+    border-radius: 2px;
+}
+
 .order-id {
     font-size: 14px;
     font-weight: 700;

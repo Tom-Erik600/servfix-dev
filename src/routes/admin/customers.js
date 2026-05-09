@@ -282,7 +282,7 @@ router.post('/:customerId/contacts/import-from-tripletex', async (req, res) => {
   const { customerId } = req.params;
   try {
     const customerService = require('../../services/customerService');
-    const tripletexService = require('../../services/tripletexService');
+    const { withClient } = require('../../services/integrations/tripletex/provider');
     const tenantId = req.session.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'Tenant ID mangler' });
 
@@ -294,7 +294,11 @@ router.post('/:customerId/contacts/import-from-tripletex', async (req, res) => {
       return res.status(400).json({ error: 'Kunden har ingen Tripletex-kobling (external_id mangler)' });
     }
 
-    const tripletexContacts = await tripletexService.getCustomerContacts(tripletexCustomerId);
+    const tripletexContacts = await withClient(tenantId, (client) =>
+      client
+        .get('/contact', { params: { customerId: tripletexCustomerId, from: 0, count: 100 } })
+        .then((r) => (r.data && r.data.values ? r.data.values : []))
+    );
 
     const stats = { imported: 0, skipped: 0, errors: [] };
 
@@ -314,7 +318,7 @@ router.post('/:customerId/contacts/import-from-tripletex', async (req, res) => {
           email,
           phone: tc.phoneNumberMobile || tc.phoneNumber || '',
           role: '',
-          is_report_recipient: false
+          is_report_recipient: false,
         });
         stats.imported++;
       } catch (err) {
@@ -408,40 +412,51 @@ router.post('/import', async (req, res) => {
 // Hent prosjekter for kunde fra Tripletex
 router.get('/:customerId/projects', async (req, res) => {
   const { customerId } = req.params;
-  console.log(`📁 [ADMIN CUSTOMERS] GET projects for customer ${customerId}`);
+  const tenantId = req.session.tenantId;
+  console.log(`🔍 [ADMIN CUSTOMERS] GET projects for customer ${customerId}`);
 
   try {
-    const tripletexService = require('../../services/tripletexService');
-    const client = await tripletexService.getApiClient();
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID mangler' });
 
-    // Hent ALLE prosjekter (inkl. lukkede) for debugging
-    const [openResponse, allResponse] = await Promise.all([
-      client.get('/project', {
-        params: {
-          customerId: customerId,
-          isClosed: false,
-          from: 0,
-          count: 20,
-          fields: 'id,name,number,displayName,startDate,endDate,isClosed'
-        }
-      }),
-      client.get('/project', {
-        params: {
-          customerId: customerId,
-          from: 0,
-          count: 20,
-          fields: 'id,name,number,displayName,startDate,endDate,isClosed'
-        }
-      })
-    ]);
+    const { withClient } = require('../../services/integrations/tripletex/provider');
 
-    const openProjects = openResponse.data.values || [];
-    const allProjects = allResponse.data.values || [];
-
-    console.log(`🔍 [PROJECTS DEBUG] Customer ${customerId}: ${openProjects.length} åpne, ${allProjects.length} totalt (fullResultCount=${allResponse.data.fullResultCount})`);
-    allProjects.forEach(p => {
-      console.log(`   📋 Prosjekt #${p.number} "${p.displayName || p.name}" (id=${p.id}, isClosed=${p.isClosed})`, JSON.stringify(p));
+    const { openProjects, allProjects } = await withClient(tenantId, async (client) => {
+      const fields = 'id,name,number,displayName,startDate,endDate,isClosed';
+      const [openRes, allRes] = await Promise.all([
+        client.get('/project', {
+          params: { customerId, isClosed: false, from: 0, count: 20, fields },
+        }),
+        client.get('/project', {
+          params: { customerId, from: 0, count: 20, fields },
+        }),
+      ]);
+      return {
+        openProjects: openRes.data.values || [],
+        allProjects: allRes.data.values || [],
+      };
     });
+
+    console.log(
+      `🔍 [PROJECTS DEBUG] Customer ${customerId}: ${openProjects.length} åpne, ${allProjects.length} totalt`
+    );
+    allProjects.forEach((p) => {
+      console.log(
+        `   🔎 Prosjekt #${p.number} "${p.displayName || p.name}" (id=${p.id}, isClosed=${p.isClosed})`
+      );
+    });
+
+    const result = openProjects
+      .sort((a, b) => b.id - a.id) // Nyeste først
+      .map((p) => ({ id: p.id, displayName: p.displayName || p.name || '' }));
+
+    console.log(`✅ [ADMIN CUSTOMERS] Found ${result.length} projects for customer ${customerId}`);
+    res.json(result);
+
+  } catch (error) {
+    console.error(`❌ [ADMIN CUSTOMERS] Error fetching projects:`, error.message);
+    res.json([]); // Tom liste – ikke krasj modalen
+  }
+});
 
     const projects = openProjects.sort((a, b) => b.id - a.id); // Nyeste først
 

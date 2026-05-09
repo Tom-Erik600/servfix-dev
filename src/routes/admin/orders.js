@@ -60,7 +60,14 @@ router.get('/', async (req, res) => {
                 SELECT 1
                 FROM quotes q
                 WHERE q.order_id = o.id
-              ) AS has_quotes
+              ) AS has_quotes,
+              (
+                SELECT COUNT(*)::int
+                FROM service_reports sr2
+                WHERE sr2.order_id = o.id
+                  AND sr2.checklist_data IS NOT NULL
+                  AND sr2.checklist_data::text ~ '"status"\s*:\s*"[Aa]vvik"'
+              ) AS avvik_count
        FROM orders o
        LEFT JOIN technicians t ON o.technician_id = t.id
        LEFT JOIN LATERAL (

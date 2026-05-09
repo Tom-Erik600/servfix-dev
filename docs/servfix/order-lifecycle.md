@@ -24,7 +24,7 @@ Manages the full lifecycle of service orders — from creation and technician as
 - Customer data is snapshotted as JSONB at order creation time. Changes in Tripletex do not retroactively update existing orders.
 - Order completion must succeed even if PDF generation fails for individual reports.
 - Equipment is linked to customers (via `customer_id`), not directly to orders. The `included_equipment_ids` JSONB array controls which equipment is part of a specific order.
-- Technician assignment is required for status `scheduled`. Orders without a technician get status `pending`.
+- Technician assignment is nullable. Orders without a technician use status `pending` and can be claimed by technicians from the available-orders pool.
 - Order IDs follow the format `PROJ-{YYYY}-{timestamp}`.
 
 ## Status transitions
@@ -45,9 +45,40 @@ pending ──────→ scheduled ──────→ completed
 | `completed` | All work done, PDFs generated | POST `/:orderId/complete` |
 
 **Rules:**
-- `pending` → `scheduled`: Technician is assigned (PUT `/:id` with technicianId).
+- `pending` → `scheduled`: Technician is assigned by admin update, drag/drop, or technician claim.
 - `scheduled` → `completed`: Completion endpoint called. Irreversible.
 - No status can be skipped. No reverse transitions.
+
+## Available Orders / Pool Claim
+
+Admin can create unassigned orders by using the `Felles`/pool technician in the admin planner. These orders have `technician_id = null`, status `pending`, and appear in the technician app as `Ledige oppdrag`.
+
+Technicians fetch available orders with a range filter:
+
+```http
+GET /api/orders/available?range=today|tomorrow|week|month
+```
+
+The backend returns pending orders where `technician_id IS NULL` and `scheduled_date` is either null or inside the selected range. The technician app always fetches the month range for calendar indicators, then filters client-side for the visible list. Pool orders are marked with a gray dot in the calendar.
+
+Technicians claim an available order with:
+
+```http
+POST /api/orders/:id/claim
+```
+
+The claim is atomic:
+
+```sql
+UPDATE orders
+   SET technician_id = $1,
+       status = 'scheduled',
+       updated_at = NOW()
+ WHERE id = $2
+   AND technician_id IS NULL
+```
+
+If no row is updated, the API returns `409` because another technician already claimed the order.
 
 ## Inputs
 
@@ -141,6 +172,7 @@ pending ──────→ scheduled ──────→ completed
 | GCS upload fails for a report | PDF not stored, `pdf_generated` stays false for that report |
 | Database transaction fails | Rolls back, order status unchanged |
 | Concurrent completion calls | First wins, second sees already-completed order |
+| Concurrent claim calls for available order | First atomic update wins; later request returns `409` |
 | Duplicate completion request | Must return success without duplicating side effects (idempotent) |
 | Missing customer_data on creation | Falls back to minimal data (name only) |
 | Equipment has no service report | Skipped during PDF generation (no error) |
@@ -155,6 +187,7 @@ pending ──────→ scheduled ──────→ completed
 - Technician order detail (`orders.html`) must, when `included_equipment_ids` is present, show only the selected equipment for that order rather than all customer equipment.
 - Service report status must be independent of order status — a report can be `completed` before the order is.
 - Order status transitions are one-way: `pending` → `scheduled` → `completed`. No reversals.
+- Claiming an available order must remain atomic and guarded by `technician_id IS NULL`.
 - Completing the same order multiple times must be idempotent — it must not duplicate side effects or corrupt state.
 
 ## Change strategy
@@ -173,6 +206,9 @@ Critical scenarios to cover:
 - Create order as admin without technician (must get status `pending`).
 - Create order as technician (must get status `scheduled`).
 - Assign technician to pending order (must transition to `scheduled`).
+- Fetch available orders with `today`, `tomorrow`, `week`, and `month` range filters.
+- Claim available order as technician (must set `technician_id`, status `scheduled`, and `updated_at`).
+- Claim already-claimed order concurrently (must return `409`).
 - Complete order with all service reports finished (happy path).
 - Complete order where one PDF fails (order must still complete, partial results returned).
 - Complete order with `includedEquipmentIds` filter (only selected equipment gets PDFs).
@@ -195,7 +231,7 @@ An order lifecycle change is considered complete when:
 - Tripletex integration is read-only for customers. Orders are NOT synced from Tripletex despite a table comment suggesting otherwise.
 - The `in_progress` status appears in frontend filter code (planlegger.js) but is never explicitly set in backend code.
 - Quotes are optional and independent — order completion does not require an approved quote.
-- The admin planlegger uses drag-drop to assign technicians, which triggers a PUT request.
+- The admin planlegger uses drag-drop to assign technicians. Dragging the `Felles`/pool card creates an unassigned order instead.
 - `sent_til_fakturering` on service reports tracks whether the report has been forwarded for billing.
 
 ### API endpoints
@@ -206,10 +242,12 @@ An order lifecycle change is considered complete when:
 |--------|------|---------|
 | GET | `/` | List orders for logged-in technician |
 | GET | `/today` | Orders scheduled for today |
+| GET | `/available?range=today|tomorrow|week|month` | Available unassigned orders for technician claim |
 | GET | `/all` | All orders (search page) |
 | GET | `/:id` | Order detail with equipment and service status |
 | PUT | `/:id` | Update order (technician assignment, details) |
 | POST | `/` | Create new order |
+| POST | `/:id/claim` | Atomically claim available unassigned order |
 | POST | `/:orderId/complete` | Complete order + generate PDFs |
 | PATCH | `/:orderId/equipment` | Update included equipment selection |
 | GET | `/:id/reports` | List service reports for order |

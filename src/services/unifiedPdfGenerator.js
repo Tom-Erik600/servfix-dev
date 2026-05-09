@@ -229,7 +229,7 @@ class UnifiedPDFGenerator {
     if (!allReportIds.includes(reportId)) allReportIds.push(reportId);
 
     const avvikImagesQ = `
-      SELECT service_report_id, checklist_item_id, image_url, metadata
+      SELECT service_report_id, checklist_item_id, image_url, image_type, metadata
       FROM avvik_images WHERE service_report_id = ANY($1::text[])
     `;
     const avvikRes = await pool.query(avvikImagesQ, [allReportIds]);
@@ -324,6 +324,13 @@ class UnifiedPDFGenerator {
     } else {
       if (itemData.avvikComment) parts.push(itemData.avvikComment);
       if (itemData.comment && !parts.includes(itemData.comment)) parts.push(itemData.comment);
+    }
+
+    // NYTT: Alvorlighetsgrad for ok_avvik_severity
+    if (inputType === 'ok_avvik_severity' && itemData.severity) {
+      const severityLabels = { low: 'Lav', medium: 'Middels', high: 'Høy' };
+      const label = severityLabels[itemData.severity] || itemData.severity;
+      parts.push(`Alvorlighet: ${label}`);
     }
 
     return parts.join(' | ');
@@ -503,7 +510,9 @@ class UnifiedPDFGenerator {
                 systemnavn: report.equipment_name || '',
                 komponent: actualName,
                 kommentar: itemData.avvikComment || itemData.comment || 'Ingen beskrivelse',
-                images: imagesForThisItem.map(img => ({ url: img.image_url, description: img.metadata?.description || '' })),
+                images: imagesForThisItem
+                  .filter(img => !img.image_type || img.image_type === 'avvik')
+                  .map(img => ({ url: img.image_url, description: img.metadata?.description || '' })),                severity: itemData.severity || null,
               });
             }
           });
@@ -646,9 +655,16 @@ class UnifiedPDFGenerator {
   }
 
   const rows = data.avvik.map(a => {
+    const hasAnySeverity = data.avvik.some(av => av.severity);
+    const severityLabels = { low: 'Lav', medium: 'Middels', high: 'Høy' };
+    const severityCell = hasAnySeverity
+      ? `<td>${a.severity ? this.escapeHtml(severityLabels[a.severity] || a.severity) : ''}</td>`
+      : '';
+
+    const colspan = hasAnySeverity ? '6' : '5';
     const imagesHtml = (largeAvvikImages && a.images && a.images.length > 0) ? `
       <tr>
-        <td colspan="5" style="padding: 4px 10px 12px 10px; border-top: none;">
+        <td colspan="${colspan}" style="padding: 4px 10px 12px 10px; border-top: none;">
           <div class="avvik-images-inline">
             <div class="images-grid">
               ${a.images.map(img => `
@@ -669,18 +685,23 @@ class UnifiedPDFGenerator {
       <td>${this.escapeHtml(a.systemnummer)}</td>
       <td>${this.escapeHtml(a.komponent)}</td>
       <td>${this.escapeHtml(a.kommentar)}</td>
+      ${severityCell}
     </tr>${imagesHtml}`;
-  }).join('');
+  });
 
-  console.log(`✅ Rendering ${data.avvik.length} avvik rows${largeAvvikImages ? ' (with images)' : ''}`);
+  // Beregn hasAnySeverity på tvers av alle avvik (utenfor map for thead)
+  const hasAnySeverity = data.avvik.some(a => a.severity);
+  const severityHeader = hasAnySeverity ? '<th>Alvorlighet</th>' : '';
+
+  console.log(`✅ Rendering ${data.avvik.length} avvik rows${largeAvvikImages ? ' (with images)' : ''}${hasAnySeverity ? ' (with severity)' : ''}`);
 
   return `
     <section class="section avoid-break avvik-section">
       <h2 class="section-header">Registrerte avvik</h2>
       <p>Følgende avvik ble registrert under servicen.</p>
       <table class="styled-table avvik-table">
-        <thead><tr><th>Avvik ID</th><th>Anlegg</th><th>Systemnummer</th><th>Komponent</th><th>Kommentar</th></tr></thead>
-        <tbody>${rows}</tbody>
+        <thead><tr><th>Avvik ID</th><th>Anlegg</th><th>Systemnummer</th><th>Komponent</th><th>Kommentar</th>${severityHeader}</tr></thead>
+        <tbody>${rows.join('')}</tbody>
       </table>
     </section>`;
 }

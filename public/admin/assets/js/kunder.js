@@ -932,11 +932,16 @@ window.selectCustomer = async function(customerId) {
                 // Finn tekniker - viser navn hvis tilgjengelig
                 const technician = order.technician_name || order.technicianName || 'Ikke tildelt';
                 
+                const isCompleted = order.status === 'completed';
+                const completedClass = isCompleted ? ' completed' : '';
+                const hasAvvik = (order.avvik_count || 0) > 0;
+
                 return `
-                    <div class="service-history-order" onclick="showOrderDetails('${order.id}')">
+                    <div class="service-history-order${completedClass}" onclick="showOrderDetails('${order.id}')">
                         <div class="order-id">#${orderNumber}</div>
                         <div class="order-date">${formattedDate}</div>
                         <div class="order-technician">${technician}</div>
+                        ${hasAvvik ? '<div class="avvik-indicator" title="Har avvik"></div>' : ''}
                     </div>
                 `;
             }).join('')}

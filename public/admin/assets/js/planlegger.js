@@ -157,6 +157,82 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     await loadTenantFlags();
 
+    // ── Top-tab navigation (Enkel / Avansert / Periode) ──────────────────
+    let currentTopTab = null;
+    let enkelInitialized = false;
+
+    function isTopTabActive(name) {
+        if (name === 'avansert') return tenantFlags.show_avansert_tab !== false; // default true
+        if (name === 'enkel')    return tenantFlags.show_enkel_tab === true;
+        if (name === 'periode')  return tenantFlags.show_periode_tab === true;
+        return false;
+    }
+
+    function setupTopTabs() {
+        const tabNames = ['enkel', 'avansert', 'periode'];
+        const activeTabs = tabNames.filter(isTopTabActive);
+
+        tabNames.forEach(name => {
+            const btn = document.getElementById(`${name}-top-tab-btn`);
+            if (btn) {
+                btn.style.display = isTopTabActive(name) ? 'inline-flex' : 'none';
+                btn.addEventListener('click', () => setTopTab(name));
+            }
+        });
+
+        const tabBar = document.getElementById('planner-top-tabs');
+        if (tabBar) tabBar.style.display = activeTabs.length >= 2 ? 'flex' : 'none';
+
+        const preferred = tenantFlags.default_tab || 'avansert';
+        const startTab = isTopTabActive(preferred) ? preferred
+                       : (activeTabs.length > 0 ? activeTabs[0] : 'avansert');
+        setTopTab(startTab);
+    }
+
+    function setTopTab(name) {
+        currentTopTab = name;
+        ['enkel', 'avansert', 'periode'].forEach(n => {
+            const btn = document.getElementById(`${n}-top-tab-btn`);
+            if (btn) btn.classList.toggle('active', n === name);
+            const div = document.getElementById(`${n}-content`);
+            if (div) div.style.display = n === name ? 'block' : 'none';
+        });
+        if (name === 'enkel' && !enkelInitialized) {
+            enkelInitialized = true;
+            initEnkelFane();
+        } else if (name === 'periode') {
+            if (!periodeInitialized) {
+                periodeInitialized = true;
+                initPeriodeFane();
+            } else {
+                loadPeriodeRules();
+                populatePeriodeCustomers();
+            }
+        }
+    }
+
+    function initEnkelFane() {
+        const searchInput = document.getElementById('enkel-customer-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                const q = e.target.value.trim().toLowerCase();
+                const cards = document.querySelectorAll('#enkel-customer-list .modern-customer-card');
+                let count = 0;
+                cards.forEach(card => {
+                    const name = (card.dataset.customerName || '').toLowerCase();
+                    const num  = (card.querySelector('.customer-number-badge')?.textContent || '').toLowerCase();
+                    const show = !q || name.includes(q) || num.includes(q);
+                    card.style.display = show ? 'block' : 'none';
+                    if (show) count++;
+                });
+                const badge = document.getElementById('enkel-order-count');
+                if (badge) badge.textContent = count;
+            });
+        }
+    }
+
+    setupTopTabs();
+
     // Sett minimumdato til i dag
     const today = new Date().toISOString().split('T')[0];
     modalDateInput.setAttribute('min', today);
@@ -194,7 +270,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             visibleCustomers = allCustomers.filter(c => !c.isInactive);
 
             renderTechnicians(technicians);
+            renderEnkelTechnicians(technicians);
             renderCurrentTab();
+            renderEnkelCustomers();
             
         } catch (error) {
             console.error('Error fetching data:', error);
@@ -258,6 +336,95 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // ── Enkel-fane: render teknikere til #enkel-technician-list ─────────
+    function renderEnkelTechnicians(technicians) {
+        const list = document.getElementById('enkel-technician-list');
+        if (!list) return;
+        list.innerHTML = '';
+
+        if (tenantFlags.show_pool_technician === true) {
+            const fellesCard = document.createElement('div');
+            fellesCard.className = 'technician-card';
+            fellesCard.style.cssText = 'background:#f9fafb;border:2px dashed #9ca3af;';
+            fellesCard.draggable = true;
+            fellesCard.dataset.technicianId = '__pool__';
+            fellesCard.innerHTML = `
+                <div class="technician-avatar" style="background-color:#9ca3af;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                </div>
+                <div>
+                    <strong>Felles</strong>
+                    <div style="font-size:11px;color:#6b7280;font-weight:400;margin-top:2px;">Pool — alle kan plukke</div>
+                </div>
+            `;
+            fellesCard.addEventListener('dragstart', handleDragStart);
+            fellesCard.addEventListener('dragend', handleDragEnd);
+            list.appendChild(fellesCard);
+        }
+
+        if (technicians.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'empty-state';
+            empty.innerHTML = '<p>Ingen teknikere funnet</p>';
+            list.appendChild(empty);
+            return;
+        }
+
+        technicians.forEach(tech => {
+            const techCard = document.createElement('div');
+            techCard.className = 'technician-card';
+            techCard.draggable = true;
+            techCard.dataset.technicianId = tech.id;
+            techCard.innerHTML = `
+                <div class="technician-avatar">${tech.initials}</div>
+                <div><strong>${tech.name}</strong></div>
+            `;
+            techCard.addEventListener('dragstart', handleDragStart);
+            techCard.addEventListener('dragend', handleDragEnd);
+            list.appendChild(techCard);
+        });
+    }
+
+    // ── Enkel-fane: render kunder til #enkel-customer-list ──────────────
+    function renderEnkelCustomers() {
+        const list = document.getElementById('enkel-customer-list');
+        if (!list) return;
+        list.innerHTML = '';
+
+        const customers = visibleCustomers;
+        const badge = document.getElementById('enkel-order-count');
+        if (badge) badge.textContent = customers.length;
+
+        if (customers.length === 0) {
+            list.innerHTML = '<div class="empty-state"><p>Ingen kunder funnet</p></div>';
+            return;
+        }
+
+        customers.forEach(customer => {
+            const card = document.createElement('div');
+            card.className = 'modern-customer-card project-card';
+            card.dataset.customerId = customer.id;
+            card.dataset.customerName = customer.name;
+            card.dataset.cardType = 'customer';
+            card.innerHTML = `
+                <div class="customer-card-header">
+                    <span class="customer-name">${customer.name}</span>
+                    ${customer.customerNumber ? `<span class="customer-number-badge">${customer.customerNumber}</span>` : ''}
+                </div>
+                ${customer.address ? `<div class="customer-address">${customer.address}</div>` : ''}
+            `;
+            card.addEventListener('dragover', handleDragOver);
+            card.addEventListener('dragleave', handleDragLeave);
+            card.addEventListener('drop', handleDrop);
+            list.appendChild(card);
+        });
+    }
+
     function updateListHeader(title, count) {
         if (plannerListTitle) {
             plannerListTitle.textContent = title;
@@ -280,6 +447,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         customersTabBtn?.classList.toggle('active', tabName === 'customers');
         projectsTabBtn?.classList.toggle('active', tabName === 'projects');
+        document.getElementById('periode-tab-btn')?.classList.toggle('active', tabName === 'periode');
+
+        // Avansert sub-tab: customers / projects only (#periode-content owned by setTopTab)
+        if (projectList) projectList.style.display = 'block';
 
         if (customerSearchInput) {
             customerSearchInput.style.display = tabName === 'customers' ? 'block' : 'none';
@@ -290,6 +461,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         if (plannerSearchLabel) {
+            plannerSearchLabel.style.display = 'block';
             plannerSearchLabel.textContent = tabName === 'projects' ? 'Søk prosjekt' : 'Søk kunde';
         }
 
@@ -309,7 +481,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             renderProjects(projectSearchResults);
             return;
         }
-
         renderCustomers();
     }
 
@@ -498,6 +669,7 @@ function escapeHtml(unsafe) {
 
     customersTabBtn?.addEventListener('click', () => setActiveTab('customers'));
     projectsTabBtn?.addEventListener('click', () => setActiveTab('projects'));
+    document.getElementById('periode-tab-btn')?.addEventListener('click', () => setActiveTab('periode'));
 
     function handleDragStart(e) {
         draggedTechnician = e.target;
@@ -589,7 +761,8 @@ function escapeHtml(unsafe) {
             
             // OPPDATERT: Vis modal med equipment selection
             await showModalWithEquipment(customer, isPool ? null : technician, {
-                suggestedDescription: cardType === 'project' ? suggestedDescription : ''
+                suggestedDescription: cardType === 'project' ? suggestedDescription : '',
+                simple: currentTopTab === 'enkel',
             });
             
         } catch (error) {
@@ -709,6 +882,45 @@ function escapeHtml(unsafe) {
         });
 
         syncClusterCheckboxStates();
+        updateEquipmentCounter();
+    }
+
+    // ── Enkel-modus: flat anleggsliste uten cluster-grupper ─────────────
+    function renderEquipmentListSimple(equipment, selectedIds = null) {
+        const equipmentList = document.querySelector('.equipment-list');
+        if (!equipmentList) return;
+
+        if (!equipment.length) {
+            equipmentList.innerHTML = '<div class="no-equipment-message">Ingen aktive anlegg funnet for kunden.</div>';
+            return;
+        }
+
+        const markup = equipment.map(eq => {
+            const name = escapeHtml(eq.systemnavn || eq.name || 'Uten navn');
+            const type = escapeHtml(eq.systemtype || eq.type || 'Ukjent type');
+            const systemNumber = escapeHtml(eq.systemnummer || eq.systemNumber || '');
+            const placement = escapeHtml(eq.plassering || eq.systemPlacement || eq.location || 'Uten plassering');
+            const isChecked = selectedIds ? selectedIds.has(String(eq.id)) : true;
+            return `
+                <label class="equipment-selection-item">
+                    <input type="checkbox" value="${eq.id}" class="equipment-checkbox" ${isChecked ? 'checked' : ''}>
+                    <div class="equipment-info">
+                        <span class="equipment-name">${name}</span>
+                        <div class="equipment-detail-inline">
+                            <span class="equipment-detail-chip"><strong>Type:</strong> ${type}</span>
+                            ${systemNumber ? `<span class="equipment-detail-chip"><strong>Nr:</strong> ${systemNumber}</span>` : ''}
+                            <span class="equipment-detail-chip equipment-detail-chip-wide"><strong>Plass:</strong> ${placement}</span>
+                        </div>
+                    </div>
+                </label>
+            `;
+        }).join('');
+
+        equipmentList.innerHTML = markup;
+
+        document.querySelectorAll('.equipment-checkbox').forEach(cb => {
+            cb.addEventListener('change', updateEquipmentCounter);
+        });
         updateEquipmentCounter();
     }
 
@@ -984,7 +1196,7 @@ function escapeHtml(unsafe) {
         });
     }
 
-    async function loadEquipmentForModal(customer, selectedIds = null) {
+    async function loadEquipmentForModal(customer, selectedIds = null, simple = false) {
         try {
             const response = await fetch(`/api/admin/equipment?customerId=${customer.externalId || customer.id}`, {
                 credentials: 'include'
@@ -994,7 +1206,12 @@ function escapeHtml(unsafe) {
 
             const equipment = await response.json();
             equipment.sort((a, b) => (a.clusterName || 'zzz').localeCompare(b.clusterName || 'zzz') || (a.name || '').localeCompare(b.name || ''));
-            renderEquipmentList(equipment, selectedIds);
+
+            if (simple) {
+                renderEquipmentListSimple(equipment, selectedIds);
+            } else {
+                renderEquipmentList(equipment, selectedIds);
+            }
         } catch (error) {
             console.error('Error loading equipment:', error);
             showToast('Kunne ikke laste anlegg', 'error');
@@ -1003,13 +1220,68 @@ function escapeHtml(unsafe) {
 
     async function showModalWithEquipment(customer, technicianName, options = {}) {
     try {
-        // Definer today lokalt i funksjonen
         const today = getLocalDateString();
         const defaultDescription = options.suggestedDescription || `Service hos ${customer.name}`;
-        
-        // Bygg modal innhold med equipment selection OG description-felt
+        const simple = !!options.simple;
+
         const modalContent = document.querySelector('.modal-content');
-        modalContent.innerHTML = `
+
+        if (simple) {
+            // ── Enkel-modus: dato + beskrivelse + anlegg (ingen cluster) ──
+            modalContent.innerHTML = `
+                <div class="modal-header">
+                    <h3>Opprett serviceoppdrag</h3>
+                    <span style="font-size: 13px; color: #6b7280; font-weight: 400;">${escapeHtml(customer.name)} · ${technicianName ? escapeHtml(technicianName) : 'Uten tekniker (pool)'}</span>
+                </div>
+
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="modal-date">Dato</label>
+                        <input type="date" id="modal-date" value="${today}" min="${today}" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="modal-description">Beskrivelse</label>
+                        <input type="text" id="modal-description"
+                               value="${escapeAttribute(defaultDescription)}"
+                               placeholder="Skriv inn beskrivelse..."
+                               class="form-input"
+                               required>
+                    </div>
+
+                    <div class="equipment-selection-section">
+                        <h4>Velg anlegg for service:</h4>
+                        <div class="equipment-selection-help">
+                            <small>Alle anlegg er valgt som standard. Fjern haken for anlegg som ikke skal inkluderes.</small>
+                        </div>
+                        <div class="equipment-bulk-actions">
+                            <button type="button" class="btn equipment-quick-btn equipment-quick-btn-add" id="equipment-select-all-btn">+ Marker alle</button>
+                            <button type="button" class="btn equipment-quick-btn equipment-quick-btn-remove" id="equipment-deselect-all-btn">- Fjern markering alle</button>
+                            <span id="equipment-counter" style="margin-left: 12px; font-size: 13px; color: #6b7280; align-self: center;"></span>
+                        </div>
+                        <div class="equipment-list"></div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="modal-cancel-btn">Avbryt</button>
+                    <button type="button" class="btn btn-primary" id="modal-save-btn">Opprett oppdrag</button>
+                </div>
+            `;
+
+            await loadEquipmentForModal(customer, null, true);
+
+            dateModal.style.display = 'flex';
+            dateModal.classList.add('show');
+
+            document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
+            document.getElementById('modal-save-btn').addEventListener('click', saveOrderWithEquipment);
+            document.getElementById('equipment-select-all-btn')?.addEventListener('click', selectAllEquipment);
+            document.getElementById('equipment-deselect-all-btn')?.addEventListener('click', deselectAllEquipment);
+
+        } else {
+            // ── Avansert-modus: full modal med cluster, prosjekt-dropdown etc. ──
+            modalContent.innerHTML = `
             <div class="modal-header">
                 <h3>Opprett serviceoppdrag</h3>
                 <span style="font-size: 13px; color: #6b7280; font-weight: 400;">${escapeHtml(customer.name)} · ${technicianName ? escapeHtml(technicianName) : 'Uten tekniker (pool)'}</span>
@@ -1118,7 +1390,9 @@ function escapeHtml(unsafe) {
         } else {
             console.error('Could not find modal-add-equipment-btn!');
         }
-        
+
+        } // end else (avansert-modus)
+
     } catch (error) {
         console.error('Error loading equipment:', error);
         // Vis standard modal hvis equipment loading feiler
@@ -1877,6 +2151,470 @@ function showOrderModalWithEquipment(customer, equipmentIds) {
             }
         }, 3000);
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    // PERIODE-FANE
+    // ─────────────────────────────────────────────────────────────────
+    let periodeInitialized = false;
+    let periodeState = {
+        ruleId: null,
+        savedRuleId: null,
+        previewDone: false,
+        previewCount: 0,
+        rules: [],
+    };
+
+    function populatePeriodeCustomers() {
+        const select = document.getElementById('periode-customer-select');
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = '<option value="">Velg kunde...</option>';
+        (allCustomersForSearch || []).forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.name + (c.customerNumber ? ` (${c.customerNumber})` : '');
+            select.appendChild(opt);
+        });
+        if (current) select.value = current;
+    }
+
+    async function populatePeriodeTechnicians() {
+        const select = document.getElementById('periode-technician-select');
+        if (!select) return;
+        try {
+            const res = await fetch('/api/admin/technicians', { credentials: 'include' });
+            if (!res.ok) return;
+            const technicians = await res.json();
+            select.innerHTML = '<option value="">Pool / ingen tekniker</option>';
+            technicians.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.id;
+                opt.textContent = t.name;
+                select.appendChild(opt);
+            });
+        } catch (e) {
+            console.warn('Kunne ikke hente teknikere for Periode-skjema:', e);
+        }
+    }
+
+    async function loadPeriodeEquipment(customerId) {
+        const container = document.getElementById('periode-equipment-list');
+        if (!container) return;
+        if (!customerId) {
+            container.innerHTML = '<span class="periode-equipment-placeholder">Velg kunde for å laste anlegg</span>';
+            return;
+        }
+        container.innerHTML = '<span class="periode-equipment-placeholder">Laster anlegg...</span>';
+        try {
+            const res = await fetch(`/api/admin/equipment?customerId=${customerId}`, { credentials: 'include' });
+            if (!res.ok) throw new Error('Feil');
+            const raw = await res.json();
+            const list = Array.isArray(raw) ? raw : (raw.equipment || []);
+            const active = list.filter(e => !e.status || e.status === 'active');
+            if (active.length === 0) {
+                container.innerHTML = '<span class="periode-equipment-placeholder">Ingen aktive anlegg</span>';
+                return;
+            }
+            container.innerHTML = active.map(eq => `
+                <label class="periode-equipment-item">
+                    <input type="checkbox" class="periode-equipment-checkbox" value="${eq.id}" checked>
+                    <span>${escapeHtml(eq.systemnavn || eq.name || 'Ukjent anlegg')}</span>
+                    ${eq.systemtype ? `<span class="periode-equipment-type">${escapeHtml(eq.systemtype)}</span>` : ''}
+                </label>`).join('');
+        } catch (e) {
+            container.innerHTML = '<span class="periode-equipment-placeholder" style="color:var(--danger-color,#dc2626);">Kunne ikke laste anlegg</span>';
+        }
+    }
+
+    function getSelectedPeriodeEquipmentIds() {
+        return Array.from(document.querySelectorAll('.periode-equipment-checkbox:checked')).map(cb => cb.value);
+    }
+
+    function handlePeriodeFreqChange() {
+        const val = document.querySelector('input[name="periode-freq"]:checked')?.value;
+        const xEl = document.getElementById('freq-every-x-container');
+        const wdEl = document.getElementById('freq-weekdays-container');
+        if (xEl) xEl.style.display = val === 'every_x_days' ? 'block' : 'none';
+        if (wdEl) wdEl.style.display = val === 'weekdays' ? 'block' : 'none';
+    }
+
+    function hidePeriodePreview() {
+        const el = document.getElementById('periode-preview');
+        if (el) el.style.display = 'none';
+    }
+
+    function updatePeriodeGenerateBtn() {
+        const btn = document.getElementById('periode-generate-btn');
+        if (!btn) return;
+        const rule = periodeState.rules.find(r => r.id === periodeState.savedRuleId);
+        const alreadyGenerated = rule && rule.generated_count > 0;
+        if (alreadyGenerated) {
+            btn.disabled = true;
+            btn.title = 'Allerede generert — opprett ny regel for ny periode';
+        } else if (!periodeState.savedRuleId) {
+            btn.disabled = true;
+            btn.title = 'Lagre regel først';
+        } else if (!periodeState.previewDone) {
+            btn.disabled = true;
+            btn.title = 'Kjør forhåndsvisning først';
+        } else {
+            btn.disabled = false;
+            btn.title = '';
+        }
+    }
+
+    async function loadPeriodeRules() {
+        const container = document.getElementById('periode-rules-list');
+        if (!container) return;
+        try {
+            const res = await fetch('/api/admin/recurring-orders', { credentials: 'include' });
+            if (!res.ok) throw new Error('Feil');
+            periodeState.rules = await res.json();
+            renderPeriodeRules();
+            updatePeriodeGenerateBtn();
+        } catch (e) {
+            console.error('Kunne ikke hente periodergler:', e);
+        }
+    }
+
+    function renderPeriodeRules() {
+        const container = document.getElementById('periode-rules-list');
+        if (!container) return;
+        if (periodeState.rules.length === 0) {
+            container.innerHTML = '<span class="periode-rules-empty">Ingen regler opprettet ennå.</span>';
+            return;
+        }
+        const freqLabels = {
+            daily: 'Daglig', weekly: 'Ukentlig', monthly: 'Månedlig',
+            yearly: 'Årlig', every_x_days: 'Hver X dag', weekdays: 'Valgte ukedager',
+        };
+        container.innerHTML = periodeState.rules.map(rule => {
+            const freqLabel = rule.frequency_type === 'every_x_days'
+                ? `Hver ${rule.frequency_value} dag`
+                : (freqLabels[rule.frequency_type] || rule.frequency_type);
+            const generated = rule.generated_count > 0;
+            const badge = generated
+                ? '<span class="periode-rule-badge periode-rule-badge--done">Generert</span>'
+                : (rule.is_active
+                    ? '<span class="periode-rule-badge periode-rule-badge--active">Aktiv</span>'
+                    : '<span class="periode-rule-badge periode-rule-badge--inactive">Inaktiv</span>');
+            return `
+            <div class="periode-rule-card">
+                <div class="periode-rule-header">
+                    <div class="periode-rule-info">
+                        <strong>${escapeHtml(rule.customer_name)}</strong>${badge}
+                    </div>
+                    <div class="periode-rule-actions">
+                        <button class="btn btn-secondary btn-sm periode-copy-btn" data-rule-id="${rule.id}">Kopier</button>
+                        <button class="btn btn-danger btn-sm periode-delete-btn" data-rule-id="${rule.id}">Slett</button>
+                    </div>
+                </div>
+                <div class="periode-rule-meta">
+                    <span>${escapeHtml(rule.start_date?.slice(0,10)||'')} → ${escapeHtml(rule.end_date?.slice(0,10)||'')}</span>
+                    <span>${freqLabel}</span>
+                    ${generated ? `<span>${rule.generated_count} ordrer opprettet</span>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+        container.querySelectorAll('.periode-copy-btn').forEach(btn =>
+            btn.addEventListener('click', () => copyPeriodeRule(parseInt(btn.dataset.ruleId))));
+        container.querySelectorAll('.periode-delete-btn').forEach(btn =>
+            btn.addEventListener('click', () => deletePeriodeRule(parseInt(btn.dataset.ruleId))));
+    }
+
+    async function copyPeriodeRule(ruleId) {
+        try {
+            const res = await fetch(`/api/admin/recurring-orders/${ruleId}`, { credentials: 'include' });
+            if (!res.ok) throw new Error('Kunne ikke hente regel');
+            const rule = await res.json();
+            periodeState.ruleId = null;
+            periodeState.savedRuleId = null;
+            periodeState.previewDone = false;
+            periodeState.previewCount = 0;
+            document.getElementById('periode-form-title').textContent = 'Ny periodeplan (kopi)';
+            document.getElementById('periode-customer-select').value = rule.customer_id;
+            document.getElementById('periode-technician-select').value = rule.technician_id || '';
+            document.getElementById('periode-service-type').value = rule.service_type || 'Generell service';
+            document.getElementById('periode-description').value = rule.description || '';
+            document.getElementById('periode-address-street').value = rule.service_address_street || '';
+            document.getElementById('periode-address-postal').value = rule.service_address_postal_code || '';
+            document.getElementById('periode-address-city').value = rule.service_address_city || '';
+            const freqRadio = document.querySelector(`input[name="periode-freq"][value="${rule.frequency_type}"]`);
+            if (freqRadio) freqRadio.checked = true;
+            document.getElementById('periode-freq-x').value = rule.frequency_value || 14;
+            if (Array.isArray(rule.weekdays)) {
+                document.querySelectorAll('input[name="weekday"]').forEach(cb => {
+                    cb.checked = rule.weekdays.includes(parseInt(cb.value));
+                });
+            }
+            handlePeriodeFreqChange();
+            const prevEnd = rule.end_date?.slice(0, 10);
+            if (prevEnd) {
+                const d = new Date(prevEnd);
+                d.setDate(d.getDate() + 1);
+                const pad = n => String(n).padStart(2, '0');
+                document.getElementById('periode-start-date').value =
+                    `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+            }
+            document.getElementById('periode-end-date').value = '';
+            document.getElementById('periode-scheduled-time').value = rule.scheduled_time || '';
+            await loadPeriodeEquipment(rule.customer_id);
+            if (Array.isArray(rule.equipment_ids)) {
+                document.querySelectorAll('.periode-equipment-checkbox').forEach(cb => {
+                    cb.checked = rule.equipment_ids.includes(cb.value);
+                });
+            }
+            hidePeriodePreview();
+            updatePeriodeGenerateBtn();
+            document.getElementById('periode-form-card')?.scrollIntoView({ behavior: 'smooth' });
+            showToast('Skjema forhåndsutfylt fra eksisterende regel', 'success');
+        } catch (e) {
+            console.error('copyPeriodeRule error:', e);
+            showToast('Kunne ikke kopiere regel', 'error');
+        }
+    }
+
+    async function deletePeriodeRule(ruleId) {
+        if (!confirm('Slett regel? Allerede genererte ordrer beholdes.')) return;
+        try {
+            const res = await fetch(`/api/admin/recurring-orders/${ruleId}`, {
+                method: 'DELETE', credentials: 'include',
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || 'Sletting feilet');
+            }
+            if (periodeState.savedRuleId === ruleId) {
+                periodeState.savedRuleId = null;
+                periodeState.ruleId = null;
+            }
+            showToast('Regel slettet. Genererte ordrer beholdes.', 'success');
+            await loadPeriodeRules();
+        } catch (e) {
+            showToast(e.message || 'Kunne ikke slette regel', 'error');
+        }
+    }
+
+    function buildPeriodeRequestBody() {
+        const frequencyType = document.querySelector('input[name="periode-freq"]:checked')?.value;
+        const weekdays = frequencyType === 'weekdays'
+            ? Array.from(document.querySelectorAll('input[name="weekday"]:checked')).map(cb => parseInt(cb.value))
+            : null;
+        const customerSelect = document.getElementById('periode-customer-select');
+        const customerId = customerSelect?.value;
+        const customerName = customerSelect?.selectedOptions[0]?.text?.split(' (')[0] || '';
+        return {
+            customerId,
+            customerName,
+            technicianId: document.getElementById('periode-technician-select').value || null,
+            equipmentIds: getSelectedPeriodeEquipmentIds(),
+            description: document.getElementById('periode-description').value.trim() || null,
+            serviceType: document.getElementById('periode-service-type').value.trim() || 'Generell service',
+            serviceAddressStreet: document.getElementById('periode-address-street').value.trim() || null,
+            serviceAddressPostalCode: document.getElementById('periode-address-postal').value.trim() || null,
+            serviceAddressCity: document.getElementById('periode-address-city').value.trim() || null,
+            startDate: document.getElementById('periode-start-date').value,
+            endDate: document.getElementById('periode-end-date').value,
+            frequencyType,
+            frequencyValue: frequencyType === 'every_x_days'
+                ? parseInt(document.getElementById('periode-freq-x').value) || 1
+                : null,
+            weekdays,
+            scheduledTime: document.getElementById('periode-scheduled-time').value || null,
+        };
+    }
+
+    function validatePeriodeForm(body) {
+        if (!body.customerId) return 'Velg kunde';
+        if (!body.startDate) return 'Velg startdato';
+        if (!body.endDate) return 'Velg sluttdato';
+        if (body.endDate < body.startDate) return 'Sluttdato må være lik eller etter startdato';
+        if (!body.frequencyType) return 'Velg frekvens';
+        if (body.frequencyType === 'weekdays' && (!body.weekdays || body.weekdays.length === 0))
+            return 'Velg minst én ukedag';
+        return null;
+    }
+
+    async function savePeriodeRule(body) {
+        const isEdit = !!periodeState.savedRuleId;
+        const url = isEdit
+            ? `/api/admin/recurring-orders/${periodeState.savedRuleId}`
+            : '/api/admin/recurring-orders';
+        const res = await fetch(url, {
+            method: isEdit ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Kunne ikke lagre regel');
+        periodeState.savedRuleId = data.id;
+        periodeState.ruleId = data.id;
+        document.getElementById('periode-form-title').textContent = 'Rediger periodeplan';
+        await loadPeriodeRules();
+        return data;
+    }
+
+    document.getElementById('periode-preview-btn')?.addEventListener('click', async () => {
+        const body = buildPeriodeRequestBody();
+        const err = validatePeriodeForm(body);
+        if (err) return showToast(err, 'error');
+
+        const previewBtn = document.getElementById('periode-preview-btn');
+        previewBtn.disabled = true;
+        previewBtn.textContent = 'Lagrer...';
+        try {
+            const saved = await savePeriodeRule(body);
+            previewBtn.textContent = 'Beregner...';
+            const res = await fetch(`/api/admin/recurring-orders/${saved.id}/preview`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Forhåndsvisning feilet');
+            periodeState.previewDone = true;
+            periodeState.previewCount = data.count;
+            const previewEl = document.getElementById('periode-preview');
+            const previewBody = document.getElementById('periode-preview-body');
+            previewEl.style.display = 'block';
+            let html = `<p class="preview-count"><strong>${data.count} ordrer</strong> vil bli opprettet</p>`;
+            if (data.first_dates?.length > 0) {
+                html += `<ul class="preview-dates">${data.first_dates.map(d => `<li>${d}</li>`).join('')}</ul>`;
+                if (data.count > data.first_dates.length)
+                    html += `<p class="preview-more">… og ${data.count - data.first_dates.length} til</p>`;
+                if (data.last_date)
+                    html += `<p class="preview-last">Siste dato: <strong>${data.last_date}</strong></p>`;
+            }
+            if (data.warning_threshold_exceeded)
+                html += `<p class="preview-warning">⚠️ Over 1000 ordrer — bekreftelse kreves ved generering</p>`;
+            previewBody.innerHTML = html;
+            updatePeriodeGenerateBtn();
+            showToast('Forhåndsvisning klar', 'success');
+        } catch (e) {
+            showToast(e.message, 'error');
+        } finally {
+            previewBtn.disabled = false;
+            previewBtn.textContent = 'Forhåndsvis';
+        }
+    });
+
+    document.getElementById('periode-save-btn')?.addEventListener('click', async () => {
+        const body = buildPeriodeRequestBody();
+        const err = validatePeriodeForm(body);
+        if (err) return showToast(err, 'error');
+        const saveBtn = document.getElementById('periode-save-btn');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Lagrer...';
+        try {
+            await savePeriodeRule(body);
+            showToast('Regel lagret', 'success');
+        } catch (e) {
+            showToast(e.message, 'error');
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Lagre regel';
+        }
+    });
+
+    document.getElementById('periode-generate-btn')?.addEventListener('click', async () => {
+        if (!periodeState.savedRuleId) return showToast('Ingen regel lagret', 'error');
+        const count = periodeState.previewCount;
+        const msg = count > 1000
+            ? `Advarsel: Dette vil opprette ${count} ordrer (over 1000). Vil du fortsette?`
+            : `Generer ${count} ordrer for denne perioden?`;
+        if (!confirm(msg)) return;
+        const btn = document.getElementById('periode-generate-btn');
+        btn.disabled = true;
+        btn.textContent = 'Genererer...';
+        try {
+            const res = await fetch(`/api/admin/recurring-orders/${periodeState.savedRuleId}/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ confirmed: true }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Generering feilet');
+            showToast(`${data.created} ordrer opprettet`, 'success');
+            periodeState.previewDone = false;
+            hidePeriodePreview();
+            await loadPeriodeRules();
+            updatePeriodeGenerateBtn();
+        } catch (e) {
+            showToast(e.message, 'error');
+            btn.disabled = false;
+            btn.textContent = 'Generer ordrer';
+        }
+    });
+
+    document.getElementById('periode-reset-btn')?.addEventListener('click', () => {
+        if (confirm('Nullstille skjemaet? Ulagrede endringer går tapt.')) resetPeriodeForm();
+    });
+
+    document.getElementById('periode-customer-select')?.addEventListener('change', async (e) => {
+        const customerId = e.target.value;
+        periodeState.savedRuleId = null;
+        periodeState.previewDone = false;
+        hidePeriodePreview();
+        updatePeriodeGenerateBtn();
+        await loadPeriodeEquipment(customerId);
+        if (customerId) {
+            try {
+                const res = await fetch(`/api/admin/customers/${customerId}/addresses`, { credentials: 'include' });
+                if (res.ok) {
+                    const addr = await res.json();
+                    const phys = addr.physicalAddress;
+                    if (phys) {
+                        document.getElementById('periode-address-street').value = phys.street || '';
+                        document.getElementById('periode-address-postal').value = phys.postalCode || phys.postal_code || '';
+                        document.getElementById('periode-address-city').value = phys.city || '';
+                    }
+                }
+            } catch (_) {}
+        }
+    });
+
+    document.querySelectorAll('input[name="periode-freq"]').forEach(radio =>
+        radio.addEventListener('change', handlePeriodeFreqChange));
+
+    function resetPeriodeForm() {
+        periodeState.ruleId = null;
+        periodeState.savedRuleId = null;
+        periodeState.previewDone = false;
+        periodeState.previewCount = 0;
+        document.getElementById('periode-form-title').textContent = 'Ny periodeplan';
+        document.getElementById('periode-customer-select').value = '';
+        document.getElementById('periode-technician-select').value = '';
+        document.getElementById('periode-service-type').value = 'Generell service';
+        document.getElementById('periode-description').value = '';
+        document.getElementById('periode-address-street').value = '';
+        document.getElementById('periode-address-postal').value = '';
+        document.getElementById('periode-address-city').value = '';
+        document.getElementById('periode-start-date').value = '';
+        document.getElementById('periode-end-date').value = '';
+        document.getElementById('periode-scheduled-time').value = '';
+        const weeklyRadio = document.querySelector('input[name="periode-freq"][value="weekly"]');
+        if (weeklyRadio) weeklyRadio.checked = true;
+        document.getElementById('periode-freq-x').value = '14';
+        document.querySelectorAll('input[name="weekday"]').forEach(cb => cb.checked = false);
+        handlePeriodeFreqChange();
+        hidePeriodePreview();
+        updatePeriodeGenerateBtn();
+        loadPeriodeEquipment('');
+    }
+
+    async function initPeriodeFane() {
+        populatePeriodeCustomers();
+        await populatePeriodeTechnicians();
+        handlePeriodeFreqChange();
+        const today = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const startEl = document.getElementById('periode-start-date');
+        if (startEl && !startEl.value) {
+            startEl.value = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+        }
+        await loadPeriodeRules();
+    }
+    // ─── END PERIODE-FANE ─────────────────────────────────────────────
 
     // Initialiser
     await fetchData();

@@ -158,9 +158,22 @@ function getDefaultSettings(tenantId) {
       show_pool_technician: false,
       show_periode_tab: false,
       show_avvik_module: false,
-      show_enkel_tab: false
+      show_enkel_tab: false,
+      show_avansert_tab: true,
+      default_tab: 'avansert'
     },
+    app_menu: getDefaultAppMenuSettings(),
     lastUpdated: new Date().toISOString()
+  };
+}
+
+function getDefaultAppMenuSettings() {
+  return {
+    planned_service: { visible: true, title: 'Planlagte service' },
+    planlegg_oppdrag: { visible: true, title: 'Planlegg oppdrag' },
+    hasteordre: { visible: true, title: 'Opprett hasteordre' },
+    search_orders: { visible: true, title: 'Søk ordre' },
+    hms: { visible: true, title: 'HMS' }
   };
 }
 
@@ -178,10 +191,17 @@ router.get('/app-settings', async (req, res) => {
     const settings = await loadTenantSettings(tenantId);
     res.json({
       hmsSettings: settings.hmsSettings ?? { hmsMenuEnabled: true, sjaPerOrderEnabled: true },
+      app_menu: {
+        ...getDefaultAppMenuSettings(),
+        ...(settings.app_menu || {})
+      },
     });
   } catch (error) {
     console.error('Error loading app-settings:', error);
-    res.json({ hmsSettings: { hmsMenuEnabled: true, sjaPerOrderEnabled: true } });
+    res.json({
+      hmsSettings: { hmsMenuEnabled: true, sjaPerOrderEnabled: true },
+      app_menu: getDefaultAppMenuSettings()
+    });
   }
 });
 
@@ -342,6 +362,19 @@ router.post('/save-settings', requireAdmin, async (req, res) => {
         ...(currentSettings.module_flags || {}),
         ...settingsUpdate.module_flags
       };
+    }
+
+    if (settingsUpdate.app_menu) {
+      const defaults = getDefaultAppMenuSettings();
+      const currentAppMenu = currentSettings.app_menu || {};
+      updatedSettings.app_menu = Object.keys(defaults).reduce((acc, key) => {
+        acc[key] = {
+          ...defaults[key],
+          ...(currentAppMenu[key] || {}),
+          ...(settingsUpdate.app_menu[key] || {})
+        };
+        return acc;
+      }, {});
     }
 
     // Save to GCS
@@ -864,6 +897,9 @@ router.post('/avvik', upload.single('image'), async (req, res) => {
     console.log('📸 Laster opp avvik-bilde:', req.file.originalname);
 
     const { orderId, equipmentId, reportId, avvikId } = req.body;
+    // NYTT: Hent imageType fra request, default 'avvik' for bakoverkompatibilitet
+    const imageType = ['ok', 'image_only'].includes(req.body.imageType) ? req.body.imageType : (req.body.imageType === 'avvik' ? 'avvik' : 'avvik');
+    const isOkImage = imageType === 'ok' || imageType === 'image_only'; // begge typer hopper over avvik-nummerering
     const tenantId = getResolvedTenantId(req);
     if (!tenantId) {
       console.error('❌ Missing tenantId in session:', req.path);
@@ -890,19 +926,22 @@ router.post('/avvik', upload.single('image'), async (req, res) => {
     }
     
     // KORREKT: Bruk auto-increment funksjon for å få neste avvik-nummer
-    const avvikNumberResult = await pool.query(
-      `SELECT COALESCE(MAX(avvik_number), 0) + 1 as next_avvik_number
-       FROM avvik_images 
-       WHERE service_report_id = $1`,
-      [reportId]
-    );
-    
-    const avvikNumber = avvikNumberResult.rows[0].next_avvik_number; // 1, 2, 3, etc.
-    console.log('📊 Generated avvik number:', avvikNumber);
+    // For OK-bilder hoppes avvik-nummerering over (avvik_number = NULL)
+    let avvikNumber = null;
+    if (!isOkImage) {
+      const avvikNumberResult = await pool.query(
+        `SELECT COALESCE(MAX(avvik_number), 0) + 1 as next_avvik_number
+         FROM avvik_images 
+         WHERE service_report_id = $1`,
+        [reportId]
+      );
+      avvikNumber = avvikNumberResult.rows[0].next_avvik_number; // 1, 2, 3, etc.
+      console.log('📊 Generated avvik number:', avvikNumber);
+    }
 
     // Generate file path med korrekt nummer
     const fileExtension = path.extname(req.file.originalname).slice(1) || 'jpg';
-    const filePath = generateImagePath(tenantId, orderId, equipmentId, 'avvik', avvikNumber, fileExtension);
+    const filePath = generateImagePath(tenantId, orderId, equipmentId, imageType, avvikNumber, fileExtension);
     
     console.log('📁 Generated file path:', filePath);
     
@@ -911,6 +950,8 @@ router.post('/avvik', upload.single('image'), async (req, res) => {
     
     console.log('☁️ Uploaded to GCS:', imageUrl);
     
+    // TODO: Tabellnavnet "avvik_images" er misvisende — inneholder nå også OK-bilder.
+    // Bør refaktoreres til "service_report_images" med category-kolonne i en fremtidig migrasjon.
     // Save to avvik_images table med korrekte kolonner
     const imageRecord = await pool.query(
       `INSERT INTO avvik_images (service_report_id, avvik_number, checklist_item_id, image_url, image_type, metadata, uploaded_at, uploaded_by)
@@ -918,14 +959,14 @@ router.post('/avvik', upload.single('image'), async (req, res) => {
        RETURNING *`,
       [
         reportId,
-        avvikNumber,                    // INTEGER: 1, 2, 3, etc.
+        isOkImage ? null : avvikNumber,  // OK-bilder har ikke avvik_number
         avvikId || null,               // checklist_item_id
         imageUrl,
-        'avvik',
+        imageType,                     // 'ok' eller 'avvik'
         JSON.stringify({
           originalName: req.file.originalname,
           fileSize: req.file.size,
-          imageType: 'avvik',
+          imageType: imageType,
           filePath: filePath,
           avvikId: avvikId,
           componentIndex: req.body.componentIndex || null  // VIKTIG: Lagre component index
@@ -939,10 +980,10 @@ router.post('/avvik', upload.single('image'), async (req, res) => {
     res.json({
       success: true,
       url: imageUrl,
-      avvikNumber: avvikNumber,                                    // Backend returnerer: 1
-      formattedAvvikNumber: String(avvikNumber).padStart(3, '0'),  // Frontend får: "001"
-      message: `Avvik-bilde #${avvikNumber} lastet opp`,
-      imageType: 'avvik',
+      avvikNumber: isOkImage ? null : avvikNumber,
+      formattedAvvikNumber: isOkImage ? null : String(avvikNumber).padStart(3, '0'),
+      message: isOkImage ? 'OK-bilde lastet opp' : `Avvik-bilde #${avvikNumber} lastet opp`,
+      imageType: imageType,
       id: imageRecord.rows[0].id
     });
 
@@ -969,11 +1010,17 @@ function generateImagePath(tenantId, orderId, equipmentId, imageType, avvikNumbe
   if (imageType === 'avvik' && avvikNumber) {
     const formattedAvvikNumber = String(avvikNumber).padStart(3, '0');
     filename = `avvik-${formattedAvvikNumber}_${timestamp}_${random}.${fileExtension}`;
+  } else if (imageType === 'ok') {
+    // NYTT: OK-bilder har eget filnavn-mønster og lagres i /ok/-undermappen
+    filename = `ok_${timestamp}_${random}.${fileExtension}`;
   } else {
     filename = `${imageType}_${timestamp}_${random}.${fileExtension}`;
   }
-  
-  return `tenants/${tenantId}/service-reports/${year}/${month}/order-${orderId}/equipment-${equipmentId}/${imageType}/${filename}`;
+
+  // NYTT: OK-bilder lagres i egen undermappe under ordren
+  const subfolder = imageType === 'ok' ? '/ok' : '';
+
+  return `tenants/${tenantId}/service-reports/${year}/${month}/order-${orderId}${subfolder}/${filename}`;
 }
 
 // GET /api/images/avvik/:reportId - Hent alle avvik-bilder for en rapport
@@ -997,17 +1044,20 @@ router.get('/avvik/:reportId', async (req, res) => {
     }
     
     const result = await pool.query(
-      `SELECT id, service_report_id, avvik_number, image_url, uploaded_at, metadata, checklist_item_id
+      `SELECT id, service_report_id, avvik_number, image_url, image_type, uploaded_at, metadata, checklist_item_id
        FROM avvik_images 
        WHERE service_report_id = $1 
-       ORDER BY avvik_number ASC`,
+       ORDER BY uploaded_at ASC`,
       [reportId]
     );
     
-    // Legg til formatted_avvik_number for frontend
+    // Legg til formatted_avvik_number for frontend (null for ok-bilder)
     const formattedResults = result.rows.map(row => ({
       ...row,
-      formatted_avvik_number: String(row.avvik_number).replace('AVVIK-', '')
+      image_type: row.image_type || 'avvik', // bakoverkompatibilitet
+      formatted_avvik_number: row.avvik_number != null
+        ? String(row.avvik_number).replace('AVVIK-', '')
+        : null
     }));
     
     console.log(`Found ${formattedResults.length} avvik images for report ${reportId}`);

@@ -373,7 +373,7 @@
             </div>
             
             <div class="menu-grid">
-                <a href="index.html" class="menu-card" style="border-left-color: #4A90E2;">
+                <a href="index.html" class="menu-card" data-menu-key="planned_service" style="border-left-color: #4A90E2;">
                     <div class="menu-icon">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -391,7 +391,7 @@
                     </svg>
                 </a>
 
-                <a href="planlegg.html" class="menu-card" style="border-left-color: #4A90E2;">
+                <a href="planlegg.html" class="menu-card" data-menu-key="planlegg_oppdrag" style="border-left-color: #4A90E2;">
                     <div class="menu-icon">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
@@ -411,7 +411,7 @@
                     </svg>
                 </a>
 
-                <a href="hasteordre.html" class="menu-card" style="border-left-color: #ff6b35;">
+                <a href="hasteordre.html" class="menu-card" data-menu-key="hasteordre" style="border-left-color: #ff6b35;">
                     <div class="menu-icon" style="color: #ff6b35;">
                         ⚡
                     </div>
@@ -424,7 +424,7 @@
                     </svg>
                 </a>
 
-                <a href="search-orders.html" class="menu-card" style="border-left-color: #10b981;">
+                <a href="search-orders.html" class="menu-card" data-menu-key="search_orders" style="border-left-color: #10b981;">
                     <div class="menu-icon">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="11" cy="11" r="8"/>
@@ -441,7 +441,7 @@
                 </a>
 
                 <!-- HMS-meny — vises kun hvis hms_menu_enabled === true -->
-                <a href="hms.html" class="menu-card" id="hms-menu-card" style="display:none; border-left-color: #0E9CB5;">
+                <a href="hms.html" class="menu-card" id="hms-menu-card" data-menu-key="hms" style="display:none; border-left-color: #0E9CB5;">
                     <div class="menu-icon">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -496,11 +496,35 @@
             settings
         });
 
-        // Vis HMS-knapp basert på innstillinger
-        if (settings?.hmsSettings?.hmsMenuEnabled !== false) {
-            document.getElementById('hms-menu-card').style.display = '';
-        }
+        applyAppMenuSettings(settings);
     });
+
+    function getDefaultAppMenuSettings() {
+        return {
+            planned_service: { visible: true, title: 'Planlagte service' },
+            planlegg_oppdrag: { visible: true, title: 'Planlegg oppdrag' },
+            hasteordre: { visible: true, title: 'Opprett hasteordre' },
+            search_orders: { visible: true, title: 'Søk ordre' },
+            hms: { visible: true, title: 'HMS' }
+        };
+    }
+
+    function applyAppMenuSettings(settings) {
+        const defaults = getDefaultAppMenuSettings();
+        const appMenu = settings?.app_menu || {};
+
+        document.querySelectorAll('[data-menu-key]').forEach(card => {
+            const key = card.dataset.menuKey;
+            const config = { ...(defaults[key] || { visible: true }), ...(appMenu[key] || {}) };
+            const isHmsDisabled = key === 'hms' && settings?.hmsSettings?.hmsMenuEnabled === false;
+            card.style.display = config.visible === false || isHmsDisabled ? 'none' : '';
+
+            const titleEl = card.querySelector('.menu-title');
+            if (titleEl && config.title) {
+                titleEl.textContent = config.title;
+            }
+        });
+    }
 </script>
 </body>
 </html>

@@ -17,73 +17,244 @@
         </header>
 
         <main class="main-content">
+            <!-- Topplinje: tittel + service-oversikt -->
             <div class="page-header">
                 <div class="page-header-top">
-                    <h1>Visuell Planlegger</h1>
+                    <h1 id="planner-page-title">Planlegger</h1>
                     <button id="open-overview-btn" class="btn-overview" title="Åpne service-oversikt">
                         📊 Service-oversikt
                     </button>
                 </div>
-                <p>Dra en tekniker og slipp på en kunde for å opprette serviceoppdrag. Maks 1 aktiv oppdrag per kunde.</p>
             </div>
 
-            <div class="planner-layout">
-                <aside class="planner-column" id="technician-column">
-                    <h2>Teknikere</h2>
-                    <div id="technician-list">
-                        <!-- Teknikere lastes dynamisk -->
-                    </div>
-                </aside>
-                
-                <section class="planner-column" id="project-column">
-                    <div class="planner-tabs">
-                        <button type="button" class="planner-tab active" id="customers-tab-btn" data-tab="customers">Kunder</button>
-                        <button type="button" class="planner-tab" id="projects-tab-btn" data-tab="projects">Prosjekter</button>
-                    </div>
-
-                    <div class="customer-search-section">
-                        <div class="planner-search-label" id="planner-search-label">Søk kunde</div>
-                        <input type="text"
-                               id="customer-search-input"
-                               class="customer-search-input"
-                               placeholder="Søk etter kunde (navn eller kundenummer)..."
-                               autocomplete="off">
-                        <input type="text"
-                               id="project-search-input"
-                               class="customer-search-input"
-                               placeholder="Søk etter prosjekt (navn eller prosjektnummer)..."
-                               autocomplete="off"
-                               style="display: none;">
-                    </div>
-
-                    <h2><span id="planner-list-title">Kunder uten oppdrag</span> <span class="order-count-badge" id="order-count">0</span></h2>
-                    <div id="project-list">
-                        <!-- Kunder/prosjekter lastes dynamisk -->
-                    </div>
-                </section>
+            <!-- Topp-fane-linje (skjult hvis kun 1 aktiv fane) -->
+            <div class="planner-top-tabs" id="planner-top-tabs" style="display:none;">
+                <button type="button" class="planner-top-tab" id="enkel-top-tab-btn"
+                        data-toptab="enkel" style="display:none;">Enkel</button>
+                <button type="button" class="planner-top-tab" id="avansert-top-tab-btn"
+                        data-toptab="avansert" style="display:none;">Avansert</button>
+                <button type="button" class="planner-top-tab" id="periode-top-tab-btn"
+                        data-toptab="periode" style="display:none;">Periode</button>
             </div>
+
+            <!-- ═══════════════════════════════════════════════
+                 ENKEL-FANE
+                 Dra tekniker til kunde → modal (dato + anlegg + beskrivelse)
+            ════════════════════════════════════════════════ -->
+            <div id="enkel-content" style="display:none;">
+                <p class="planner-guidance">Dra en tekniker og slipp på en kunde for å opprette serviceoppdrag.</p>
+
+                <div class="planner-layout">
+                    <aside class="planner-column" id="enkel-technician-column">
+                        <h2>Teknikere</h2>
+                        <div id="enkel-technician-list">
+                            <!-- Fylles dynamisk -->
+                        </div>
+                    </aside>
+
+                    <section class="planner-column" id="enkel-project-column">
+                        <h2>Kunder <span class="order-count-badge" id="enkel-order-count">0</span></h2>
+                        <div class="customer-search-section">
+                            <input type="text"
+                                   id="enkel-customer-search"
+                                   class="customer-search-input"
+                                   placeholder="Søk etter kunde..."
+                                   autocomplete="off">
+                        </div>
+                        <div id="enkel-customer-list">
+                            <!-- Fylles dynamisk -->
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════
+                 AVANSERT-FANE
+                 Nåværende full planlegger: tekniker + kunder/prosjekter
+            ════════════════════════════════════════════════ -->
+            <div id="avansert-content" style="display:none;">
+                <div class="planner-layout">
+                    <aside class="planner-column" id="technician-column">
+                        <h2>Teknikere</h2>
+                        <div id="technician-list">
+                            <!-- Teknikere lastes dynamisk -->
+                        </div>
+                    </aside>
+
+                    <section class="planner-column" id="project-column">
+                        <div class="planner-tabs">
+                            <button type="button" class="planner-tab active" id="customers-tab-btn" data-tab="customers">Kunder</button>
+                            <button type="button" class="planner-tab" id="projects-tab-btn" data-tab="projects">Prosjekter</button>
+                        </div>
+
+                        <div class="customer-search-section">
+                            <div class="planner-search-label" id="planner-search-label">Søk kunde</div>
+                            <input type="text"
+                                   id="customer-search-input"
+                                   class="customer-search-input"
+                                   placeholder="Søk etter kunde (navn eller kundenummer)..."
+                                   autocomplete="off">
+                            <input type="text"
+                                   id="project-search-input"
+                                   class="customer-search-input"
+                                   placeholder="Søk etter prosjekt (navn eller prosjektnummer)..."
+                                   autocomplete="off"
+                                   style="display: none;">
+                        </div>
+
+                        <h2><span id="planner-list-title">Kunder uten oppdrag</span> <span class="order-count-badge" id="order-count">0</span></h2>
+                        <div id="project-list">
+                            <!-- Kunder/prosjekter lastes dynamisk -->
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════
+                 PERIODE-FANE
+                 Recurring orders (periodeplan)
+            ════════════════════════════════════════════════ -->
+            <div id="periode-content" style="display:none;">
+
+                <!-- Skjema: ny/rediger regel -->
+                <div class="periode-form-card" id="periode-form-card">
+                    <h3 id="periode-form-title">Ny periodeplan</h3>
+
+                    <div class="form-group">
+                        <label for="periode-customer-select">Kunde</label>
+                        <select id="periode-customer-select" class="periode-input">
+                            <option value="">Velg kunde...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="periode-technician-select">Tekniker</label>
+                        <select id="periode-technician-select" class="periode-input">
+                            <option value="">Pool / ingen tekniker</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="periode-service-type">Tjenestetype</label>
+                        <input type="text" id="periode-service-type" class="periode-input" value="Generell service" placeholder="F.eks. Generell service">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="periode-description">Beskrivelse (valgfri)</label>
+                        <textarea id="periode-description" class="periode-input" rows="2" placeholder="Intern merknad..."></textarea>
+                    </div>
+
+                    <details class="periode-address-details">
+                        <summary>Service-adresse (valgfri)</summary>
+                        <div class="form-group mt-2">
+                            <label for="periode-address-street">Gate/vei</label>
+                            <input type="text" id="periode-address-street" class="periode-input" placeholder="Gateadresse">
+                        </div>
+                        <div class="periode-address-row">
+                            <div class="form-group">
+                                <label for="periode-address-postal">Postnr</label>
+                                <input type="text" id="periode-address-postal" class="periode-input" placeholder="0000">
+                            </div>
+                            <div class="form-group">
+                                <label for="periode-address-city">Sted</label>
+                                <input type="text" id="periode-address-city" class="periode-input" placeholder="Sted">
+                            </div>
+                        </div>
+                    </details>
+
+                    <div class="form-group">
+                        <label>Anlegg</label>
+                        <div id="periode-equipment-list" class="periode-equipment-list">
+                            <span class="periode-equipment-placeholder">Velg kunde for å laste anlegg</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Frekvens</label>
+                        <div class="periode-freq-radios" id="periode-freq-radios">
+                            <label class="freq-radio-label"><input type="radio" name="periode-freq" value="daily"> Daglig</label>
+                            <label class="freq-radio-label"><input type="radio" name="periode-freq" value="weekly" checked> Ukentlig</label>
+                            <label class="freq-radio-label"><input type="radio" name="periode-freq" value="monthly"> Månedlig</label>
+                            <label class="freq-radio-label"><input type="radio" name="periode-freq" value="yearly"> Årlig</label>
+                            <label class="freq-radio-label"><input type="radio" name="periode-freq" value="every_x_days"> Hver X dag</label>
+                            <label class="freq-radio-label"><input type="radio" name="periode-freq" value="weekdays"> Valgte ukedager</label>
+                        </div>
+
+                        <div id="freq-every-x-container" class="freq-extra" style="display:none;">
+                            <label for="periode-freq-x">Antall dager mellom hvert oppdrag</label>
+                            <input type="number" id="periode-freq-x" class="periode-input periode-input-sm" min="1" value="14" placeholder="F.eks. 14">
+                        </div>
+
+                        <div id="freq-weekdays-container" class="freq-extra" style="display:none;">
+                            <label>Velg ukedager</label>
+                            <div class="weekday-checkboxes">
+                                <label><input type="checkbox" name="weekday" value="1"> Man</label>
+                                <label><input type="checkbox" name="weekday" value="2"> Tir</label>
+                                <label><input type="checkbox" name="weekday" value="3"> Ons</label>
+                                <label><input type="checkbox" name="weekday" value="4"> Tor</label>
+                                <label><input type="checkbox" name="weekday" value="5"> Fre</label>
+                                <label><input type="checkbox" name="weekday" value="6"> Lør</label>
+                                <label><input type="checkbox" name="weekday" value="0"> Søn</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="periode-date-row">
+                        <div class="form-group">
+                            <label for="periode-start-date">Startdato</label>
+                            <input type="date" id="periode-start-date" class="periode-input">
+                        </div>
+                        <div class="form-group">
+                            <label for="periode-end-date">Sluttdato</label>
+                            <input type="date" id="periode-end-date" class="periode-input">
+                        </div>
+                        <div class="form-group">
+                            <label for="periode-scheduled-time">Klokkeslett (valgfri)</label>
+                            <input type="time" id="periode-scheduled-time" class="periode-input">
+                        </div>
+                    </div>
+
+                    <div id="periode-preview" class="periode-preview" style="display:none;">
+                        <div class="periode-preview-header">Forhåndsvisning</div>
+                        <div id="periode-preview-body"></div>
+                    </div>
+
+                    <div class="periode-form-actions">
+                        <button type="button" class="btn btn-secondary" id="periode-preview-btn">Forhåndsvis</button>
+                        <button type="button" class="btn btn-primary" id="periode-save-btn">Lagre regel</button>
+                        <button type="button" class="btn btn-success" id="periode-generate-btn" disabled title="Kjør forhåndsvisning og lagre regel først">Generer ordrer</button>
+                        <button type="button" class="btn btn-ghost" id="periode-reset-btn">Nullstill</button>
+                    </div>
+                </div>
+
+                <div class="periode-rules-section">
+                    <h3>Eksisterende periodergler</h3>
+                    <div id="periode-rules-list">
+                        <span class="periode-rules-empty">Ingen regler opprettet ennå.</span>
+                    </div>
+                </div>
+
+            </div><!-- /periode-content -->
+
         </main>
     </div>
 
     <!-- Toast Container -->
     <div id="toast-container"></div>
 
-    <!-- Modal for datovelger (samme som før) -->
+    <!-- Modal for datovelger / oppdrettering (Enkel + Avansert) -->
     <div class="modal-overlay" id="date-modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Opprett serviceoppdrag</h3>
             </div>
-            
             <div class="modal-body">
                 <p id="modal-info-text" class="modal-info-text"></p>
-                
                 <div class="form-group">
                     <label for="modal-date">Velg dato:</label>
                     <input type="date" id="modal-date" required>
                 </div>
             </div>
-            
             <div class="modal-footer">
                 <button type="button" id="modal-cancel-btn" class="btn btn-secondary">Avbryt</button>
                 <button type="button" id="modal-save-btn" class="btn btn-primary">Lagre Oppdrag</button>
@@ -94,7 +265,6 @@
     <!-- Service-oversikt Modal -->
     <div class="modal-overlay" id="overview-modal">
         <div class="overview-modal-content">
-            <!-- Header -->
             <div class="overview-header">
                 <h2>📊 Service-oversikt</h2>
                 <div class="overview-controls">
@@ -113,21 +283,15 @@
                 </div>
             </div>
 
-            <!-- Periode-navigasjon -->
             <div class="period-navigation">
-                <button class="period-nav-btn" id="prev-period-btn">
-                    ← Forrige
-                </button>
+                <button class="period-nav-btn" id="prev-period-btn">← Forrige</button>
                 <div class="period-indicator">
                     <h3 id="period-title">Laster...</h3>
                     <span id="period-subtitle">Viser 6 måneder</span>
                 </div>
-                <button class="period-nav-btn" id="next-period-btn">
-                    Neste →
-                </button>
+                <button class="period-nav-btn" id="next-period-btn">Neste →</button>
             </div>
 
-            <!-- Statistikk-bar -->
             <div class="overview-stats">
                 <div class="stat-item">
                     <span class="stat-icon">📋</span>
@@ -159,27 +323,13 @@
                 </div>
             </div>
 
-            <!-- Modal Body -->
             <div class="overview-body">
-                <div class="load-grid-view" id="load-grid-view">
-                    <!-- Fylles dynamisk med JavaScript -->
-                </div>
-
-                <!-- Kalender-visning (Kunde) -->
-                <div class="calendar-grid-view" id="calendar-grid-view" style="display: none;">
-                    <!-- Fylles dynamisk med JavaScript -->
-                </div>
-
-                <!-- Tekniker-visning -->
-                <div class="technician-list-view" id="technician-list-view" style="display: none;">
-                    <!-- Fylles dynamisk med JavaScript -->
-                </div>
+                <div class="load-grid-view" id="load-grid-view"></div>
+                <div class="calendar-grid-view" id="calendar-grid-view" style="display: none;"></div>
+                <div class="technician-list-view" id="technician-list-view" style="display: none;"></div>
             </div>
 
-            <!-- Tekniker-legend (kun synlig i kalendervisning) -->
-            <div class="technician-legend" id="technician-legend">
-                <!-- Fylles dynamisk med JavaScript -->
-            </div>
+            <div class="technician-legend" id="technician-legend"></div>
         </div>
     </div>
 

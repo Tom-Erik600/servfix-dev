@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const adminTenant = require('../../middleware/admin-tenant');
-const tripletexService = require('../../services/tripletexService');
+const { withClient } = require('../../services/integrations/tripletex/provider');
 
 // 🔒 Admin auth + tenant-isolasjon
 router.use(adminTenant);
@@ -16,32 +16,23 @@ router.get('/search', async (req, res) => {
   }
 
   const searchTerm = q.trim();
+  const tenantId = req.session.tenantId;
   console.log(`🔍 [PROJECTS] Søker etter prosjekt: "${searchTerm}"`);
 
   try {
-    const client = await tripletexService.getApiClient();
-
     const fields = 'id,name,number,displayName,startDate,endDate,isClosed,customer';
 
-    // Søk parallelt på navn og nummer
-    const [nameResponse, numberResponse] = await Promise.allSettled([
-      client.get('/project', {
-        params: {
-          name: searchTerm,
-          from: 0,
-          count: 20,
-          fields
-        }
-      }),
-      client.get('/project', {
-        params: {
-          number: searchTerm,
-          from: 0,
-          count: 10,
-          fields
-        }
-      })
-    ]);
+    // Søk parallelt på navn og nummer innenfor én withClient-sesjon
+    const [nameResponse, numberResponse] = await withClient(tenantId, (client) =>
+      Promise.allSettled([
+        client.get('/project', {
+          params: { name: searchTerm, from: 0, count: 20, fields },
+        }),
+        client.get('/project', {
+          params: { number: searchTerm, from: 0, count: 10, fields },
+        }),
+      ])
+    );
 
     // Slå sammen resultater og deduper på id
     const seen = new Set();

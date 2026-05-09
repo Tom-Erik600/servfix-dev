@@ -21,45 +21,58 @@ Integrates with Tripletex as a read-only customer master data source. Customers,
 
 ## Main rules
 - Tripletex is read-only. ServFix never creates or modifies data in Tripletex.
-- All Tripletex credentials must come from environment variables — never hardcoded.
+- Tripletex credentials are stored per tenant in `servfix_admin.tenant_integrations`.
+- During Fase 1a rollout only, the provider may fall back to `CONSUMER_TOKEN`, `EMPLOYEE_TOKEN`, and `BASE_URL` from env if no DB row exists yet. This fallback is temporary and removed in Steg 9.7.
 - Customer data is imported and stored locally. After import, all app logic uses local data only.
 - The `servfixmail` contact (Tripletex contact with `lastName='servfixmail'`) determines where service reports are emailed for billing.
-- All queries must use `db.getTenantConnection(tenantId)` — Tripletex credentials are shared, but data storage is tenant-isolated.
+- All queries must use `db.getTenantConnection(tenantId)` — Tripletex config is resolved per tenant, and data storage remains tenant-isolated.
 - Local customer edits (where `updated_at > created_at`) are protected from being overwritten during re-import.
 
 ## Authentication
 
 ```
-Consumer Token + Employee Token (from .env)
+servfix_admin.tenant_integrations
+        ↓
+registry.js (60s cache by tenantId + provider)
+        ↓
+provider.js (_resolveConfig, per-tenant session cache)
         ↓
 PUT /token/session/:create
         ↓
-Session Token (valid until Dec 31 of current year)
+Session Token (per tenant, expires one year ahead)
         ↓
 Basic Auth header: "Basic 0:{sessionToken}" (base64)
+        ↓
+withClient(tenantId, fn)
         ↓
 All subsequent API calls
 ```
 
-| Config | Env variable | Description |
-|--------|-------------|-------------|
-| Base URL | `BASE_URL` | `https://api-test.tripletex.tech/v2` (test) or `https://tripletex.no/v2` (prod) |
-| Consumer token | `CONSUMER_TOKEN` | Identifies the application |
-| Employee token | `EMPLOYEE_TOKEN` | Identifies the user/tenant |
+| Config | Source | Description |
+|--------|--------|-------------|
+| Base URL | `tenant_integrations.config.base_url` | Defaults to `https://tripletex.no/v2` if omitted |
+| Consumer token | `tenant_integrations.config.consumer_token` | Identifies the application |
+| Employee token | `tenant_integrations.config.employee_token` | Identifies the user/tenant |
 
 **Token lifecycle:**
-- Session token is cached in memory (service singleton).
-- Expires at end of year (Dec 31).
-- No automatic refresh — requires service restart if token expires early.
+- Session tokens are cached in memory per tenant in `provider.js`.
+- Sessions are reused until 5 minutes before Tripletex expiry.
+- Config changes invalidate reuse because `config_version` is tracked from `tenant_integrations`.
+- A failed API call with HTTP 401 evicts the cached session and retries once with a fresh session token.
+- During rollout, tenants without a DB config row may use the temporary env-var fallback described above.
 
 ## Data flow
 
 ```
 Tripletex API
     ↓ (read-only)
-tripletexService.js — auth, customers, contacts, addresses
+integrations/tripletex/apiClient.js — pure HTTP client
     ↓
-customerImportService.js — import logic, upsert, servfixmail resolution
+integrations/tripletex/provider.js — per-tenant auth + withClient
+    ↓
+integrations/shims/tripletexService.js — temporary compatibility shim
+    ↓
+customerImportService.js / routes — import logic and lookups
     ↓
 Local DB (customers, customer_contacts tables)
     ↓
@@ -81,6 +94,17 @@ Orders / Reports / Email — always use local data, never Tripletex directly
 | GET | `/project` | List open projects for customer |
 
 ### Local database tables
+
+**`servfix_admin.tenant_integrations`:**
+| Column | Type | Description |
+|--------|------|-------------|
+| `tenant_id` | VARCHAR | Tenant identifier |
+| `provider` | VARCHAR | `tripletex` in Fase 1a |
+| `is_active` | BOOLEAN | Active integration flag |
+| `config` | JSONB | Provider config (`consumer_token`, `employee_token`, `base_url`) |
+| `config_version` | INTEGER | Incremented when `config` changes |
+| `last_sync_at`, `sync_status`, `sync_error` | metadata | Reserved sync status fields |
+| `created_at`, `updated_at` | TIMESTAMP | Tracking |
 
 **`customers`:**
 | Column | Type | Description |
@@ -170,7 +194,7 @@ Contacts for a specific customer can be imported from Tripletex on demand via th
 | Failure | Behavior |
 |---------|----------|
 | Invalid consumer/employee tokens | Session token request fails, 401 returned |
-| Session token expired | All API calls fail until service restart |
+| Session token expired | Provider clears cached session and retries once automatically |
 | Tripletex API unreachable | Import fails, local data preserved unchanged |
 | Address lookup fails for a customer | Silently returns null, import continues without address |
 | Contact lookup fails for a customer | Silently returns empty array, import continues |
@@ -178,6 +202,7 @@ Contacts for a specific customer can be imported from Tripletex on demand via th
 | Duplicate external_id on import | UPSERT handles it (ON CONFLICT UPDATE) |
 | Customer has no servfixmail contact | No report recipient set, email send will need manual recipient |
 | Health check fails | `GET /api/customers/health` returns error details for debugging |
+| No active tenant integration row | Provider may use temporary env fallback during Fase 1a rollout; after Steg 9.7 this becomes a hard configuration error |
 
 ## Critical invariants (must not be broken)
 - Tripletex is read-only. ServFix must never create, update, or delete data in Tripletex via API.
@@ -191,6 +216,8 @@ Contacts for a specific customer can be imported from Tripletex on demand via th
 - Re-running the same import must be idempotent — it must not create duplicate customers, contacts, or inconsistent local state.
 - Invoice tracking is local only. The `is_invoiced` and `invoice_number` fields are for internal tracking, not synced to any external system.
 - Session tokens must never be logged or exposed in API responses.
+- Tenant integration credentials must never be returned to the UI or API client. Admin listings may only expose masked state such as `has_credentials: true`.
+- Tripletex credentials and tenant-local customer data must remain isolated from each other: config is loaded from `servfix_admin`, while imported data is written only to the current tenant database.
 
 ## Change strategy
 When modifying Tripletex integration:
@@ -199,9 +226,10 @@ When modifying Tripletex integration:
 3. Test import with edge cases: customers without addresses, without contacts, with local edits.
 4. Verify that batch processing stays within rate limits (currently 5 concurrent).
 5. Ensure local customer edits are still protected after the change.
-6. Test session token lifecycle (creation, caching, expiry).
+6. Test session token lifecycle (creation, per-tenant caching, 401 refresh, config change invalidation).
 7. Confirm servfixmail contact resolution still works correctly.
 8. Check that all downstream features (orders, reports, email) still use local data.
+9. If the change touches config loading, verify both `registry.js` cache behavior and `provider.js` fallback/removal plan.
 
 ## Test scenarios
 Critical scenarios to cover:
@@ -212,6 +240,7 @@ Critical scenarios to cover:
 - Selective import of specific customers only.
 - Session token creation with valid credentials.
 - Session token creation with invalid credentials (must fail gracefully).
+- Changing Tripletex config for one tenant must not affect another tenant's session or requests.
 - Health check endpoint when Tripletex is reachable vs unreachable.
 - Concurrent import requests (must not create duplicates).
 - Email send to report recipient when servfixmail contact is missing.
@@ -219,6 +248,7 @@ Critical scenarios to cover:
 ## Definition of done
 A Tripletex integration change is considered complete when:
 - Authentication flow works correctly (token creation, caching, usage).
+- Per-tenant config loading works correctly from `servfix_admin.tenant_integrations`.
 - Import correctly handles new, updated, unchanged, and locally-edited customers.
 - Servfixmail contact resolution produces correct report recipients (all contacts with `is_report_recipient = true`).
 - No write operations are added to Tripletex.
@@ -228,12 +258,29 @@ A Tripletex integration change is considered complete when:
 
 ## Notes
 - The `tripletex_order_id` column on orders exists but is unused — orders are not synced from Tripletex.
-- There are two Tripletex client files: `src/services/tripletexService.js` (active) and `services/tripletex-api.js` (legacy). Only the former is used.
-- Session token is cached in memory as a singleton. Service restart required if token expires or credentials change.
+- Current runtime structure is:
+  - `src/services/integrations/tripletex/apiClient.js` — pure HTTP client
+  - `src/services/integrations/tripletex/provider.js` — per-tenant session management and `withClient`
+  - `src/services/integrations/registry.js` — loads config from `servfix_admin.tenant_integrations` with 60s cache
+  - `src/services/integrations/shims/tripletexService.js` — deprecated compatibility shim
+  - `src/services/tripletexService.js` — deprecated re-export shim kept for one release cycle
+- Session tokens are cached per tenant, not as a singleton.
+- The temporary env-var fallback in `provider.js` exists only to support zero-downtime rollout before the tenant row is seeded via admin UI.
 - Address lookups during import are N+1 (one API call per customer per address type). This is a known inefficiency.
 - No retry logic exists for Tripletex API calls. Failures are immediate.
+- Runtime requests retry once on HTTP 401 by creating a fresh Tripletex session.
 - Batch size of 5 during import is the only rate-limit mitigation. No exponential backoff.
 - Invoice tracking is purely local bookkeeping — not connected to any accounting system.
+
+### Admin Integration API
+
+**Admin Integration API** (`/api/admin/integrations`):
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/` | List active tenants and configured integrations with masked credential state |
+| POST | `/:tenantId/tripletex` | Save or update Tripletex config for a tenant and invalidate registry cache |
+| POST | `/:tenantId/tripletex/test` | Test new Tripletex credentials without persisting them |
 
 ### API endpoints
 

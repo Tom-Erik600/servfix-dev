@@ -3,30 +3,24 @@ const router = express.Router();
 
 console.log('🟢 [CUSTOMERS] Route loading...');
 
-// Health check endpoint
+// Health check endpoint — verifies Tripletex connectivity for the session tenant
 router.get('/health', async (req, res) => {
+  const tenantId = req.session?.tenantId || req.tenantId;
   try {
-    const tripletexService = require('../services/tripletexService');
-    
-    // Test at vi kan få token
-    const token = await tripletexService.getSessionToken();
-    const hasToken = !!token;
-    
-    // Test at vi kan lage client
-    const client = await tripletexService.getApiClient();
-    const hasClient = !!client;
-    
-    res.json({
-      status: 'ok',
-      hasToken,
-      hasClient,
-      tokenLength: token ? token.length : 0
+    if (!tenantId) return res.status(400).json({ status: 'error', error: 'Tenant ID mangler' });
+
+    const { withClient } = require('../services/integrations/tripletex/provider');
+
+    // Verify we can obtain a session and make a minimal API call
+    const ok = await withClient(tenantId, async (client) => {
+      // Minimal call: fetch 1 customer to confirm auth works
+      await client.get('/customer', { params: { from: 0, count: 1 } });
+      return true;
     });
+
+    res.json({ status: 'ok', connected: ok });
   } catch (error) {
-    res.status(500).json({
-      status: 'error',
-      error: error.message
-    });
+    res.status(500).json({ status: 'error', error: error.message });
   }
 });
 
@@ -131,21 +125,49 @@ router.get('/:customerId/addresses', async (req, res) => {
 // GET prosjekter for kunde fra Tripletex
 router.get('/:customerId/projects', async (req, res) => {
   const { customerId } = req.params;
-  console.log(`📁 [CUSTOMERS] GET projects for customer ${customerId}`);
+  const tenantId = req.session?.tenantId || req.tenantId;
+  console.log(`🔍 [CUSTOMERS] GET projects for customer ${customerId}`);
 
   try {
-    const tripletexService = require('../services/tripletexService');
-    const client = await tripletexService.getApiClient();
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID mangler' });
 
-    const response = await client.get('/project', {
-      params: {
-        customerId: customerId,
-        isClosed: false,
-        from: 0,
-        count: 20,
-        fields: 'id,name,number,displayName,startDate,endDate,isClosed'
-      }
+    const { withClient } = require('../services/integrations/tripletex/provider');
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const result = await withClient(tenantId, async (client) => {
+      const response = await client.get('/project', {
+        params: {
+          customerId: customerId,
+          isClosed: false,
+          from: 0,
+          count: 20,
+          fields: 'id,name,number,displayName,startDate,endDate,isClosed',
+        },
+      });
+
+      return (response.data.values || [])
+        .sort((a, b) => b.id - a.id)
+        .filter((p) => {
+          if (!p.endDate) return true;
+          const end = p.endDate.toString().slice(0, 10);
+          return end >= today;
+        })
+        .map((p) => ({
+          id: p.id,
+          displayName: p.displayName || p.name || '',
+          number: p.number || null,
+        }));
     });
+
+    console.log(`✅ [CUSTOMERS] ${result.length} aktive prosjekter (filtrert på sluttdato)`);
+    res.json(result);
+
+  } catch (error) {
+    console.error(`❌ [CUSTOMERS] Error fetching projects:`, error.message);
+    res.json([]); // Tom liste – ikke krasj
+  }
+});
 
     const today = new Date().toISOString().split('T')[0];
     const projects = (response.data.values || [])

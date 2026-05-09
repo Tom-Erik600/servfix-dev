@@ -1148,6 +1148,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                         <div class="checklist-item-header">
                             <span class="item-name">${statusIcon} ${escapeHtml(item.displayName)}</span>
                             <span class="status-badge status-${statusClass}">${escapeHtml(item.status)}</span>
+                            ${item.severity ? `<span class="severity-badge severity-${escapeHtml(item.severity)}">${{ low: 'Lav', medium: 'Middels', high: 'Høy' }[item.severity] || escapeHtml(item.severity)}</span>` : ''}
                         </div>
 
                         ${item.hasCommentField ? `

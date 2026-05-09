@@ -96,27 +96,9 @@ BEGIN
     END IF;
 END$$;
 
--- STEG 3: tenant_integrations
-CREATE TABLE IF NOT EXISTS tenant_integrations (
-    id SERIAL PRIMARY KEY,
-    tenant_id VARCHAR(50) NOT NULL,
-    provider VARCHAR(50) NOT NULL,
-    is_active BOOLEAN DEFAULT true,
-    config JSONB NOT NULL DEFAULT '{}',
-    last_sync_at TIMESTAMP,
-    sync_status VARCHAR(50),
-    sync_error TEXT,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_integrations_tenant_provider') THEN
-        CREATE UNIQUE INDEX idx_integrations_tenant_provider
-            ON tenant_integrations(tenant_id, provider);
-    END IF;
-END$$;
+-- STEG 3: tenant_integrations er fjernet fra per-tenant schema.
+-- Den opprettes nå i servfix_admin via migrations/seeds/000-tenant-integrations-admin.sql
+-- og migrations/002-move-tenant-integrations-to-admin.js.
 
 -- STEG 4: local_customer_id på orders
 DO $$
@@ -148,7 +130,6 @@ const VERIFY_SQL = `
 SELECT
     (SELECT count(*) FROM information_schema.tables WHERE table_name = 'customers') as customers_ok,
     (SELECT count(*) FROM information_schema.tables WHERE table_name = 'customer_contacts') as contacts_ok,
-    (SELECT count(*) FROM information_schema.tables WHERE table_name = 'tenant_integrations') as integrations_ok,
     (SELECT count(*) FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'local_customer_id') as orders_ok,
     (SELECT count(*) FROM information_schema.columns WHERE table_name = 'equipment' AND column_name = 'local_customer_id') as equipment_ok;
 `;
@@ -222,9 +203,9 @@ async function main() {
         console.log('  ⚠️  Verifisering — noe mangler:');
         console.log(`      customers: ${v.customers_ok === '1' ? '✅' : '❌'}`);
         console.log(`      customer_contacts: ${v.contacts_ok === '1' ? '✅' : '❌'}`);
-        console.log(`      tenant_integrations: ${v.integrations_ok === '1' ? '✅' : '❌'}`);
         console.log(`      orders.local_customer_id: ${v.orders_ok === '1' ? '✅' : '❌'}`);
         console.log(`      equipment.local_customer_id: ${v.equipment_ok === '1' ? '✅' : '❌'}`);
+        console.log(`      (tenant_integrations er ikke lenger per-tenant — se migration 002)`);
       }
 
       results.push({ tenant: tenant.id, status: allOk ? 'ok' : 'partial', details: v });

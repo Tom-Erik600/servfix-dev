@@ -1,6 +1,6 @@
 # ServFix — Komplett Prosessbeskrivelse
 
-> Sist oppdatert: 2026-04-16  
+> Sist oppdatert: 2026-05-09  
 > Formål: Brukes til akseptansetesting, reklamemateriell, salgspresentasjoner og prosessdokumentasjon.
 
 ---
@@ -60,6 +60,10 @@ ServFix er et skybasert (Google Cloud Run) serviceadministrasjonssystem for bedr
                     └──────────────┘    └─────────────────────┘
 ```
 
+### Runtime entrypoint
+
+Cloud Run bygger fra `Dockerfile` og starter `server.js`. Det finnes også en `src/app.js` entrypoint i kodebasen. Når nye ruter eller middleware legges til, må de enten monteres begge steder eller entrypoint-strukturen ryddes opp slik at det bare finnes én kilde. Hvis en rute virker lokalt men ikke i deployet miljø, er dette et av de første punktene som bør sjekkes.
+
 ---
 
 ## 2. Roller og tilgang
@@ -77,6 +81,7 @@ ServFix er et skybasert (Google Cloud Run) serviceadministrasjonssystem for bedr
 | Ferdigstille ordre | Markere hele ordren som fullført — trigger PDF-generering |
 | Opprette hasteordre | Rask opprettelse av akutt serviceoppdrag |
 | Planlegge oppdrag | Opprette planlagt service for en kunde med dato og utstyr |
+| Ledige oppdrag | Se og plukke ordre som admin har lagt i Felles/pool uten tekniker |
 | Søke og overta ordrer | Finne og overta ordrer fra andre teknikere |
 | SJA | Opprette Sikker Jobb Analyse knyttet til en ordre |
 | Tilbud | Opprette tilbud med timer og produkter knyttet til ordre |
@@ -89,13 +94,13 @@ ServFix er et skybasert (Google Cloud Run) serviceadministrasjonssystem for bedr
 | Funksjon | Beskrivelse |
 |----------|-------------|
 | Dashboard | KPI-oversikt: dagens ordrer, fullførte denne uken, rapporter ikke sendt, tilbud ventende, venter på fakturering |
-| Planlegger | Visuell drag-and-drop-tildeling av teknikere til kunder |
+| Planlegger | Enkel, avansert og periodisk planlegging av serviceoppdrag |
 | Kundeadministrasjon | Se/redigere kunder, utstyr, kontakter. Import fra Tripletex |
 | Teknikeradministrasjon | Opprette, redigere, deaktivere teknikere |
 | Rapporter | Se, generere, sende PDF-rapporter til kunder |
 | Tilbud | Se, redigere, sende tilbud til kunder |
 | HMS | Se og administrere SJA- og ROS-analyser |
-| Innstillinger | Firmainfo, logo, rapportfarger, HMS-innstillinger |
+| Innstillinger | Firmainfo, logo, rapportfarger, HMS-innstillinger, app-meny og planleggerfaner |
 
 ### 2.3 Kunde (ekstern mottaker)
 
@@ -154,26 +159,21 @@ Dette er den primære arbeidsflyten i ServFix — fra en kunde trenger service t
 
 **Fremgangsmåte:**
 
-1. Administrator åpner Planleggeren, som viser to kolonner:
-   - **Venstre:** Liste over teknikere (draggbare kort)
-   - **Høyre:** Liste over kunder/prosjekter (drop-soner)
+1. Administrator åpner Planleggeren. Avhengig av tenantens innstillinger kan den vise fanene **Enkel**, **Avansert** og **Periode**.
 
-2. Administrator **drar en tekniker** over til en kunde. En modal åpnes med:
-   - Kundeinformasjon (forhåndsutfylt)
-   - **Datovalg** for når servicen skal utføres
-   - **Beskrivelse** (fritekst eller Tripletex-prosjekt)
-   - **Utstyrsvalg** — checkbox-liste over kundens anlegg (alle valgt som standard)
-   - **Cluster-gruppering** — utstyr kan grupperes for enklere valg
-   - Valgfritt: **Besøksnummer**, **Serviceadresse**, **Kundenotat**
+2. Administrator velger ønsket opprettelsesflyt:
+   - **Enkel:** Drag & drop tekniker til kunde. Modal med kundeinfo, dato, fritekstbeskrivelse og flat anleggsliste uten cluster/prosjektfelter.
+   - **Avansert:** Drag & drop tekniker til kunde eller Tripletex-prosjekt. Modal med dato, prosjekt/fritekst, anleggsvalg, cluster-gruppering, besøksnummer, serviceadresse og kundenotat.
+   - **Periode:** Skjema for gjentakende service der admin velger kunde, tekniker, anlegg, frekvens og dato-intervall, forhåndsviser resultatet og genererer flere ordre samtidig.
 
-3. Administrator klikker **"Opprett ordre"**. Systemet:
+3. Administrator klikker **"Opprett ordre"**, eller **"Generer ordre"** i Periode-fanen. Systemet:
    - Genererer unikt ordre-ID (format: `PROJ-ÅÅÅÅ-timestamp`)
    - Tar et **snapshot** av kundedataene (adresse, kontakt, org.nr) som JSONB — endringer i Tripletex påvirker IKKE eksisterende ordrer
    - Lagrer valgt utstyr som `included_equipment_ids`
    - Setter status til `scheduled`
    - Knytter valgt tekniker til ordren
 
-4. Ordren vises nå i teknikerens kalender.
+4. Ordren vises nå i teknikerens kalender. Hvis ordren ble opprettet uten tekniker via `Felles`, vises den under `Ledige oppdrag` i tekniker-appen og kan plukkes av en tekniker. Ved Periode-generering vises alle genererte ordre på sine respektive datoer.
 
 **Alternativ:** Administrator kan også opprette ordre via Dashboard → "Opprett ordre"-knappen med samme felt.
 
@@ -468,6 +468,25 @@ PDF-rapporten genereres av `UnifiedPDFGenerator` og inneholder:
 
 ---
 
+### 4.3b Ledige oppdrag fra Felles/pool
+
+**Scenario:** Administrator legger et oppdrag i `Felles` i stedet for å tildele en konkret tekniker.
+
+**Hvem:** Tekniker  
+**Hvor:** Tekniker-app → Planlagte service (`/app/index.html`)
+
+**Fremgangsmåte:**
+
+1. Tekniker åpner Planlagte service og ser seksjonen `Ledige oppdrag`.
+2. Tekniker filtrerer listen på `I dag`, `I morgen`, `+1 uke` eller `+1 mnd`.
+3. Pool-oppdrag markeres med grå prikk i kalenderen.
+4. Tekniker klikker `Plukk` på ønsket oppdrag.
+5. Backend kjører atomisk claim via `POST /api/orders/:id/claim`.
+6. Hvis oppdraget fortsatt er ledig, settes `technician_id` til innlogget tekniker, status settes til `scheduled`, og oppdraget flyttes til teknikerens egne ordre.
+7. Hvis en annen tekniker allerede har plukket oppdraget, returnerer API `409`, og listen refreshes.
+
+---
+
 ### 4.4 Ekstra utstyr/anlegg under service
 
 **Scenario:** Tekniker oppdager et anlegg hos kunden som ikke er registrert i systemet.
@@ -664,6 +683,11 @@ ServFix har **enveis, skrivebeskyttet** integrasjon med Tripletex:
 | Kontakter | Tripletex → ServFix | Import av kundekontakter (inkl. "servfixmail"-kontakt) |
 | Prosjekter | Tripletex → ServFix | Sanntidsoppslag av Tripletex-prosjekter ved ordreopprettelse |
 | Fakturering | Kun lokal | ServFix sporer fakturering, men skriver ALDRI til Tripletex |
+
+**Konfigurasjon:**
+- Tripletex konfigureres per tenant i `servfix_admin.tenant_integrations`.
+- Runtime laster konfigurasjonen via admin-databasen, men importerte kunder og kontakter skrives bare til tenantens egen database.
+- I Fase 1a finnes en midlertidig env-fallback for eksisterende prod-tenant under utrulling, men nye tenants skal konfigureres via admin-laget, ikke globale env-variabler.
 
 ### 7.2 Kundeimport
 
@@ -893,7 +917,34 @@ ServFix håndterer **ikke** selve faktureringen — dette gjøres i regnskapssys
 | HMS-meny aktivert | Viser/skjuler HMS-knappen i tekniker-appen |
 | SJA per ordre aktivert | Viser SJA-knapp på ordredetaljer |
 
-### 13.3 Sjekkliste-maler
+### 13.3 App-meny
+
+Admin kan konfigurere hovedmenyen i tekniker-appen:
+
+| Menyvalg | Standardtittel | Konfigurasjon |
+|----------|----------------|---------------|
+| Planlagte service | `Planlagte service` | Synlig/skjult + egendefinert tittel |
+| Planlegg oppdrag | `Planlegg oppdrag` | Synlig/skjult + egendefinert tittel |
+| Opprett hasteordre | `Opprett hasteordre` | Synlig/skjult + egendefinert tittel |
+| Søk ordre | `Søk ordre` | Synlig/skjult + egendefinert tittel |
+| HMS | `HMS` | Synlig/skjult + egendefinert tittel |
+
+Verdiene lagres i GCS-basert `settings.json` under `app_menu`. HMS-menyen vises bare hvis både `app_menu.hms.visible` og `hmsSettings.hmsMenuEnabled` tillater det.
+
+### 13.4 Planlegger-innstillinger
+
+Admin kan konfigurere hvilke planleggerfaner som er tilgjengelige for tenantens administratorer:
+
+| Innstilling | Beskrivelse |
+|-------------|-------------|
+| Vis Enkel-fane | Aktiverer forenklet drag & drop-planlegging |
+| Vis Avansert-fane | Aktiverer full planlegger med prosjekt, cluster og ekstra ordrefelt |
+| Vis Periode-fane | Aktiverer periodeplaner for gjentakende ordre |
+| Standardfane | Bestemmer hvilken aktiv fane som åpnes først |
+
+Disse verdiene lagres i GCS-basert `settings.json` under `module_flags`. Hvis standardfanen er deaktivert, åpnes første aktive fane i stedet. Fanelinjen vises bare når minst to faner er aktive.
+
+### 13.5 Sjekkliste-maler
 
 Administrator kan konfigurere sjekkliste-maler per utstyrstype:
 - Legge til/fjerne sjekkpunkter
@@ -910,7 +961,9 @@ Administrator kan konfigurere sjekkliste-maler per utstyrstype:
 
 | Type | Opprettet av | Trigger | Dato | Utstyr |
 |------|-------------|---------|------|--------|
-| **Planlagt (admin)** | Administrator | Drag-and-drop i planlegger | Valgt | Valgt fra kundens utstyr |
+| **Planlagt (admin enkel)** | Administrator | Enkel-fanen: drag-and-drop tekniker til kunde | Valgt | Flat anleggsliste |
+| **Planlagt (admin avansert)** | Administrator | Avansert-fanen: drag-and-drop til kunde/prosjekt | Valgt | Cluster-gruppert anleggsliste |
+| **Periodisk (admin)** | Administrator | Periode-fanen: forhåndsvis og generer fra regel | Flere datoer | Valgt fra kundens utstyr |
 | **Planlagt (tekniker)** | Tekniker | Fra "Planlegg oppdrag" | Valgt (hurtigvalg eller manuelt) | Valgt fra kundens utstyr |
 | **Hasteordre** | Tekniker | Fra "Opprett hasteordre" | I dag (automatisk) | Alle (velges senere) |
 | **Overtatt** | Tekniker | Fra "Søk ordre" → "Overta" | Beholder opprinnelig | Beholder opprinnelig |
@@ -977,14 +1030,18 @@ draft ──▶ completed
 
 | # | Testcase | Forventet resultat |
 |---|----------|-------------------|
-| B1 | Admin oppretter planlagt ordre via planlegger (drag-and-drop) | Ordre opprettet med riktig tekniker, dato og utstyr |
-| B2 | Admin oppretter ordre med Tripletex-prosjekt | `agreement_number` satt fra prosjekt |
-| B3 | Admin oppretter ordre med serviceadresse | Adresse lagret separat fra kundeadresse |
-| B4 | Tekniker oppretter hasteordre | Ordre opprettet med dagens dato, tekniker = seg selv |
-| B5 | Tekniker oppretter planlagt oppdrag med hurtigdato | Riktig dato beregnet (f.eks. 1 måned frem) |
-| B6 | Tekniker oppretter ordre med spesifikke anlegg valgt | Kun valgte anlegg i `included_equipment_ids` |
-| B7 | Ordre opprettes — kundesnapshot lagret | `customer_data` inneholder navn, adresse, kontakt etc. |
-| B8 | Samme kunde kan ha maks 1 aktiv ordre (i planlegger) | Forhindret i UI |
+| B1 | Admin oppretter planlagt ordre fra Enkel-fanen | Ordre opprettet med riktig tekniker, dato, beskrivelse og valgte anlegg |
+| B2 | Enkel-fanen åpner forenklet modal | Ingen prosjekt-dropdown, cluster-admin, serviceadresse, besøksnummer eller kundenotat vises |
+| B3 | Admin oppretter planlagt ordre fra Avansert-fanen | Ordre opprettet med riktig tekniker, dato og cluster-gruppert utstyr |
+| B4 | Admin oppretter ordre med Tripletex-prosjekt | `agreement_number` satt fra prosjekt |
+| B5 | Admin oppretter ordre med serviceadresse | Adresse lagret separat fra kundeadresse |
+| B6 | Admin oppretter periodeplan og forhåndsviser | Forhåndsvisning viser forventede ordre før generering |
+| B7 | Admin genererer ordre fra periodeplan | Flere ordre opprettes på korrekte datoer med valgt tekniker og anlegg |
+| B8 | Tekniker oppretter hasteordre | Ordre opprettet med dagens dato, tekniker = seg selv |
+| B9 | Tekniker oppretter planlagt oppdrag med hurtigdato | Riktig dato beregnet (f.eks. 1 måned frem) |
+| B10 | Tekniker oppretter ordre med spesifikke anlegg valgt | Kun valgte anlegg i `included_equipment_ids` |
+| B11 | Ordre opprettes — kundesnapshot lagret | `customer_data` inneholder navn, adresse, kontakt etc. |
+| B12 | Planleggerfane er deaktivert i innstillinger | Fanen skjules, og standardfane faller tilbake til første aktive fane |
 
 ### Kategori C: Servicegjennomføring
 
