@@ -4947,9 +4947,9 @@ async function openPhotoOption(type) {
                         showToast(message, 'success');
                         
                         // Vent litt før rendering
-                        setTimeout(() => {
+                        setTimeout(async () => {
                             console.log('🔄 Rendering avvik images...');
-                            renderAvvikImagesForChecklist();
+                            await renderAvvikImagesForChecklist();
                             
                             // Hvis det var byttet, synkroniser også byttet-bildene
                             if (isByttet) {
@@ -5159,7 +5159,7 @@ async function renderAvvikImagesForChecklist(currentReportId) {
                 const container = document.getElementById(`avvik-images-container-${itemId}`);
                 if (container) {
                     container.innerHTML = images.map(img => `
-                        <div class="avvik-image-wrapper">
+                        <div class="avvik-image-wrapper" data-image-id="${img.id}">
                             <img src="${img.image_url}" alt="Avvik ${img.avvik_number}" onclick="openImageModal('${img.image_url}', 'Avvik #${img.avvik_number}')">
                             <button type="button" class="image-remove-btn" onclick="removeAvvikImage('${itemId}', '${img.id}')" title="Fjern bilde">×</button>
                         </div>
@@ -5249,6 +5249,45 @@ async function removeAvvikImage(itemId, imageId) {
     }
 }
 
+// Slett generelt rapport-bilde (lagret som URL i photos-array)
+async function removeGeneralImage(encodedImageUrl) {
+    const imageUrl = decodeURIComponent(encodedImageUrl);
+    console.log('🗑️ Removing general image:', imageUrl);
+
+    try {
+        if (!confirm('Er du sikker på at du vil slette dette bildet?')) {
+            return;
+        }
+
+        showToast('🗑️ Sletter bilde...', 'info');
+
+        const reportId = state.serviceReport?.reportId;
+        if (!reportId) {
+            throw new Error('Mangler rapport-ID');
+        }
+
+        const response = await fetch(`/api/images/general/${reportId}`, {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageUrl })
+        });
+
+        if (!response.ok) {
+            throw new Error('Kunne ikke slette bilde');
+        }
+
+        showToast('✅ Bilde slettet!', 'success');
+
+        // Oppdater UI
+        setTimeout(() => renderGeneralImages(), 200);
+
+    } catch (error) {
+        console.error('Feil ved sletting av generelt bilde:', error);
+        showToast(`❌ Kunne ikke slette bilde: ${error.message}`, 'error');
+    }
+}
+
 // Synkroniser byttet-bilder med avvik-bilder
 function syncByttetImages(itemId) {
     console.log('🔄 Syncing byttet images for item:', itemId);
@@ -5265,13 +5304,16 @@ function syncByttetImages(itemId) {
     const avvikImages = avvikContainer.querySelectorAll('.avvik-image-wrapper');
     avvikImages.forEach((wrapper, index) => {
         const img = wrapper.querySelector('img');
+        const imageId = wrapper.dataset.imageId;
         if (img) {
             const byttetWrapper = document.createElement('div');
             byttetWrapper.className = 'byttet-image-wrapper';
+            byttetWrapper.dataset.imageId = imageId || '';
             byttetWrapper.innerHTML = `
                 <img src="${img.src}" 
                      alt="Byttet bilde" 
                      onclick="openImageModal('${img.src}', 'Byttet filter bilde')">
+                ${imageId ? `<button type="button" class="image-remove-btn" onclick="removeAvvikImage('${itemId}', '${imageId}')" title="Fjern bilde">×</button>` : ''}
             `;
             byttetContainer.appendChild(byttetWrapper);
         }
@@ -5354,13 +5396,19 @@ function loadImagesProgressively(images) {
                 const imgElement = new Image();
                 
                 imgElement.onload = function() {
+                    const encodedUrl = encodeURIComponent(img.image_url).replace(/'/g, '%27');
                     thumbnail.innerHTML = `
                         <img src="${img.image_url}" alt="Bilde ${index + 1}">
+                        <button type="button" class="image-remove-btn" onclick="removeGeneralImage('${encodedUrl}')" title="Fjern bilde">×</button>
                         <div class="image-info">
                             <span class="image-title">Bilde ${index + 1}</span>
                         </div>
                     `;
-                    thumbnail.onclick = () => openImageModal(img.image_url, `Bilde ${index + 1}`);
+                    thumbnail.onclick = (e) => {
+                        if (!e.target.classList.contains('image-remove-btn')) {
+                            openImageModal(img.image_url, `Bilde ${index + 1}`);
+                        }
+                    };
                     thumbnail.classList.add('loaded');
                 };
                 

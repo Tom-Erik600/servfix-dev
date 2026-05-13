@@ -1076,6 +1076,66 @@ router.get('/avvik/:reportId', async (req, res) => {
   }
 });
 
+// DELETE /api/images/general/:reportId - Fjern ett generelt bilde fra rapport (URL-basert)
+router.delete('/general/:reportId', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const { imageUrl } = req.body;
+    const tenantId = getResolvedTenantId(req);
+
+    if (!tenantId) {
+      return res.status(401).json({ error: 'Ikke autentisert — mangler tenant' });
+    }
+
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'imageUrl er påkrevd' });
+    }
+
+    const pool = await db.getTenantConnection(tenantId);
+    const accessibleReport = await getAccessibleReport(pool, reportId, req);
+
+    if (accessibleReport === null) {
+      return res.status(404).json({ error: 'Service report ikke funnet' });
+    }
+
+    if (accessibleReport === false) {
+      return res.status(403).json({ error: 'Ingen tilgang til service report' });
+    }
+
+    // Fjern URL fra photos-arrayet
+    const result = await pool.query(
+      `UPDATE service_reports
+       SET photos = array_remove(COALESCE(photos, ARRAY[]::text[]), $1)
+       WHERE id = $2
+       RETURNING photos`,
+      [imageUrl, reportId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Service report ikke funnet' });
+    }
+
+    // Slett fra GCS
+    try {
+      const decodedFilePath = ensureTenantFilePath(imageUrl, tenantId);
+      await bucket.file(decodedFilePath).delete();
+      console.log(`✅ Generelt bilde slettet fra GCS: ${decodedFilePath}`);
+    } catch (storageError) {
+      console.warn('⚠️ Kunne ikke slette fra GCS:', storageError.message);
+    }
+
+    res.json({
+      success: true,
+      totalPhotos: result.rows[0].photos.length,
+      message: 'Bilde fjernet fra rapport'
+    });
+
+  } catch (error) {
+    console.error('❌ Feil ved sletting av generelt bilde:', error);
+    res.status(500).json({ error: 'Kunne ikke slette bilde', details: error.message });
+  }
+});
+
 // GET /api/images/general/:reportId - Hent alle rapport-bilder for en rapport
 router.get('/general/:reportId', async (req, res) => {
   try {

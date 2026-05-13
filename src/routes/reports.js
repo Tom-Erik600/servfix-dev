@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { processReportDeviations } = require('../services/deviationsService');
 
 // ✅ KRITISK FIX: Legg til authentication middleware
 router.use((req, res, next) => {
@@ -503,8 +504,32 @@ router.post('/:reportId/complete', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Rapport ikke funnet' });
     }
-    
-    res.json(transformDbRowToFrontend(result.rows[0]));
+
+    const completedRow = result.rows[0];
+
+    // --- Deviation-prosessering (fail-safe, ikke i samme transaksjon) ---
+    // Kaller processReportDeviations ETTER at rapporten er lagret og committed.
+    // Feil her skal IKKE påvirke svaret til tekniker — rapporten er ferdig uansett.
+    try {
+      await processReportDeviations(pool, tenantId, {
+        reportId:      completedRow.id,
+        // TEKNISK GJELD: equipment_id er VARCHAR i service_reports men INTEGER i
+        // deviations (FK til equipment.id). Number()-cast er pragmatisk løsning.
+        // Se deviationsService.js for fullstendig notat.
+        equipmentId:   completedRow.equipment_id,
+        checklistData: completedRow.checklist_data,
+        technicianId:  req.session.technicianId
+      });
+    } catch (deviationErr) {
+      // Fail-safe: deviation-feil ødelegger ikke rapport-svaret
+      console.error('⚠️ Deviation processing failed (non-blocking):', {
+        error:    deviationErr.message,
+        reportId: completedRow.id,
+        tenantId
+      });
+    }
+
+    res.json(transformDbRowToFrontend(completedRow));
   } catch (error) {
     console.error('Feil ved fullføring av servicerapport:', error);
     res.status(500).json({ error: 'Intern serverfeil' });

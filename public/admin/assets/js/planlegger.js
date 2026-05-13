@@ -752,7 +752,7 @@ function escapeHtml(unsafe) {
             targetCustomer = {
                 ...customer,
                 technicianId: isPool ? null : technicianId,
-                customerId: customer.externalId || customer.id || customer.customerId,
+                customerId: customer.id || customer.externalId || customer.customerId,
                 customerName: customer.name,
                 selectedProjectName: cardType === 'project' ? suggestedDescription : ''
             };

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../config/database');
 const adminTenant = require('../../middleware/admin-tenant');
+const customerService = require('../../services/customerService');
 
 // 🔒 Delt middleware: Admin auth + tenant-isolasjon med validering
 router.use(adminTenant);
@@ -168,8 +169,20 @@ router.post('/', async (req, res) => {
     if (!customerId || !customerName) {
       return res.status(400).json({ error: 'Customer ID and name are required' });
     }
-    
-    const pool = await db.getTenantConnection(req.session.tenantId);
+
+    // Normaliser customerId til lokal customers.id — frontend kan sende Tripletex external_id
+    const tenantId = req.session.tenantId;
+    let resolvedCustomer = await customerService.getCustomer(tenantId, customerId);
+    if (!resolvedCustomer) {
+      resolvedCustomer = await customerService.getCustomerByExternalId(tenantId, customerId);
+    }
+    if (!resolvedCustomer) {
+      return res.status(400).json({ error: `Kunde ikke funnet: ${customerId}` });
+    }
+    const localCustomerId = resolvedCustomer.id;
+    console.log(`[orders] customerId normalisert: ${customerId} → lokal id ${localCustomerId}`);
+
+    const pool = await db.getTenantConnection(tenantId);
     const orderId = `PROJ-${new Date().getFullYear()}-${Date.now()}`;
     
     // Opprett customer_data objekt
@@ -230,7 +243,7 @@ router.post('/', async (req, res) => {
     
 const params = [
   orderId,
-  parseInt(customerId),
+  localCustomerId,
   String(customerName),
   JSON.stringify(customer_data),
   description || null,

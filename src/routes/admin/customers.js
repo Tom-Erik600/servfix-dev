@@ -170,7 +170,10 @@ router.get('/:customerId/addresses', async (req, res) => {
       return res.status(400).json({ error: 'Tenant ID mangler i session' });
     }
 
-    const customer = await customerService.getCustomer(tenantId, customerId);
+    let customer = await customerService.getCustomer(tenantId, customerId);
+    if (!customer) {
+      customer = await customerService.getCustomerByExternalId(tenantId, customerId);
+    }
     if (!customer) {
       return res.status(404).json({ error: 'Kunde ikke funnet' });
     }
@@ -200,7 +203,13 @@ router.get('/:customerId/contact', async (req, res) => {
       return res.status(400).json({ error: 'Tenant ID mangler i session' });
     }
 
-    const contacts = await customerService.getContacts(tenantId, customerId);
+    let resolvedContact = await customerService.getCustomer(tenantId, customerId);
+    if (!resolvedContact) {
+      resolvedContact = await customerService.getCustomerByExternalId(tenantId, customerId);
+    }
+    const localContactId = resolvedContact?.id || customerId;
+
+    const contacts = await customerService.getContacts(tenantId, localContactId);
 
     // Filtrer bort rapport-kontakter (servfixmail) for å finne primær kontaktperson
     const realContacts = contacts.filter(c => !c.is_report_recipient);
@@ -209,8 +218,7 @@ router.get('/:customerId/contact', async (req, res) => {
     // Fallback: bruk kundens e-post hvis ingen kontaktperson finnes
     let fallbackEmail = '';
     if (!primary) {
-      const customer = await customerService.getCustomer(tenantId, customerId);
-      fallbackEmail = customer?.email || customer?.invoice_email || '';
+      fallbackEmail = resolvedContact?.email || resolvedContact?.invoice_email || '';
     }
 
     res.json({
@@ -235,7 +243,13 @@ router.get('/:customerId/servfixmail', async (req, res) => {
       return res.status(400).json({ error: 'Tenant ID mangler i session' });
     }
 
-    const recipient = await customerService.getReportRecipient(tenantId, customerId);
+    let resolvedServfixmail = await customerService.getCustomer(tenantId, customerId);
+    if (!resolvedServfixmail) {
+      resolvedServfixmail = await customerService.getCustomerByExternalId(tenantId, customerId);
+    }
+    const localServfixmailId = resolvedServfixmail?.id || customerId;
+
+    const recipient = await customerService.getReportRecipient(tenantId, localServfixmailId);
 
     if (recipient && recipient.email) {
       console.log(`✅ [ADMIN CUSTOMERS] Found report recipient: ${recipient.email}`);
