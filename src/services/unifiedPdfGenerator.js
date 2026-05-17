@@ -371,6 +371,7 @@ class UnifiedPDFGenerator {
     (data.avvik || []).forEach(a => (a.images || []).forEach(img => img?.url && collect.push(img)));
     
     console.log(`🖼️ Converting ${collect.length} images to base64...`);
+    const inlineFailures = [];
     for (const obj of collect) {
       if (!obj.url || obj.url.startsWith('data:')) continue;
       try {
@@ -378,10 +379,15 @@ class UnifiedPDFGenerator {
         const mime = obj.url.endsWith('.png') ? 'image/png' : obj.url.endsWith('.gif') ? 'image/gif' : 'image/jpeg';
         obj.url = `data:${mime};base64,${buf.toString('base64')}`;
       } catch (e) {
-        console.error(`  ❌ Image conversion failed:`, e.message);
+        inlineFailures.push({ url: obj.url, reason: e.message });
+        console.error(`  ❌ Image conversion FAILED — url=${obj.url} reason=${e.message}`);
       }
     }
-    console.log(`✅ Image conversion complete`);
+    if (inlineFailures.length > 0) {
+      console.error(`❌ inlineAllImages: ${inlineFailures.length}/${collect.length} bilder feilet:`, JSON.stringify(inlineFailures));
+      data._inlineFailures = inlineFailures;
+    }
+    console.log(`✅ Image conversion complete — ${collect.length - inlineFailures.length}/${collect.length} ok`);
     return data;
   }
 

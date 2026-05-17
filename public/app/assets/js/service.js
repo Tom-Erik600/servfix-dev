@@ -5387,15 +5387,24 @@ async function renderGeneralImages() {
 }
 
 // Progressiv bildelasting optimalisert for mobil
+// renderToken brukes for å kansellere utdaterte lastinger ved race conditions
+let _loadImagesToken = 0;
+
 function loadImagesProgressively(images) {
+    const token = ++_loadImagesToken;
     images.forEach((img, index) => {
         // Øk delay mellom bilder for å ikke overbelaste mobil
         setTimeout(() => {
+            // Kanseller hvis en nyere renderGeneralImages har startet
+            if (token !== _loadImagesToken) return;
+
             const thumbnail = document.querySelector(`.image-thumbnail[data-index="${index}"]`);
             if (thumbnail) {
                 const imgElement = new Image();
                 
                 imgElement.onload = function() {
+                    // Dobbelsjekk at vi fortsatt er aktuelle
+                    if (token !== _loadImagesToken) return;
                     const encodedUrl = encodeURIComponent(img.image_url).replace(/'/g, '%27');
                     thumbnail.innerHTML = `
                         <img src="${img.image_url}" alt="Bilde ${index + 1}">
@@ -5413,6 +5422,7 @@ function loadImagesProgressively(images) {
                 };
                 
                 imgElement.onerror = function() {
+                    if (token !== _loadImagesToken) return;
                     thumbnail.innerHTML = `
                         <div class="image-error">⚠️</div>
                         <div class="image-info">

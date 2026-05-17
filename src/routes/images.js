@@ -12,6 +12,8 @@ if (!bucket) {
   throw new Error('GCS bucket not configured — set GCS_BUCKET_NAME environment variable');
 }
 
+const { uploadToGCS, generateImagePath, deleteImage } = require('../services/storage');
+
 // Multer setup for memory storage
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -26,27 +28,6 @@ const upload = multer({
     }
   }
 });
-
-// Helper: Last opp til Google Cloud Storage
-async function uploadToGCS(buffer, filePath, mimetype) {
-  const file = bucket.file(filePath);
-  
-  const stream = file.createWriteStream({
-    metadata: {
-      contentType: mimetype,
-    },
-    resumable: false,
-  });
-
-  return new Promise((resolve, reject) => {
-    stream.on('error', reject);
-    stream.on('finish', () => {
-      const publicUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
-      resolve(publicUrl);
-    });
-    stream.end(buffer);
-  });
-}
 
 // ── In-memory cache for tenant settings (unngår GCS-kall på hvert request) ──
 const _settingsCache = new Map(); // tenantId → { value, expiresAt }
@@ -871,17 +852,17 @@ router.post('/general', upload.single('image'), async (req, res) => {
         
       } catch (manualUpdateError) {
         console.error('❌ Begge update-metoder feilet:', manualUpdateError);
-        
-        // Som siste utvei, logg detaljert feilinfo
         console.error('Stack:', manualUpdateError.stack);
-        
-        // Returner success siden bildet ble lastet opp til GCS
-        res.json({
-          success: true,
-          url: imageUrl,
-          message: 'Bilde lastet opp (database-oppdatering feilet)',
-          imageType: 'general',
-          warning: 'Database update failed but image uploaded to storage'
+
+        // Fail closed: DB-skriving feilet, så bildet er foreldreløst i GCS.
+        // Slett det opplastede bildet og returner feil, slik at frontend
+        // ikke tror lagringen lyktes.
+        await deleteImage(imageUrl);
+
+        return res.status(500).json({
+          success: false,
+          error: 'Kunne ikke lagre bilde-referanse i database',
+          details: manualUpdateError.message
         });
       }
     }
@@ -1005,31 +986,6 @@ router.post('/avvik', upload.single('image'), async (req, res) => {
     });
   }
 });
-
-// Helper: Generate image path for service images
-function generateImagePath(tenantId, orderId, equipmentId, imageType, avvikNumber = null, fileExtension = 'jpg') {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const timestamp = Date.now();
-  const random = Math.floor(Math.random() * 1000);
-  
-  let filename;
-  if (imageType === 'avvik' && avvikNumber) {
-    const formattedAvvikNumber = String(avvikNumber).padStart(3, '0');
-    filename = `avvik-${formattedAvvikNumber}_${timestamp}_${random}.${fileExtension}`;
-  } else if (imageType === 'ok') {
-    // NYTT: OK-bilder har eget filnavn-mønster og lagres i /ok/-undermappen
-    filename = `ok_${timestamp}_${random}.${fileExtension}`;
-  } else {
-    filename = `${imageType}_${timestamp}_${random}.${fileExtension}`;
-  }
-
-  // NYTT: OK-bilder lagres i egen undermappe under ordren
-  const subfolder = imageType === 'ok' ? '/ok' : '';
-
-  return `tenants/${tenantId}/service-reports/${year}/${month}/order-${orderId}${subfolder}/${filename}`;
-}
 
 // GET /api/images/avvik/:reportId - Hent alle avvik-bilder for en rapport
 router.get('/avvik/:reportId', async (req, res) => {
