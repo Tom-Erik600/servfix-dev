@@ -2,19 +2,12 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../config/database');
 const adminTenant = require('../../middleware/admin-tenant');
+const resolveCustomer = require('../../middleware/resolveCustomer');
 
-// 🔒 Delt middleware: Admin auth + tenant-isolasjon med validering
 router.use(adminTenant);
 
-// GET equipment for a specific customer
-router.get('/', async (req, res) => {
+router.get('/', resolveCustomer, async (req, res) => {
   try {
-    const { customerId } = req.query;
-    
-    if (!customerId) {
-      return res.status(400).json({ error: 'customerId is required' });
-    }
-    
     const pool = await db.getTenantConnection(req.adminTenantId);
     
     const query = `
@@ -33,7 +26,7 @@ router.get('/', async (req, res) => {
       ORDER BY ec.name ASC NULLS LAST, e.systemnavn ASC
     `;
 
-    const result = await pool.query(query, [parseInt(customerId)]);
+    const result = await pool.query(query, [req.resolvedCustomerId]);
 
     // Transform data til frontend format
     const equipment = result.rows.map(eq => ({
@@ -69,8 +62,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST new equipment
-router.post('/', async (req, res) => {
+router.post('/', resolveCustomer, async (req, res) => {
   try {
     const { customerId, systemtype, systemnummer, systemnavn, plassering, betjener, location, notater, clusterId,
             hasFilters, filterSupply, filterExhaust, filterDriveSupply, filterDriveExhaust,
@@ -93,7 +85,7 @@ router.post('/', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
        RETURNING *;`,
       [
-        parseInt(customerId),
+        req.resolvedCustomerId,
         systemtype,
         systemnummer,
         systemnavn,

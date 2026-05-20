@@ -106,9 +106,15 @@ router.get('/', async (req, res) => {
                     COALESCE(sr.status, 'not_started') as service_report_status
                 FROM equipment e
                 LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
-                WHERE e.customer_id = $1
+                WHERE (e.customer_id::text = $1::text
+                   OR EXISTS (
+                     SELECT 1 FROM customers c
+                     WHERE c.id = e.customer_id
+                     AND c.external_source = 'tripletex'
+                     AND c.external_id = $1::text
+                   ))
                 AND e.status = 'active'`,
-                [order.customer_id, order.id]
+                [String(order.customer_id), order.id]
             );
 
             equipment = equipmentResult.rows.map(eq => ({

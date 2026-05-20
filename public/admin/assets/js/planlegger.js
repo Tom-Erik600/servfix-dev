@@ -1198,7 +1198,7 @@ function escapeHtml(unsafe) {
 
     async function loadEquipmentForModal(customer, selectedIds = null, simple = false) {
         try {
-            const response = await fetch(`/api/admin/equipment?customerId=${customer.externalId || customer.id}`, {
+            const response = await fetch(`/api/admin/equipment?customerId=${customer.id || customer.externalId}`, {
                 credentials: 'include'
             });
 
@@ -1406,7 +1406,7 @@ async function loadProjectSuggestions(customer, preferredDescription = '') {
     if (!select || !textInput) return;
 
     try {
-        const response = await fetch(`/api/admin/customers/${customer.externalId || customer.id}/projects`, {
+        const response = await fetch(`/api/admin/customers/${customer.id || customer.externalId}/projects`, {
             credentials: 'include'
         });
         const projects = await response.json();
@@ -1636,7 +1636,7 @@ function showEquipmentForm(customer, equipmentType) {
         e.preventDefault();
         
         const equipmentData = {
-            customerId: customer.externalId || customer.id || customer.customerId,
+            customerId: customer.id || customer.externalId || customer.customerId,
             systemtype: equipmentType,
             systemnummer: document.getElementById('systemnummer').value,
             systemnavn: document.getElementById('systemnavn').value,

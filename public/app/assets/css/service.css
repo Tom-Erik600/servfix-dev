@@ -1954,6 +1954,11 @@ button[type="submit"].action-btn.primary:hover {
     transition: all 0.2s ease;
 }
 
+.byttet-image-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
 .virkningsgrad-wrapper {
     display: flex;
     flex-direction: column;

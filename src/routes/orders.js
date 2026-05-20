@@ -5,6 +5,7 @@ const fs = require('fs').promises;
 
 const customerService = require('../services/customerService');
 const { requireTenant } = require('../middleware/auth');
+const resolveCustomer = require('../middleware/resolveCustomer');
 
 const router = express.Router();
 
@@ -216,8 +217,15 @@ router.get('/', async (req, res) => {
                     COALESCE(sr.status, 'not_started') as service_report_status
                 FROM equipment e
                 LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
-                WHERE e.customer_id = $1 AND e.status = 'active'`,
-                [parseInt(order.customer_id), order.id]
+                WHERE (e.customer_id::text = $1::text
+                   OR EXISTS (
+                     SELECT 1 FROM customers c
+                     WHERE c.id = e.customer_id
+                     AND c.external_source = 'tripletex'
+                     AND c.external_id = $1::text
+                   ))
+                  AND e.status = 'active'`,
+                [String(order.customer_id), order.id]
             );
 
             equipment = equipmentResult.rows.map(eq => ({
@@ -310,8 +318,14 @@ router.get('/today', async (req, res) => {
                     COALESCE(sr.status, 'not_started') as service_report_status
                 FROM equipment e
                 LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
-                WHERE e.customer_id = $1`,
-                [parseInt(order.customer_id), order.id]
+                WHERE (e.customer_id::text = $1::text
+                   OR EXISTS (
+                     SELECT 1 FROM customers c
+                     WHERE c.id = e.customer_id
+                     AND c.external_source = 'tripletex'
+                     AND c.external_id = $1::text
+                   ))`,
+                [String(order.customer_id), order.id]
             );
 
             equipment = equipmentResult.rows.map(eq => ({
@@ -452,8 +466,15 @@ router.get('/:id', async (req, res) => {
             COALESCE(sr.status, 'not_started') as service_report_status
         FROM equipment e
         LEFT JOIN service_reports sr ON (sr.equipment_id = e.id AND sr.order_id = $2)
-        WHERE e.customer_id = $1 AND e.status = 'active'`,
-        [parseInt(order.customer_id), order.id]
+        WHERE (e.customer_id::text = $1::text
+           OR EXISTS (
+             SELECT 1 FROM customers c
+             WHERE c.id = e.customer_id
+             AND c.external_source = 'tripletex'
+             AND c.external_id = $1::text
+           ))
+          AND e.status = 'active'`,
+        [String(order.customer_id), order.id]
     );
 
     // 3. Map equipment med status
@@ -883,7 +904,7 @@ router.get('/service-report/:reportId/preview', async (req, res) => {
 });
 
 // POST create new order (for teknikere)
-router.post('/', async (req, res) => {
+router.post('/', resolveCustomer, async (req, res) => {
   try {
     const { 
       customerId, 
@@ -975,7 +996,7 @@ router.post('/', async (req, res) => {
     
     const params = [
       orderId,                                    // $1 - ordre ID
-      parseInt(customerId),                       // $2 - kunde ID
+      req.resolvedCustomerId,                     // $2 - kunde ID
       String(customerName),                       // $3 - kunde navn
       JSON.stringify(customer_data),              // $4 - kunde data
       description || null,                        // $5 - beskrivelse

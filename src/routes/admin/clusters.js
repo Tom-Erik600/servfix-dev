@@ -2,19 +2,12 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../config/database');
 const adminTenant = require('../../middleware/admin-tenant');
+const resolveCustomer = require('../../middleware/resolveCustomer');
 
-// 🔒 Admin auth + tenant-isolasjon
 router.use(adminTenant);
 
-// GET alle cluster for en kunde (inkl. antall anlegg per cluster)
-router.get('/', async (req, res) => {
-  const { customerId } = req.query;
-
-  if (!customerId) {
-    return res.status(400).json({ error: 'customerId er påkrevd' });
-  }
-
-  console.log(`📦 [CLUSTERS] GET clusters for customer ${customerId}`);
+router.get('/', resolveCustomer, async (req, res) => {
+  console.log(`📦 [CLUSTERS] GET clusters for customer ${req.resolvedCustomerId}`);
 
   try {
     const pool = await db.getTenantConnection(req.adminTenantId);
@@ -34,7 +27,7 @@ router.get('/', async (req, res) => {
        WHERE ec.customer_id = $1
        GROUP BY ec.id
        ORDER BY ec.name ASC`,
-      [parseInt(customerId)]
+      [req.resolvedCustomerId]
     );
 
     const clusters = result.rows.map(row => ({
@@ -56,14 +49,14 @@ router.get('/', async (req, res) => {
 });
 
 // POST opprett nytt cluster
-router.post('/', async (req, res) => {
-  const { customerId, name, notes, tripletexProjectId, tripletexProjectName } = req.body;
+router.post('/', resolveCustomer, async (req, res) => {
+  const { name, notes, tripletexProjectId, tripletexProjectName } = req.body;
 
-  if (!customerId || !name || !name.trim()) {
-    return res.status(400).json({ error: 'customerId og name er påkrevd' });
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'name er påkrevd' });
   }
 
-  console.log(`📦 [CLUSTERS] POST ny cluster "${name}" for customer ${customerId}`);
+  console.log(`📦 [CLUSTERS] POST ny cluster "${name}" for customer ${req.resolvedCustomerId}`);
 
   try {
     const pool = await db.getTenantConnection(req.adminTenantId);
@@ -74,7 +67,7 @@ router.post('/', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
       [
-        parseInt(customerId),
+        req.resolvedCustomerId,
         name.trim(),
         notes || null,
         tripletexProjectId || null,

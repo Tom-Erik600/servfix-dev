@@ -2,6 +2,7 @@
 const express = require('express');
 const db = require('../config/database');
 const { requireTenant } = require('../middleware/auth');
+const resolveCustomer = require('../middleware/resolveCustomer');
 
 const router = express.Router();
 
@@ -91,7 +92,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // ✅ OPPDATERT: GET equipment by customer ID
-router.get('/', async (req, res) => {
+router.get('/', resolveCustomer, async (req, res) => {
   console.log('=== EQUIPMENT BY CUSTOMER ID ENDPOINT CALLED ===');
   try {
     const { customerId } = req.query;
@@ -111,7 +112,7 @@ router.get('/', async (req, res) => {
       AND (status = 'active' OR $2 = true)
       ORDER BY systemnavn ASC
     `;
-    const params = [parseInt(customerId), includeInactive];
+    const params = [req.resolvedCustomerId, includeInactive];
     
     const result = await pool.query(query, params);
     console.log(`Found ${result.rows.length} equipment for customer ${customerId}`);
@@ -150,7 +151,7 @@ router.get('/', async (req, res) => {
 });
 
 // ✅ OPPDATERT: POST new equipment
-router.post('/', async (req, res) => {
+router.post('/', resolveCustomer, async (req, res) => {
   console.log('Equipment POST request:', {
     body: req.body,
     sessionTechnicianId: req.session.technicianId,
@@ -184,7 +185,7 @@ router.post('/', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) 
        RETURNING *;`,
       [
-        parseInt(customerId), 
+        req.resolvedCustomerId, 
         systemtype, 
         systemnummer, 
         systemnavn, 

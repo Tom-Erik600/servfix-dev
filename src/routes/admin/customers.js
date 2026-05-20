@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const db = require('../../config/database');
 
 console.log('🟢 [ADMIN CUSTOMERS] Route loading...');
 
@@ -434,14 +435,22 @@ router.get('/:customerId/projects', async (req, res) => {
 
     const { withClient } = require('../../services/integrations/tripletex/provider');
 
+    // Slå opp external_id (Tripletex) fra customers-tabellen — customerId i URL er lokal ID
+    const pool = await db.getTenantConnection(tenantId);
+    const customerRow = await pool.query(
+      'SELECT external_id FROM customers WHERE id = $1',
+      [parseInt(customerId)]
+    );
+    const tripletexCustomerId = customerRow.rows[0]?.external_id || customerId;
+
     const { openProjects, allProjects } = await withClient(tenantId, async (client) => {
       const fields = 'id,name,number,displayName,startDate,endDate,isClosed';
       const [openRes, allRes] = await Promise.all([
         client.get('/project', {
-          params: { customerId, isClosed: false, from: 0, count: 20, fields },
+          params: { customerId: tripletexCustomerId, isClosed: false, from: 0, count: 20, fields },
         }),
         client.get('/project', {
-          params: { customerId, from: 0, count: 20, fields },
+          params: { customerId: tripletexCustomerId, from: 0, count: 20, fields },
         }),
       ]);
       return {
@@ -451,7 +460,7 @@ router.get('/:customerId/projects', async (req, res) => {
     });
 
     console.log(
-      `🔍 [PROJECTS DEBUG] Customer ${customerId}: ${openProjects.length} åpne, ${allProjects.length} totalt`
+      `🔍 [PROJECTS DEBUG] Customer ${customerId} (tripletex=${tripletexCustomerId}): ${openProjects.length} åpne, ${allProjects.length} totalt`
     );
     allProjects.forEach((p) => {
       console.log(

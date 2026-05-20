@@ -233,7 +233,7 @@
         if (!select || !textInput) return;
 
         try {
-            const customerId = customer.externalId || customer.id;
+            const customerId = customer.id || customer.externalId;
             const response = await fetch(`/api/customers/${customerId}/projects`, {
                 credentials: 'include'
             });
@@ -329,7 +329,7 @@
 
     async function loadClustersForSelect(customer) {
         try {
-            const customerId = customer.externalId || customer.id;
+            const customerId = customer.id || customer.externalId;
             const response = await fetch(`/api/clusters?customerId=${customerId}`, {
                 credentials: 'include'
             });
@@ -360,7 +360,7 @@
         const customer = state.selectedCustomer;
         if (!customer) return;
 
-        const customerId = customer.externalId || customer.id;
+        const customerId = customer.id || customer.externalId;
         const nameInput = document.getElementById('clusterNameInput');
         const select = document.getElementById('clusterSelect');
 
@@ -554,7 +554,7 @@
         }
 
         // Last inn anlegg for denne kunden
-        await loadCustomerEquipment(customer.externalId || customer.id);
+        await loadCustomerEquipment(customer.id || customer.externalId);
 
         validateForm();
     }
@@ -866,7 +866,7 @@
     }
 
     async function handleSaveEquipment(selectedType) {
-        const customerId = state.selectedCustomer?.externalId || state.selectedCustomer?.id;
+        const customerId = state.selectedCustomer?.id || state.selectedCustomer?.externalId;
         if (!customerId) {
             showToast('Feil: Mangler kunde-ID', 'error');
             return;
@@ -908,7 +908,7 @@
             hideEquipmentModal();
 
             // Refresh utstyrsliste og auto-velg det nye anlegget
-            await loadCustomerEquipment(state.selectedCustomer.externalId || state.selectedCustomer.id);
+            await loadCustomerEquipment(state.selectedCustomer.id || state.selectedCustomer.externalId);
             const newId = parseInt(createdEquipment.id);
             if (!state.selectedEquipmentIds.includes(newId)) {
                 state.selectedEquipmentIds.push(newId);
@@ -1023,7 +1023,7 @@
             const serviceAddressCity = elements.serviceAddressCity?.value?.trim() || '';
 
             const orderData = {
-                customerId: state.selectedCustomer.externalId || state.selectedCustomer.id,
+                customerId: state.selectedCustomer.id || state.selectedCustomer.externalId,
                 customerName: state.selectedCustomer.name,
                 customerData: state.selectedCustomer,
                 description: description,

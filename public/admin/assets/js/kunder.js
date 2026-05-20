@@ -312,7 +312,7 @@ window.selectCustomer = async function(customerId) {
     }
 
     // Hent anlegg for kunden (bruk externalId for å matche equipment-tabellen)
-    const equipmentCustomerId = customer.externalId || customerId;
+    const equipmentCustomerId = customerId || customer.externalId;
     console.log(`🏢 Henter anlegg for ${customer.name} (equipmentId: ${equipmentCustomerId})...`);
     try {
         const equipmentResponse = await fetch(`/api/admin/equipment?customerId=${equipmentCustomerId}`, {
@@ -835,7 +835,7 @@ window.selectCustomer = async function(customerId) {
             selectedEquipmentIdsForCluster = [];
             await loadCustomerClusters(currentSelectedCustomer);
 
-            const eqResponse = await fetch(`/api/admin/equipment?customerId=${currentSelectedCustomer.externalId || currentSelectedCustomer.id}`, {
+            const eqResponse = await fetch(`/api/admin/equipment?customerId=${currentSelectedCustomer.id || currentSelectedCustomer.externalId}`, {
                 credentials: 'include'
             });
 
@@ -843,7 +843,7 @@ window.selectCustomer = async function(customerId) {
                 currentCustomerEquipment = await eqResponse.json();
                 renderEquipmentList(currentCustomerEquipment);
             }
-
+        
             closeClusterActionModal();
         } catch (error) {
             console.error('Cluster action error:', error);
@@ -1359,7 +1359,7 @@ window.selectCustomer = async function(customerId) {
                 credentials: 'include',
                 body: JSON.stringify({
                     ...body,
-                    customerId: currentSelectedCustomer.externalId || currentSelectedCustomer.id
+                    customerId: currentSelectedCustomer.id || currentSelectedCustomer.externalId
                 })
             });
 
@@ -1373,7 +1373,7 @@ window.selectCustomer = async function(customerId) {
                 // Re-hent anleggsliste
                 if (currentSelectedCustomer) {
                     await loadCustomerClusters(currentSelectedCustomer);
-                    const eqResponse = await fetch(`/api/admin/equipment?customerId=${currentSelectedCustomer.externalId || currentSelectedCustomer.id}`, {
+                    const eqResponse = await fetch(`/api/admin/equipment?customerId=${currentSelectedCustomer.id || currentSelectedCustomer.externalId}`, {
                         credentials: 'include'
                     });
                     if (eqResponse.ok) {

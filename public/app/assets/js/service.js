@@ -5198,11 +5198,11 @@ async function renderAvvikImagesForChecklist(currentReportId) {
         // Ikke vis feilmelding til bruker for bilderedering
     }
 
-    // Synkroniser byttet-bilder (eksisterende kode)
-    document.querySelectorAll('.status-btn.byttet.active').forEach(btn => {
-        const checklistItem = btn.closest('.checklist-item');
-        if (checklistItem) {
-            const itemId = checklistItem.dataset.itemId;
+    // Synkroniser byttet-bilder: bruk .byttet-container.show for å fange alle synlige
+    // byttet-containere uavhengig av timing på active-klassen
+    document.querySelectorAll('.byttet-container.show').forEach(container => {
+        const itemId = container.id.replace('byttet-', '');
+        if (itemId) {
             syncByttetImages(itemId);
         }
     });
