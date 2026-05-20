@@ -1,0 +1,50 @@
+{
+  "active_plan": "E:\\apps\\servfix-dev\\.sisyphus\\plans\\belastning-fane.md",
+  "started_at": "2026-04-29T20:01:10.167Z",
+  "session_ids": [
+    "ses_2264e2471ffe26QcZWcnCGLzSK"
+  ],
+  "session_origins": {
+    "ses_2264e2471ffe26QcZWcnCGLzSK": "direct"
+  },
+  "plan_name": "belastning-fane",
+  "agent": "atlas",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "HTML-endringer i `planlegger.html`",
+      "session_id": "ses_2252a22a5ffetSV6V7ieUDHbKa",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-04-29T20:03:04.138Z"
+    },
+    "todo:2": {
+      "task_key": "todo:2",
+      "task_label": "2",
+      "task_title": "CSS-tillegg i `planlegger.css`",
+      "session_id": "ses_225289eefffeyMLe5pCihEZRMH",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-04-29T20:04:31.604Z"
+    },
+    "todo:3": {
+      "task_key": "todo:3",
+      "task_label": "3",
+      "task_title": "JavaScript-endringer i `planlegger.js`",
+      "session_id": "ses_22509cfa5ffeTqTTQelZWk00ZI",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-04-29T20:41:17.123Z"
+    },
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "**Akseptansekriterier-sjekk** — `unspecified-high` med `playwright`-skill",
+      "session_id": "ses_225035905ffePIoG1W9vAsL1TY",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-04-29T21:02:52.233Z"
+    }
+  }
+}
