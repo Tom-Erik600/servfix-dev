@@ -324,7 +324,8 @@ router.get('/today', async (req, res) => {
                      WHERE c.id = e.customer_id
                      AND c.external_source = 'tripletex'
                      AND c.external_id = $1::text
-                   ))`,
+                   ))
+                  AND e.status = 'active'`,
                 [String(order.customer_id), order.id]
             );
 
