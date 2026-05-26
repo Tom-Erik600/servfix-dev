@@ -331,7 +331,7 @@ function populateTodaysTable(orders, customerMap, technicianMap) {
     if (todaysOrders.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" style="text-align: center; padding: 40px; color: #9CA3AF;">
+                <td colspan="8" style="text-align: center; padding: 40px; color: #9CA3AF;">
                     <div style="font-size: 48px; margin-bottom: 10px;">☀️</div>
                     <div style="font-weight: 500;">Ingen oppdrag planlagt for i dag</div>
                     <div style="font-size: 14px; margin-top: 8px;">Nyt dagen!</div>
@@ -369,6 +369,7 @@ function populateTodaysTable(orders, customerMap, technicianMap) {
         const scheduledDate = parseDate(order.scheduledDate || order.scheduled_date);
         const dateDisplay = scheduledDate ? formatDateNorwegian(scheduledDate) : 'Ikke satt';
         const customerName = customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde';
+        const technicianName = technicianMap.get(order.technician_id ?? order.technicianId) || '—';
         const anleggstype = getAnleggstype(order);
         const deleteBtn = renderDeleteButton(order, orderNumber, customerName);
         
@@ -376,6 +377,7 @@ function populateTodaysTable(orders, customerMap, technicianMap) {
         <tr style="${rowStyle}">
             <td><strong><a href="#" onclick="openOrderModal('${order.id}'); return false;" style="color:#3b82f6; text-decoration:none; cursor:pointer;">${orderNumber}</a></strong></td>
             <td>${customerName}</td>
+            <td>${technicianName}</td>
             <td>${order.description || '—'}</td>
             <td>${anleggstype}</td>
             <td>${dateDisplay}</td>
@@ -420,7 +422,7 @@ function populateWeeklyTable(orders, customerMap, technicianMap) {
     if (weeklyOrders.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" style="text-align: center; padding: 40px; color: #9CA3AF;">
+                <td colspan="8" style="text-align: center; padding: 40px; color: #9CA3AF;">
                     <div style="font-size: 48px; margin-bottom: 10px;">📋</div>
                     <div style="font-weight: 500;">Ingen planlagte oppdrag denne uken</div>
                 </td>
@@ -459,6 +461,7 @@ function populateWeeklyTable(orders, customerMap, technicianMap) {
         const scheduledDate = parseDate(order.scheduledDate || order.scheduled_date);
         const dateDisplay = scheduledDate ? formatDateNorwegian(scheduledDate) : 'Ikke satt';
         const customerName = customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde';
+        const technicianName = technicianMap.get(order.technician_id ?? order.technicianId) || '—';
         const anleggstype = getAnleggstype(order);
         const deleteBtn = renderDeleteButton(order, orderNumber, customerName);
         
@@ -466,6 +469,7 @@ function populateWeeklyTable(orders, customerMap, technicianMap) {
         <tr style="${rowStyle}">
             <td><strong><a href="#" onclick="openOrderModal('${order.id}'); return false;" style="color:#3b82f6; text-decoration:none; cursor:pointer;">${orderNumber}</a></strong></td>
             <td>${customerName}</td>
+            <td>${technicianName}</td>
             <td>${order.description || '—'}</td>
             <td>${anleggstype}</td>
             <td>${dateDisplay}</td>
@@ -508,7 +512,7 @@ function populateUnfinishedTable(orders, customerMap, technicianMap) {
     if (unfinishedOrders.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" style="text-align: center; padding: 40px; color: #9CA3AF;">
+                <td colspan="8" style="text-align: center; padding: 40px; color: #9CA3AF;">
                     <div style="font-size: 48px; margin-bottom: 10px;">🎉</div>
                     <div style="font-weight: 500;">Ingen uferdige oppdrag</div>
                     <div style="font-size: 14px; margin-top: 8px;">Alt er på stell!</div>
@@ -530,6 +534,7 @@ function populateUnfinishedTable(orders, customerMap, technicianMap) {
         const scheduledDate = parseDate(order.scheduledDate || order.scheduled_date);
         const dateDisplay = scheduledDate ? formatDateNorwegian(scheduledDate) : 'Ikke satt';
         const customerName = customerMap.get(customerId) || order.customerName || order.customer_name || 'Ukjent kunde';
+        const technicianName = technicianMap.get(order.technician_id ?? order.technicianId) || '—';
         const anleggstype = getAnleggstype(order);
         const deleteBtn = renderDeleteButton(order, orderNumber, customerName);
         
@@ -537,6 +542,7 @@ function populateUnfinishedTable(orders, customerMap, technicianMap) {
         <tr>
             <td><strong><a href="#" onclick="openOrderModal('${order.id}'); return false;" style="color:#3b82f6; text-decoration:none; cursor:pointer;">${orderNumber}</a></strong></td>
             <td>${customerName}</td>
+            <td>${technicianName}</td>
             <td>${order.description || '—'}</td>
             <td>${anleggstype}</td>
             <td>${dateDisplay}</td>
@@ -656,7 +662,7 @@ function showErrorState() {
     // Vis feilmelding i tabeller
     const errorMessage = `
         <tr>
-            <td colspan="7" style="text-align: center; padding: 20px; color: #EF4444;">
+            <td colspan="8" style="text-align: center; padding: 20px; color: #EF4444;">
                 <div style="font-size: 24px; margin-bottom: 10px;">⚠️</div>
                 <div>Kunne ikke laste data. Prøv å oppdatere siden.</div>
             </td>

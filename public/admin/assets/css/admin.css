@@ -402,9 +402,10 @@ table {
 
 .dashboard-table .col-ordrenr    { width: 110px; }
 .dashboard-table .col-kunde      { width: 18%; }
-.dashboard-table .col-beskrivelse { width: 24%; }
-.dashboard-table .col-anleggstype { width: 20%; }
+.dashboard-table .col-beskrivelse { width: 20%; }
+.dashboard-table .col-anleggstype { width: 16%; }
 .dashboard-table .col-dato       { width: 100px; }
+.dashboard-table .col-tekniker   { width: 14%; }
 .dashboard-table .col-status     { width: 110px; }
 .dashboard-table .col-slett      { width: 60px; }
 
