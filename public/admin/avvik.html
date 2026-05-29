@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avvik - Air-Tech Admin</title>
+    <link rel="stylesheet" href="/admin/assets/css/admin.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Avvik-specific styles */
+        .avvik-hero {
+            padding: 24px 32px 0;
+            background: #fff;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        .avvik-hero-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .avvik-title { font-size: 22px; font-weight: 700; color: #111827; margin: 0 0 4px 0; }
+        .avvik-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
+
+        .avvik-filters {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 16px 0;
+            align-items: flex-end;
+        }
+        .avvik-filter-group { display: flex; flex-direction: column; gap: 4px; }
+        .avvik-filter-group label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; }
+        .avvik-filter-group select,
+        .avvik-filter-group input[type="date"] {
+            border: 1px solid #D1D5DB;
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 13px;
+            color: #374151;
+            background: #fff;
+            min-width: 140px;
+        }
+        .avvik-filter-group select[multiple] { min-height: 80px; }
+
+        .avvik-card { padding: 0 32px 32px; }
+        .avvik-table-wrap { overflow-x: auto; border: 1px solid #E5E7EB; border-radius: 8px; margin-top: 16px; }
+        .avvik-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .avvik-table th {
+            background: #F9FAFB;
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            color: #6B7280;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        .avvik-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #F3F4F6;
+            color: #374151;
+            vertical-align: middle;
+        }
+        .avvik-table tr:last-child td { border-bottom: none; }
+        .avvik-table tbody tr:hover { background: #F9FAFB; cursor: pointer; }
+
+        .avvik-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .badge-red    { background: #FEE2E2; color: #B91C1C; }
+        .badge-yellow { background: #FEF3C7; color: #92400E; }
+        .badge-blue   { background: #DBEAFE; color: #1E40AF; }
+        .badge-gray   { background: #F3F4F6; color: #6B7280; }
+        .badge-green  { background: #D1FAE5; color: #065F46; }
+        .badge-orange { background: #FED7AA; color: #92400E; }
+
+        .avvik-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0 0;
+            font-size: 13px;
+            color: #6B7280;
+        }
+        .avvik-pagination button {
+            border: 1px solid #D1D5DB;
+            background: #fff;
+            border-radius: 6px;
+            padding: 5px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            color: #374151;
+        }
+        .avvik-pagination button:disabled { opacity: 0.4; cursor: default; }
+        .avvik-pagination button:not(:disabled):hover { background: #F9FAFB; }
+
+        /* Detail panel overlay */
+        .avvik-detail-overlay {
+            display: none;
+            position: fixed;
+            top: 0; right: 0;
+            width: 480px;
+            height: 100%;
+            background: #fff;
+            box-shadow: -4px 0 24px rgba(0,0,0,0.12);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        .avvik-detail-overlay.is-open { display: block; }
+        .avvik-detail-backdrop {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.3);
+            z-index: 999;
+        }
+        .avvik-detail-backdrop.is-open { display: block; }
+        .avvik-detail-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid #E5E7EB;
+            position: sticky;
+            top: 0;
+            background: #fff;
+        }
+        .avvik-detail-close {
+            background: none; border: none; font-size: 20px;
+            cursor: pointer; color: #6B7280; line-height: 1;
+        }
+        .avvik-detail-body { padding: 20px; }
+        .avvik-detail-section { margin-bottom: 20px; }
+        .avvik-detail-section h4 { font-size: 12px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px 0; }
+        .avvik-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .avvik-detail-field label { font-size: 11px; color: #6B7280; display: block; margin-bottom: 2px; }
+        .avvik-detail-field span { font-size: 13px; color: #111827; font-weight: 500; }
+        .avvik-obs-item { background: #F9FAFB; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; }
+        .avvik-obs-meta { color: #6B7280; font-size: 11px; margin-bottom: 4px; }
+        .avvik-img-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+        .avvik-img-thumb { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer; border: 1px solid #E5E7EB; }
+        .avvik-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid #E5E7EB; }
+        .avvik-btn {
+            padding: 7px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+        .avvik-btn-primary { background: #2563EB; color: #fff; border-color: #2563EB; }
+        .avvik-btn-primary:hover { background: #1D4ED8; }
+        .avvik-btn-outline { background: #fff; color: #374151; border-color: #D1D5DB; }
+        .avvik-btn-outline:hover { background: #F9FAFB; }
+        .avvik-btn-danger { background: #DC2626; color: #fff; border-color: #DC2626; }
+        .avvik-btn-danger:hover { background: #B91C1C; }
+
+        /* Mini-dialog modal */
+        .avvik-dialog-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4);
+            z-index: 1200;
+            align-items: center;
+            justify-content: center;
+        }
+        .avvik-dialog-overlay.is-open { display: flex; }
+        .avvik-dialog {
+            background: #fff;
+            border-radius: 10px;
+            padding: 24px;
+            min-width: 320px;
+            max-width: 440px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+        }
+        .avvik-dialog h3 { margin: 0 0 16px 0; font-size: 16px; color: #111827; }
+        .avvik-dialog label { display: block; font-size: 12px; font-weight: 600; color: #6B7280; margin-bottom: 4px; }
+        .avvik-dialog select,
+        .avvik-dialog input[type="date"],
+        .avvik-dialog textarea {
+            width: 100%;
+            border: 1px solid #D1D5DB;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 13px;
+            color: #374151;
+            box-sizing: border-box;
+            margin-bottom: 12px;
+        }
+        .avvik-dialog textarea { min-height: 80px; resize: vertical; }
+        .avvik-dialog-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+        .avvik-error { background: #FEE2E2; color: #B91C1C; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; display: none; }
+
+        /* Image lightbox */
+        .avvik-lightbox {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 1300;
+            align-items: center;
+            justify-content: center;
+        }
+        .avvik-lightbox.is-open { display: flex; }
+        .avvik-lightbox img { max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 4px; }
+        .avvik-lightbox-close { position: absolute; top: 16px; right: 20px; color: #fff; font-size: 28px; cursor: pointer; line-height: 1; }
+        .avvik-radio-group { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+        .avvik-radio-group label { font-size: 13px; color: #374151; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+        .avvik-hint { font-size: 11px; color: #9CA3AF; margin: 6px 0 0 0; }
+    </style>
+</head>
+<body>
+    <div class="app-layout">
+        <header class="app-header">
+            <!-- Content loaded dynamically by main.js -->
+        </header>
+
+        <main class="main-content">
+            <!-- Hero + filters -->
+            <div class="avvik-hero">
+                <div class="avvik-hero-top">
+                    <div>
+                        <h1 class="avvik-title">Avvikshåndtering</h1>
+                        <p class="avvik-subtitle">Oversikt og oppfølging av avvik registrert under servicebesøk</p>
+                    </div>
+                    <button class="avvik-btn avvik-btn-primary" onclick="loadDeviations()" type="button">Oppdater</button>
+                    <button id="avvikExportBtn" class="avvik-btn avvik-btn-outline" type="button">Eksporter</button>
+                </div>
+
+                <div class="avvik-filters">
+                    <div class="avvik-filter-group">
+                        <label>Status</label>
+                        <select id="filter-status" multiple size="3">
+                            <option value="open" selected>Åpen</option>
+                            <option value="assigned" selected>Tildelt</option>
+                            <option value="in_progress" selected>Under arbeid</option>
+                            <option value="fixed_pending_verification" selected>Venter verifikasjon</option>
+                            <option value="closed">Lukket</option>
+                        </select>
+                    </div>
+
+                    <div class="avvik-filter-group">
+                        <label>Alvorlighet</label>
+                        <select id="filter-severity" multiple size="3">
+                            <option value="høy">Høy</option>
+                            <option value="medium">Medium</option>
+                            <option value="lav">Lav</option>
+                        </select>
+                    </div>
+
+                    <div class="avvik-filter-group">
+                        <label>Dato fra</label>
+                        <input type="date" id="filter-date-from">
+                    </div>
+
+                    <div class="avvik-filter-group">
+                        <label>Dato til</label>
+                        <input type="date" id="filter-date-to">
+                    </div>
+
+                    <div class="avvik-filter-group">
+                        <label>Sortering</label>
+                        <select id="filter-sort">
+                            <option value="severity_desc_opened_asc">Alvorlighet (verste først)</option>
+                            <option value="opened_desc">Nyeste first</option>
+                            <option value="deadline_asc">Deadline (tidligste først)</option>
+                        </select>
+                    </div>
+
+                    <div class="avvik-filter-group" style="flex-direction: row; align-items: flex-end; gap: 8px;">
+                        <button class="avvik-btn avvik-btn-primary" onclick="applyFilters()" type="button">Søk</button>
+                        <button class="avvik-btn avvik-btn-outline" onclick="resetFilters()" type="button">Nullstill</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="avvik-card">
+                <div id="avvik-global-error" class="avvik-error"></div>
+
+                <div class="avvik-table-wrap">
+                    <table class="avvik-table">
+                        <thead>
+                            <tr>
+                                <th>Utstyr</th>
+                                <th>Sjekkpunkt</th>
+                                <th>Status</th>
+                                <th>Alvorlighet</th>
+                                <th>Åpnet</th>
+                                <th>Dager åpen</th>
+                                <th>Obs.</th>
+                                <th>Tildelt</th>
+                                <th>Deadline</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deviations-table-body">
+                            <tr><td colspan="9" style="text-align:center; color:#9CA3AF; padding: 32px;">Laster avvik...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="deviations-pagination" class="avvik-pagination"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Detail panel -->
+    <div id="avvik-detail-backdrop" class="avvik-detail-backdrop" onclick="closeDetailPanel()"></div>
+    <div id="avvik-detail-panel" class="avvik-detail-overlay">
+        <div class="avvik-detail-header">
+            <h3 id="detail-title" style="margin:0; font-size:16px; color:#111827;">Avvik</h3>
+            <button class="avvik-detail-close" onclick="closeDetailPanel()" aria-label="Lukk">&#x2715;</button>
+        </div>
+        <div class="avvik-detail-body" id="avvik-detail-body">
+            <!-- Filled dynamically -->
+        </div>
+    </div>
+
+    <!-- Dialog: Tildel -->
+    <div id="dialog-assign" class="avvik-dialog-overlay">
+        <div class="avvik-dialog">
+            <h3>Tildel tekniker</h3>
+            <div id="assign-error" class="avvik-error"></div>
+            <label for="assign-technician">Tekniker</label>
+            <select id="assign-technician">
+                <option value="">-- Ingen --</option>
+            </select>
+            <div class="avvik-dialog-footer">
+                <button class="avvik-btn avvik-btn-outline" onclick="closeDialog('dialog-assign')" type="button">Avbryt</button>
+                <button class="avvik-btn avvik-btn-primary" onclick="submitAssign()" type="button">Lagre</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dialog: Sett deadline -->
+    <div id="dialog-deadline" class="avvik-dialog-overlay">
+        <div class="avvik-dialog">
+            <h3>Sett deadline</h3>
+            <div id="deadline-error" class="avvik-error"></div>
+            <label for="deadline-input">Dato</label>
+            <input type="date" id="deadline-input">
+            <div class="avvik-dialog-footer">
+                <button class="avvik-btn avvik-btn-outline" onclick="closeDialog('dialog-deadline')" type="button">Avbryt</button>
+                <button class="avvik-btn avvik-btn-primary" onclick="submitDeadline()" type="button">Lagre</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dialog: Endre alvorlighet -->
+    <div id="dialog-severity" class="avvik-dialog-overlay">
+        <div class="avvik-dialog">
+            <h3>Endre alvorlighetsgrad</h3>
+            <div id="severity-error" class="avvik-error"></div>
+            <label for="severity-input">Alvorlighet</label>
+            <select id="severity-input">
+                <option value="høy">Høy</option>
+                <option value="medium">Medium</option>
+                <option value="lav">Lav</option>
+            </select>
+            <div class="avvik-dialog-footer">
+                <button class="avvik-btn avvik-btn-outline" onclick="closeDialog('dialog-severity')" type="button">Avbryt</button>
+                <button class="avvik-btn avvik-btn-primary" onclick="submitSeverity()" type="button">Lagre</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dialog: Lukk avvik -->
+    <div id="dialog-close" class="avvik-dialog-overlay">
+        <div class="avvik-dialog">
+            <h3>Lukk avvik</h3>
+            <div id="close-error" class="avvik-error"></div>
+            <label for="closure-mode">Årsak</label>
+            <select id="closure-mode">
+                <option value="fixed_on_visit">Utbedret under besøk</option>
+                <option value="manual_close">Manuelt lukket</option>
+                <option value="accepted_by_customer">Godkjent av kunde</option>
+            </select>
+            <label for="closure-comment">Kommentar</label>
+            <textarea id="closure-comment" placeholder="Beskriv hva som ble gjort..."></textarea>
+            <div class="avvik-dialog-footer">
+                <button class="avvik-btn avvik-btn-outline" onclick="closeDialog('dialog-close')" type="button">Avbryt</button>
+                <button class="avvik-btn avvik-btn-danger" onclick="submitClose()" type="button">Lukk avvik</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lightbox -->
+    <div id="avvik-lightbox" class="avvik-lightbox" onclick="closeLightbox()">
+        <span class="avvik-lightbox-close">&#x2715;</span>
+        <img id="avvik-lightbox-img" src="" alt="Avviksbilde">
+    </div>
+
+    <!-- Export modal -->
+    <div id="avvikExportModal" class="avvik-dialog-overlay">
+      <div class="avvik-dialog">
+        <h3 class="avvik-dialog-title">Eksporter avvik</h3>
+        <div class="avvik-error" id="avvikExportError"></div>
+        
+        <div class="avvik-form-group">
+          <label class="avvik-label">Format</label>
+          <div class="avvik-radio-group">
+            <label><input type="radio" name="exportFormat" value="csv" checked> CSV (Excel-kompatibel)</label>
+            <label><input type="radio" name="exportFormat" value="pdf"> PDF</label>
+          </div>
+        </div>
+        
+        <div class="avvik-form-group">
+          <label class="avvik-label">Omfang</label>
+          <div class="avvik-radio-group">
+            <label><input type="radio" name="exportScope" value="filtered" checked> Filtrert (aktive filtre)</label>
+            <label><input type="radio" name="exportScope" value="all"> Alle avvik for tenant</label>
+          </div>
+          <p class="avvik-hint">Filtrert bruker aktive filtre i listevisningen. Alle inkluderer hele tenant.</p>
+        </div>
+        
+        <div class="avvik-dialog-footer">
+          <button type="button" id="avvikExportCancel" class="avvik-btn avvik-btn-outline">Avbryt</button>
+          <button type="button" id="avvikExportSubmit" class="avvik-btn avvik-btn-primary">Last ned</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/admin/assets/js/main.js"></script>
+    <script src="/admin/assets/js/avvik.js"></script>
+</body>
+</html>

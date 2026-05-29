@@ -449,13 +449,13 @@
                     </div>
 
                     <div class="settings-grid" style="margin-bottom: 20px;">
-                        <div class="setting-item disabled">
+                        <div class="setting-item">
                             <div class="setting-info">
-                                <div class="setting-title">⚠️ Vis Avvik-modul <span style="font-size:11px; color:var(--text-light); font-weight:normal;">(kommer snart)</span></div>
+                                <div class="setting-title">⚠️ Vis Avvik-modul</div>
                                 <div class="setting-description">Aktiverer avvik-håndtering i planleggeren</div>
                             </div>
                             <label class="toggle-switch">
-                                <input type="checkbox" id="show-avvik-module-toggle" disabled>
+                                <input type="checkbox" id="show-avvik-module-toggle">
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
@@ -999,6 +999,7 @@ async function saveCompanyInfo() {
                         show_avansert_tab: document.getElementById('show-avansert-tab-toggle').checked,
                         show_periode_tab: document.getElementById('show-periode-tab-toggle').checked,
                         show_avvik_module: document.getElementById('show-avvik-module-toggle').checked,
+                        enable_deviations_management: document.getElementById('show-avvik-module-toggle').checked,
                         default_tab: selectedDefault ? selectedDefault.value : 'avansert',
                     };
                     const response = await fetch('/api/images/save-settings', {

@@ -97,6 +97,7 @@ module.exports = async () => {
 
   // Other admin API routes, now protected by their own middleware
   app.use('/api/admin/customers', require('./routes/admin/customers'));
+  app.use('/api/admin/deviations', require('./routes/admin/deviations'));
   app.use('/api/admin/technicians', require('./routes/admin/technicians'));
   app.use('/api/admin/orders', require('./routes/admin/orders'));
   app.use('/api/admin/reports', require('./routes/admin/reports'));

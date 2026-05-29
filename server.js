@@ -335,6 +335,7 @@ setupSession().then(() => {
       app.use('/api/admin/auth', require('./src/routes/admin-auth'));
       app.use('/api/admin/orders', require('./src/routes/admin/orders'));
       app.use('/api/admin/customers', require('./src/routes/admin/customers'));
+      app.use('/api/admin/deviations', require('./src/routes/admin/deviations'));
       app.use('/api/admin/technicians', require('./src/routes/admin/technicians'));
       //app.use('/api/admin/products', require('./src/routes/admin/products'));
       app.use('/api/admin/checklist-templates', require('./src/routes/checklist-templates'));
