@@ -52,6 +52,7 @@ jest.mock('puppeteer', () => {
 const express = require('express');
 const request = require('supertest');
 const deviationsRouter = require('../src/routes/admin/deviations');
+const { generateDeviationsPdf } = require('../src/services/deviationsExport');
 
 const MOCK_DEVIATIONS = [
   { id: 1, equipmentName: 'Pumpe A', checklistItemLabel: 'Trykk OK', status: 'open', severity: 'høy', openedAt: new Date('2026-01-15'), closedAt: null, assignedToName: 'Ola Nordmann', deadline: new Date('2026-03-01'), observationCount: 2, closureMode: null, closureComment: null },
@@ -121,6 +122,11 @@ describe('GET /api/admin/deviations/export — PDF', () => {
     const res = await request(makeApp()).get('/api/admin/deviations/export?format=pdf');
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('application/pdf');
+  });
+
+  test('generateDeviationsPdf returnerer Buffer-instans', async () => {
+    const result = await generateDeviationsPdf([], {});
+    expect(Buffer.isBuffer(result)).toBe(true);
   });
 
   test('Content-Disposition attachment med riktig filnavn-mønster', async () => {

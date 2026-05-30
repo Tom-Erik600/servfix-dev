@@ -205,7 +205,7 @@ async function generateDeviationsPdf(deviations, tenantSettings = {}, options = 
       margin: { top: '20mm', bottom: '20mm', left: '15mm', right: '15mm' }
     });
     await page.close();
-    return pdfBuffer;
+    return Buffer.from(pdfBuffer);
   } finally {
     await browser.close();
   }

@@ -147,6 +147,8 @@ router.get('/export', async (req, res) => {
       res.status(200)
         .type('application/pdf')
         .setHeader('Content-Disposition', `attachment; filename="avvik-${tenantId}-${today}.pdf"`)
+        .setHeader('Content-Length', pdfBuffer.length)
+        .setHeader('Cache-Control', 'no-transform')
         .send(pdfBuffer);
       return;
     }

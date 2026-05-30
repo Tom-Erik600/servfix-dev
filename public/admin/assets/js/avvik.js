@@ -558,6 +558,8 @@ function formatClosureMode(mode) {
     async function triggerExport() {
         const format = document.querySelector('input[name="exportFormat"]:checked')?.value || 'csv';
         const scope = document.querySelector('input[name="exportScope"]:checked')?.value || 'filtered';
+        const exportBtn = document.getElementById('avvikExportSubmit');
+        const originalBtnHtml = exportBtn ? exportBtn.innerHTML : '';
 
         // Bygg URL med filter-params hvis scope=filtered
         const params = new URLSearchParams({ format, scope });
@@ -572,7 +574,13 @@ function formatClosureMode(mode) {
             }
         }
 
-        submitBtn.disabled = true;
+        if (exportBtn) {
+            exportBtn.disabled = true;
+            exportBtn.innerHTML = '⏳ Eksporterer...';
+            exportBtn.style.opacity = '0.7';
+            exportBtn.style.cursor = 'not-allowed';
+        }
+
         errorDiv.style.display = 'none';
 
         try {
@@ -613,7 +621,12 @@ function formatClosureMode(mode) {
         } catch (err) {
             showExportError('Nettverksfeil — prøv igjen.');
         } finally {
-            submitBtn.disabled = false;
+            if (exportBtn) {
+                exportBtn.disabled = false;
+                exportBtn.innerHTML = originalBtnHtml || 'Last ned';
+                exportBtn.style.opacity = '1';
+                exportBtn.style.cursor = 'pointer';
+            }
         }
     }
 
