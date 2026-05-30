@@ -518,6 +518,11 @@ PDF-rapporten genereres av `UnifiedPDFGenerator` og inneholder:
 4. Kan ta flere bilder per avvik.
 5. Avviket vises i PDF-rapporten med bilde, nummer og kommentar.
 
+#### 4.5b Admin oppfølging av avvik
+Når en tekniker registrerer et avvik, blir dette tilgjengelig for administrator i **Avvikshåndterings-modulen**. Her kan administrator tildele avviket til en tekniker for utbedring, sette tidsfrister, og følge status frem til avviket er lukket. 
+
+For detaljert beskrivelse av administrasjon, API og arbeidsflyt for oppfølging, se [avvik-admin.md](avvik-admin.md).
+
 **Visning i PDF:**
 - Avviksbilder kan vises som **store bilder** (innstilling per tenant: `reportSettings.largeAvvikImages`)
 - Hvert avvik nummereres for referanse
