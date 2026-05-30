@@ -29,3 +29,12 @@ npm-debug.log*
 # OS files
 .DS_Store
 Thumbs.db
+
+# Agent runtime artifacts (OhMyOpenCode / Playwright MCP)
+.omo/tmp/
+.omo/drafts/
+.omo/evidence/
+.omo/reports/
+.omo/run-continuation/
+.omo/boulder.json
+.playwright-mcp/
