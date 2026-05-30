@@ -3,7 +3,9 @@
     "allow": [
       "Bash(node node_modules/.bin/jest tests/sja-features.test.js --no-coverage)",
       "Bash(npm ls:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(Get-ChildItem -Path \"c:\\\\apps\\\\servfix-dev\" -Force)",
+      "Bash(Select-Object Name, Mode)"
     ]
   }
 }
