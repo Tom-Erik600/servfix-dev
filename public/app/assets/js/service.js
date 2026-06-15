@@ -3470,6 +3470,11 @@ case 'konsekvensgrad_dropdown':
             default:
                 console.log(`  ⚠️ Unknown input type: ${item.inputType}`);
         }
+
+        if (result && typeof result === 'object' && result.outcome) {
+            const outcomeBtn = document.querySelector(`#avvik-${item.id} .outcome-btn[data-outcome="${result.outcome}"]`);
+            setOutcomeBtnActive(outcomeBtn, true);
+        }
         
         // Handle subpoints recursively
         if (item.hasSubpoints && item.subpoints) {
@@ -3508,6 +3513,7 @@ function setupEventListeners() {
     
     // Status buttons
     document.getElementById('checklist-items-container')?.addEventListener('click', handleStatusClick);
+document.getElementById('checklist-items-container')?.addEventListener('click', handleOutcomeClick);
     
     // Finalize button
     document.getElementById('finalize-report-btn')?.addEventListener('click', finalizeAnlegg);
@@ -3609,6 +3615,67 @@ function focusContainerInput(container) {
     }
 }
 
+const OUTCOME_ITEM_TYPES = ['ok_avvik', 'ok_avvik_comment', 'ok_avvik_image', 'ok_avvik_severity', 'ok_byttet_avvik', 'dropdown_ok_avvik', 'dropdown_ok_avvik_comment'];
+
+function outcomeChoiceHTML(itemId) {
+    return `
+        <div class="outcome-choice" data-item-id="${itemId}" style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:13px;font-weight:600;color:#495057;">Utfall:</span>
+            <button type="button" class="outcome-btn" data-outcome="fixed_on_site" style="padding:7px 12px;border:1px solid #ced4da;border-radius:6px;background:#fff;font-size:13px;cursor:pointer;">Fikset på stedet</button>
+            <button type="button" class="outcome-btn" data-outcome="wants_quote" style="padding:7px 12px;border:1px solid #ced4da;border-radius:6px;background:#fff;font-size:13px;cursor:pointer;">Ønsker tilbud</button>
+        </div>
+    `;
+}
+
+function setOutcomeBtnActive(btn, active) {
+    if (!btn) return;
+    if (active) {
+        btn.classList.add('active');
+        btn.style.background = '#4A90E2';
+        btn.style.color = '#fff';
+        btn.style.borderColor = '#357ABD';
+    } else {
+        btn.classList.remove('active');
+        btn.style.background = '#fff';
+        btn.style.color = '';
+        btn.style.borderColor = '#ced4da';
+    }
+}
+
+function injectOutcomeChoiceStyleOnce() {
+    if (document.getElementById('outcome-choice-mobile-style')) return;
+    const style = document.createElement('style');
+    style.id = 'outcome-choice-mobile-style';
+    style.textContent = '@media (max-width:768px){.outcome-choice{flex-direction:column !important;align-items:stretch !important;}.outcome-choice .outcome-btn{width:100% !important;}}';
+    document.head.appendChild(style);
+}
+
+function ensureOutcomeChoice(avvikContainer, itemId, itemType) {
+    if (!avvikContainer || !OUTCOME_ITEM_TYPES.includes(itemType)) return;
+    if (avvikContainer.querySelector('.outcome-choice')) return;
+    injectOutcomeChoiceStyleOnce();
+    avvikContainer.insertAdjacentHTML('beforeend', outcomeChoiceHTML(itemId));
+}
+
+function getSelectedOutcome(itemId) {
+    const container = document.getElementById(`avvik-${itemId}`);
+    if (!container) return null;
+    const active = container.querySelector('.outcome-btn.active');
+    return active ? active.dataset.outcome : null;
+}
+
+function handleOutcomeClick(e) {
+    const button = e.target.closest('.outcome-btn');
+    if (!button) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const group = button.closest('.outcome-choice');
+    const wasActive = button.classList.contains('active');
+    if (group) group.querySelectorAll('.outcome-btn').forEach(b => setOutcomeBtnActive(b, false));
+    if (!wasActive) setOutcomeBtnActive(button, true);
+    markFormAsDirty();
+}
+
 function handleStatusClick(e) {
     const button = e.target.closest('.status-btn');
     if (!button) return;
@@ -3654,6 +3721,7 @@ function handleStatusClick(e) {
         if (button.dataset.status === 'avvik' && avvikContainer) {
             avvikContainer.classList.add('show');
             avvikContainer.style.display = 'block';
+            ensureOutcomeChoice(avvikContainer, itemId, itemElement.dataset.itemType);
             if (isServiceV2Page()) {
                 avvikContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 focusContainerInput(avvikContainer);
@@ -4203,7 +4271,12 @@ function getChecklistItemValue(itemId) {
                     result.byttetComment = textarea ? textarea.value : '';
                 }
             }
-            
+
+            if (status === 'avvik') {
+                const oc = getSelectedOutcome(itemId);
+                if (oc) result.outcome = oc;
+            }
+
             return result;
         }
 
@@ -4229,6 +4302,8 @@ function getChecklistItemValue(itemId) {
                         result.avvikComment = textarea.value.trim();
                     }
                 }
+                const oc = getSelectedOutcome(itemId);
+                if (oc) result.outcome = oc;
             }
 
             return result;
@@ -4255,6 +4330,10 @@ function getChecklistItemValue(itemId) {
                     if (comment) result.comment = comment;
                 }
             }
+            if (status === 'avvik') {
+                const oc = getSelectedOutcome(itemId);
+                if (oc) result.outcome = oc;
+            }
             return result;
         }
 
@@ -4275,6 +4354,8 @@ function getChecklistItemValue(itemId) {
                     const textarea = avvikContainer.querySelector('textarea');
                     result.avvikComment = textarea ? textarea.value : '';
                 }
+                const oc = getSelectedOutcome(itemId);
+                if (oc) result.outcome = oc;
             }
             return result;
         }
@@ -4321,6 +4402,11 @@ function getChecklistItemValue(itemId) {
                     result.avvikComment = textarea ? textarea.value : '';
                 }
             }
+
+            if (status === 'avvik') {
+                const oc = getSelectedOutcome(itemId);
+                if (oc) result.outcome = oc;
+            }
             
             return result;
         }
@@ -4352,6 +4438,11 @@ function getChecklistItemValue(itemId) {
                         result.avvikComment = textarea.value.trim();
                     }
                 }
+            }
+
+            if (status === 'avvik') {
+                const oc = getSelectedOutcome(itemId);
+                if (oc) result.outcome = oc;
             }
             
             return result;
@@ -4647,9 +4738,42 @@ function updateFinalizeButtonState() {
     updateServiceWorkspaceSummary();
 }
 
+function validateOutcomesBeforeFinalize() {
+    const checklistData = collectChecklistData();
+    const missingDescription = [];
+    let hasFixedOnSite = false;
+
+    for (const [itemId, data] of Object.entries(checklistData)) {
+        if (!data || data.status !== 'avvik') continue;
+        if (data.outcome === 'wants_quote') {
+            const desc = (data.avvikComment || data.comment || '').trim();
+            if (!desc) missingDescription.push(itemId);
+        } else if (data.outcome === 'fixed_on_site') {
+            hasFixedOnSite = true;
+        }
+    }
+
+    if (missingDescription.length > 0) {
+        showToast('Avvik merket "Ønsker tilbud" må ha en beskrivelse før ferdigstilling.', 'error');
+        const firstItem = document.querySelector(`[data-item-id="${missingDescription[0]}"]`);
+        if (firstItem) firstItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return false;
+    }
+
+    if (hasFixedOnSite) {
+        showToast('Husk å registrere timer/produkter på servicen for avvik som ble fikset på stedet.', 'info');
+    }
+
+    return true;
+}
+
 async function finalizeAnlegg() {
     console.log('🏁 Starting finalize process...');
-    
+
+    if (!validateOutcomesBeforeFinalize()) {
+        return;
+    }
+
     // Vis bekreftelsesmodal
     const confirmed = await showFinalizeConfirmationModal();
     

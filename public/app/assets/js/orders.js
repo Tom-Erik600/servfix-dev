@@ -27,6 +27,19 @@ async function loadHmsSettings() {
     }
 }
 
+let tenantFlags = {};
+
+async function loadTenantFlags() {
+    try {
+        const res = await fetch('/api/tenant/flags', { credentials: 'include' });
+        if (res.ok) {
+            tenantFlags = await res.json();
+        }
+    } catch (e) {
+        console.warn('Kunne ikke hente tenant-flagg, bruker default');
+    }
+}
+
 /**
  * Nullstiller pageState eksplisitt for å unngå at gammel state vises
  * Dette er kritisk for å forhindre race conditions ved navigering
@@ -127,6 +140,7 @@ async function initializePage() {
 
     // Last HMS-innstillinger (for SJA-knapp i footer)
     await loadHmsSettings();
+    await loadTenantFlags();
 
     clearAllImageContainers();
     const orderId = new URLSearchParams(window.location.search).get('id');
@@ -402,7 +416,9 @@ function renderEquipmentList() {
     equipmentHTML += renderQuotesList();
 
     // Legg til "Opprett tilbud" knapp
-    equipmentHTML += `<button class="create-quote-btn" data-action="create-quote">+ Opprett tilbud</button>`;
+    if (tenantFlags.show_manual_quote_button !== false) {
+        equipmentHTML += `<button class="create-quote-btn" data-action="create-quote">+ Opprett tilbud</button>`;
+    }
     if (hmsSettings.sjaPerOrderEnabled !== false) {
         equipmentHTML += `
           <button class="sja-inline-btn" data-action="open-sja">
