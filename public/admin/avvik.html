@@ -220,6 +220,43 @@
         .avvik-radio-group { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
         .avvik-radio-group label { font-size: 13px; color: #374151; cursor: pointer; display: flex; align-items: center; gap: 8px; }
         .avvik-hint { font-size: 11px; color: #9CA3AF; margin: 6px 0 0 0; }
+
+        /* Worklist v1.2 */
+        .avvik-card.worklist-card--wants-quote   { border-left: 4px solid #B45309; }
+        .avvik-card.worklist-card--fixed-on-site { border-left: 4px solid #047857; }
+        .avvik-card.worklist-card--unassessed    { border-left: 4px solid #6B7280; }
+
+        .avvik-card .worklist-card-customer { font-weight: 700; }
+        .avvik-card .worklist-card-meta     { font-weight: 400; }
+
+        .worklist-toggle-bar { padding: 8px 0 16px; font-size: 13px; }
+        .worklist-toggle-bar input[type="checkbox"] { margin-right: 6px; }
+
+        /* Arbeidsliste/Avviksliste faner */
+        .avvik-view-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 0;
+            border-bottom: 2px solid #E5E7EB;
+            padding-bottom: 0;
+        }
+        .avvik-view-tab {
+            display: inline-flex;
+            align-items: center;
+            padding: 9px 20px;
+            border: none;
+            background: transparent;
+            color: #6B7280;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            border-radius: 6px 6px 0 0;
+            transition: color 0.15s, border-color 0.15s, background 0.15s;
+        }
+        .avvik-view-tab:hover  { color: #111827; background: #F9FAFB; }
+        .avvik-view-tab.active { color: #3b82f6; border-bottom-color: #3b82f6; font-weight: 600; }
     </style>
 </head>
 <body>
@@ -236,8 +273,11 @@
                         <h1 class="avvik-title">Avvikshåndtering</h1>
                         <p class="avvik-subtitle">Oversikt og oppfølging av avvik registrert under servicebesøk</p>
                     </div>
-                    <button class="avvik-btn avvik-btn-primary" onclick="loadDeviations()" type="button">Oppdater</button>
                     <button id="avvikExportBtn" class="avvik-btn avvik-btn-outline" type="button">Eksporter</button>
+                </div>
+                <div class="avvik-view-tabs" id="view-toggle">
+                    <button type="button" class="avvik-view-tab active" id="view-worklist-btn">Arbeidsliste</button>
+                    <button type="button" class="avvik-view-tab" id="view-list-btn">Avviksliste</button>
                 </div>
 
                 <div class="avvik-filters">
@@ -303,15 +343,36 @@
                                 <th>Obs.</th>
                                 <th>Tildelt</th>
                                 <th>Deadline</th>
+                                <th>Kunde</th>
+                                <th>Beskrivelse</th>
+                                <th>Utført av</th>
+                                <th>Rapport</th>
                             </tr>
                         </thead>
                         <tbody id="deviations-table-body">
-                            <tr><td colspan="9" style="text-align:center; color:#9CA3AF; padding: 32px;">Laster avvik...</td></tr>
+                            <tr><td colspan="13" style="text-align:center; color:#9CA3AF; padding: 32px;">Laster avvik...</td></tr>
                         </tbody>
                     </table>
                 </div>
 
                 <div id="deviations-pagination" class="avvik-pagination"></div>
+            </div>
+
+            <div id="avvik-worklist-card" class="avvik-card" style="display:none;">
+                <div id="avvik-worklist-error" class="avvik-error"></div>
+                <div style="display:flex; align-items:center; gap:16px; margin-bottom:12px; flex-wrap:wrap;">
+                    <select id="worklist-period-filter" onchange="window._avvikSetPeriod(this.value)" style="padding:6px 10px; border:1px solid #D1D5DB; border-radius:6px; font-size:14px; background:white; cursor:pointer;">
+                        <option value="all" selected>Alle</option>
+                        <option value="month">Siste måned</option>
+                        <option value="3months">Siste 3 måneder</option>
+                        <option value="year">Hittil i år</option>
+                    </select>
+                    <label style="font-size:13px; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                        <input type="checkbox" id="worklist-include-sent" onchange="window._avvikToggleIncludeSent()"> Vis også sendte
+                    </label>
+                </div>
+                <div id="worklist-counters" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;"></div>
+                <div id="worklist-orders"></div>
             </div>
         </main>
     </div>

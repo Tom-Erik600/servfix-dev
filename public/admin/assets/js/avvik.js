@@ -1,5 +1,6 @@
 'use strict';
 
+if (typeof document !== 'undefined') {
 document.addEventListener('DOMContentLoaded', async function () {
 
     // ---------------------------------------------------------------------------
@@ -20,6 +21,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     };
     window._avvikState = state;
+
+    let includeSent = false;
+    let worklistPeriod = 'all';
+    let activeOutcomeFilter = null;
+    let worklistOrders = [];
+    let worklistCounters = {};
 
     // ---------------------------------------------------------------------------
     // Element refs
@@ -55,6 +62,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         await loadTechnicians();
         setupEventListeners();
         await loadDeviations();
+        showView('worklist');
     }
 
     // ---------------------------------------------------------------------------
@@ -86,13 +94,13 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function loadDeviations() {
         showGlobalError(null);
-        el.tableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#9CA3AF;padding:24px;">Laster...</td></tr>';
+        el.tableBody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#9CA3AF;padding:24px;">Laster...</td></tr>';
         try {
             const params = buildQueryString();
             const res = await fetch(`/api/admin/deviations?${params}`, { credentials: 'include' });
             if (!res.ok) {
                 showGlobalError('Kunne ikke laste avvik');
-                el.tableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#B91C1C;padding:24px;">Feil ved lasting</td></tr>';
+                el.tableBody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#B91C1C;padding:24px;">Feil ved lasting</td></tr>';
                 return;
             }
             const data = await res.json();
@@ -102,7 +110,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             renderPagination();
         } catch (err) {
             showGlobalError('Nettverksfeil — prøv igjen');
-            el.tableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#B91C1C;padding:24px;">Nettverksfeil</td></tr>';
+            el.tableBody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#B91C1C;padding:24px;">Nettverksfeil</td></tr>';
         }
     }
 
@@ -143,6 +151,198 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     // ---------------------------------------------------------------------------
+    // Arbeidsliste (kommersiell, gruppert per ordre)
+    // ---------------------------------------------------------------------------
+    function getWorklistDateFrom(period) {
+        if (period === 'all') return null;
+        const now = new Date();
+        if (period === 'month') {
+            const d = new Date(now); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 10);
+        }
+        if (period === '3months') {
+            const d = new Date(now); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10);
+        }
+        if (period === 'year') {
+            return `${now.getFullYear()}-01-01`;
+        }
+        return null;
+    }
+
+    async function loadWorklist() {
+        const errEl = document.getElementById('avvik-worklist-error');
+        const ordersEl = document.getElementById('worklist-orders');
+        if (errEl) errEl.textContent = '';
+        ordersEl.innerHTML = '<p style="color:#9CA3AF;padding:24px;text-align:center;">Laster arbeidsliste...</p>';
+        try {
+            const params = new URLSearchParams();
+            if (includeSent) params.set('includeSent', 'true');
+            const dateFrom = getWorklistDateFrom(worklistPeriod);
+            if (dateFrom) params.set('dateFrom', dateFrom);
+            const query = params.toString();
+            const url = '/api/admin/deviations/worklist' + (query ? '?' + query : '');
+            const res = await fetch(url, { credentials: 'include' });
+            if (!res.ok) {
+                ordersEl.innerHTML = '<p style="color:#B91C1C;padding:24px;text-align:center;">Kunne ikke laste arbeidsliste</p>';
+                return;
+            }
+            const data = await res.json();
+            worklistOrders = data.orders || [];
+            worklistCounters = data.counters || {};
+            renderWorklistCounters(worklistCounters);
+            renderWorklistOrders(worklistOrders);
+        } catch (_) {
+            ordersEl.innerHTML = '<p style="color:#B91C1C;padding:24px;text-align:center;">Nettverksfeil — prøv igjen</p>';
+        }
+    }
+
+    function renderWorklistCounters(counters) {
+        const c = counters || { wants_quote: 0, fixed_on_site: 0, unassessed: 0 };
+        const card = (label, value, color, filterKey) => {
+            const isActive = activeOutcomeFilter === filterKey;
+            const clickable = filterKey ? `onclick="window._avvikToggleOutcomeFilter('${filterKey}')" style="flex:1; min-width:140px; background:${isActive ? '#EFF6FF' : '#F9FAFB'}; border:${isActive ? '2px solid #3b82f6' : '1px solid #E5E7EB'}; border-radius:8px; padding:14px; cursor:pointer;"` : `style="flex:1; min-width:140px; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:8px; padding:14px;"`;
+            return `<div ${clickable}>
+                <div style="font-size:24px; font-weight:700; color:${color};">${value}</div>
+                <div style="font-size:13px; color:#6B7280;">${label}</div>
+            </div>`;
+        };
+        document.getElementById('worklist-counters').innerHTML =
+            card('Ønsker tilbud', c.wants_quote, '#B45309', 'wants_quote') +
+            card('Fikset på stedet', c.fixed_on_site, '#047857', 'fixed_on_site') +
+            card('Uvurdert', c.unassessed, '#6B7280', 'unassessed');
+    }
+
+    function outcomeLabel(outcome) {
+        if (outcome === 'wants_quote') return 'Ønsker tilbud';
+        if (outcome === 'fixed_on_site') return 'Fikset på stedet';
+        if (outcome === 'not_applicable') return 'Ikke aktuelt';
+        return 'Uvurdert';
+    }
+
+    function renderWorklistOrders(orders) {
+        const ordersEl = document.getElementById('worklist-orders');
+        if (!orders || !orders.length) {
+            ordersEl.innerHTML = '<p style="color:#9CA3AF;padding:24px;text-align:center;">Ingen avvik å følge opp</p>';
+            return;
+        }
+        const filtered = activeOutcomeFilter
+            ? orders.filter(o => o.deviations.some(d =>
+                activeOutcomeFilter === 'unassessed' ? (d.outcome === null || d.outcome === undefined) : d.outcome === activeOutcomeFilter
+              ))
+            : orders;
+        ordersEl.innerHTML = filtered.map(o => {
+            const devRows = o.deviations.map(d => `
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 0; border-top:1px solid #F3F4F6;">
+                    <div style="flex:1;">
+                        <strong>${escHtml(d.equipmentName || '—')}</strong> · ${escHtml(d.label || '—')}
+                        <div style="font-size:13px; color:#6B7280;">${escHtml(d.summary || '')}</div>
+                    </div>
+                    <span style="font-size:12px; color:#6B7280;">${outcomeLabel(d.outcome)}</span>
+                    <div style="display:flex; gap:6px;">
+                        ${d.quoteId
+                            ? `<button class="avvik-btn avvik-btn-outline" disabled style="opacity:0.4;cursor:not-allowed;" type="button" title="Avvik er knyttet til tilbud">Ikke aktuelt</button>
+                               <button class="avvik-btn avvik-btn-outline" disabled style="opacity:0.4;cursor:not-allowed;" type="button" title="Avvik er knyttet til tilbud">Håndtert</button>`
+                            : `<button class="avvik-btn avvik-btn-outline" type="button" onclick="_avvikWorklistNotApplicable(${d.id})">Ikke aktuelt</button>
+                               <button class="avvik-btn avvik-btn-outline" type="button" onclick="_avvikWorklistHandled(${d.id})">Håndtert</button>`}
+                    </div>
+                </div>`).join('');
+            const reportIdsAttr = encodeURIComponent(JSON.stringify(o.report_ids || []));
+            return `
+                <div class="avvik-card worklist-card--${dominantState(o.stateCounts)}" style="margin-bottom:16px; box-shadow:none; border:1px solid #E5E7EB;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                        <div>
+                            <strong class="worklist-card-customer">${escHtml(o.customer_name || 'Ukjent kunde')}</strong>
+
+                            <div class="worklist-card-meta" style="margin-top:4px;">
+                                ${o.project_description ? `<div>${escHtml(o.project_description)}</div>` : ''}
+                                <div>📍 ${escHtml(o.visit_address || '—')}</div>
+                                <div>Kontakt: ${escHtml(o.contact_name || '—')}${o.contact_phone ? ` · ${escHtml(o.contact_phone)}` : ''}</div>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            ${o.quote_id
+                                ? `<button class="avvik-btn avvik-btn-primary" type="button" onclick="_avvikWorklistEditQuote('${escHtml(o.quote_id)}')">Rediger tilbud</button>`
+                                : `<button class="avvik-btn avvik-btn-primary" type="button" onclick="_avvikWorklistCreateQuote('${escHtml(o.order_id)}')">Lag tilbud</button>`}
+                            <button class="avvik-btn avvik-btn-outline" type="button" onclick="_avvikWorklistSeeReport('${reportIdsAttr}')">Se rapport</button>
+                        </div>
+                    </div>
+                    ${devRows}
+                </div>`;
+        }).join('');
+    }
+
+    async function worklistPut(id, patch) {
+        const errEl = document.getElementById('avvik-worklist-error');
+        if (errEl) errEl.textContent = '';
+        try {
+            const res = await fetch(`/api/admin/deviations/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(patch)
+            });
+            if (!res.ok) {
+                if (errEl) errEl.textContent = 'Kunne ikke oppdatere avvik';
+                return;
+            }
+            await loadWorklist();
+        } catch (_) {
+            if (errEl) errEl.textContent = 'Nettverksfeil — prøv igjen';
+        }
+    }
+
+    async function worklistCreateQuote(orderId) {
+        const errEl = document.getElementById('avvik-worklist-error');
+        if (errEl) errEl.textContent = '';
+        try {
+            const res = await fetch(`/api/admin/deviations/quote-from-order/${encodeURIComponent(orderId)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({})
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                if (body.code === 'ALREADY_QUOTED') {
+                    await loadWorklist();
+                    return;
+                }
+                if (errEl) errEl.textContent = body.error || 'Kunne ikke lage tilbud';
+                return;
+            }
+            const data = await res.json();
+            window.location.href = `/admin/tilbud.html?openQuote=${encodeURIComponent(data.quoteId)}`;
+        } catch (_) {
+            if (errEl) errEl.textContent = 'Nettverksfeil — prøv igjen';
+        }
+    }
+
+    function worklistSeeReport(reportIdsAttr) {
+        let reportIds = [];
+        try { reportIds = JSON.parse(decodeURIComponent(reportIdsAttr)); } catch (_) {}
+        if (!reportIds.length) {
+            const errEl = document.getElementById('avvik-worklist-error');
+            if (errEl) errEl.textContent = 'Ingen rapport funnet for denne ordren';
+            return;
+        }
+        window.open(`/api/admin/reports/${reportIds[0]}/pdf`, '_blank');
+    }
+
+    function showView(view) {
+        const listFilters = document.querySelector('.avvik-filters');
+        const listCard = document.querySelector('.avvik-table-wrap')?.closest('.avvik-card');
+        const worklistCard = document.getElementById('avvik-worklist-card');
+        const listBtn = document.getElementById('view-list-btn');
+        const worklistBtn = document.getElementById('view-worklist-btn');
+        const isWorklist = view === 'worklist';
+        if (listFilters) listFilters.style.display = isWorklist ? 'none' : '';
+        if (listCard) listCard.style.display = isWorklist ? 'none' : '';
+        if (worklistCard) worklistCard.style.display = isWorklist ? 'block' : 'none';
+        document.getElementById('view-worklist-btn')?.classList.toggle('active', isWorklist);
+        document.getElementById('view-list-btn')?.classList.toggle('active', !isWorklist);
+        if (isWorklist) loadWorklist();
+    }
+
+    // ---------------------------------------------------------------------------
     // Query builder
     // ---------------------------------------------------------------------------
     function buildQueryString() {
@@ -162,7 +362,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     // ---------------------------------------------------------------------------
     function renderTable() {
         if (!state.items.length) {
-            el.tableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#9CA3AF;padding:32px;">Ingen avvik funnet</td></tr>';
+            el.tableBody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#9CA3AF;padding:32px;">Ingen avvik funnet</td></tr>';
             return;
         }
         el.tableBody.innerHTML = state.items.map(d => `
@@ -176,6 +376,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td style="text-align:center;">${d.observationCount}</td>
                 <td>${escHtml(d.assignedToName || '—')}</td>
                 <td>${d.deadline ? formatDate(d.deadline) : '—'}</td>
+                <td>${escHtml(d.customerName || '—')}</td>
+                <td>${escHtml(formatOrderDescription(d.orderDescription, d.tripletexOrderId))}</td>
+                <td>${escHtml(d.performedByName || '—')}</td>
+                <td>${reportButtonCell(d.openedInReportId)}</td>
             </tr>
         `).join('');
     }
@@ -276,6 +480,23 @@ document.addEventListener('DOMContentLoaded', async function () {
         window.submitSeverity = submitSeverity;
         window.submitClose = submitClose;
         window.closeLightbox = closeLightbox;
+
+        window._avvikWorklistCreateQuote = worklistCreateQuote;
+        window._avvikWorklistEditQuote = (quoteId) => {
+            window.location.href = `/admin/tilbud.html?openQuote=${encodeURIComponent(quoteId)}`;
+        };
+        window._avvikWorklistSeeReport = worklistSeeReport;
+        window._avvikWorklistNotApplicable = (id) => worklistPut(id, { outcome: 'not_applicable' });
+        window._avvikWorklistHandled = (id) => worklistPut(id, { markHandled: true });
+        window._avvikToggleIncludeSent = () => { includeSent = !includeSent; loadWorklist(); };
+        window._avvikSetPeriod = (period) => { worklistPeriod = period; loadWorklist(); };
+        window._avvikToggleOutcomeFilter = (outcome) => {
+            activeOutcomeFilter = activeOutcomeFilter === outcome ? null : outcome;
+            renderWorklistOrders(worklistOrders);
+            renderWorklistCounters(worklistCounters);
+        };
+        document.getElementById('view-list-btn')?.addEventListener('click', () => showView('list'));
+        document.getElementById('view-worklist-btn')?.addEventListener('click', () => showView('worklist'));
 
         // Internal callbacks used in rendered HTML
         window._avvikOpenDetail = (id) => loadDetail(id);
@@ -469,6 +690,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
 });
+} // Close if document !== undefined
 
 // ---------------------------------------------------------------------------
 // Pure helpers (outside DOMContentLoaded for testability if needed)
@@ -478,6 +700,13 @@ function formatDaysOpen(days) {
     if (days === 0) return 'I dag';
     if (days === 1) return '1 dag';
     return `${days} dager`;
+}
+
+function dominantState(sc) {
+    if (!sc) return 'unassessed';
+    if (sc.wants_quote >= sc.fixed_on_site && sc.wants_quote >= sc.unassessed) return 'wants-quote';
+    if (sc.fixed_on_site >= sc.unassessed) return 'fixed-on-site';
+    return 'unassessed';
 }
 
 function getStatusBadgeClass(status) {
@@ -525,11 +754,24 @@ function formatClosureMode(mode) {
     }[mode] || mode || '—';
 }
 
+function formatOrderDescription(orderDescription, tripletexOrderId) {
+    return orderDescription
+        || (tripletexOrderId ? 'Tripletex #' + tripletexOrderId : null)
+        || '—';
+}
+
+function reportButtonCell(reportId) {
+    if (!reportId) return '—';
+    const encoded = encodeURIComponent(JSON.stringify([reportId]));
+    return `<button style="font-size:0.8em;cursor:pointer;" onclick="_avvikWorklistSeeReport('${encoded}')">Se rapport</button>`;
+}
+
 // ---------------------------------------------------------------------------
 // Eksport-modal
 // ---------------------------------------------------------------------------
 
 (function initExportModal() {
+    if (typeof document === 'undefined') return;
     const btn = document.getElementById('avvikExportBtn');
     const modal = document.getElementById('avvikExportModal');
     const cancelBtn = document.getElementById('avvikExportCancel');
@@ -634,3 +876,7 @@ function formatClosureMode(mode) {
     cancelBtn.addEventListener('click', closeExportModal);
     submitBtn.addEventListener('click', triggerExport);
 })();
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { formatOrderDescription };
+}
