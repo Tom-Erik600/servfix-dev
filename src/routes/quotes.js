@@ -55,6 +55,8 @@ function transformQuoteForFrontend(dbQuote) {
             name: dbQuote.customer_name || customer.name || 'Ukjent kunde',
             ...customer
         },
+        order_description: dbQuote.order_description || '',
+        report_ids: dbQuote.report_ids || [],
         totalAmount: dbQuote.total_amount || 0
     };
 }
@@ -73,7 +75,13 @@ router.get('/', async (req, res) => {
         const result = await pool.query(`
             SELECT q.*, q.items::jsonb as items_data,
                    o.customer_name, o.customer_data,
-                   COALESCE(o.customer_name, 'Ukjent kunde') as customer_name
+                   o.description AS order_description,
+                   COALESCE(o.customer_name, 'Ukjent kunde') as customer_name,
+                   COALESCE(
+                     (SELECT array_agg(sr.id ORDER BY sr.id)
+                        FROM service_reports sr WHERE sr.order_id = q.order_id),
+                     ARRAY[]::varchar[]
+                   ) AS report_ids
             FROM quotes q 
             LEFT JOIN orders o ON q.order_id = o.id
             ORDER BY q.created_at DESC
@@ -180,6 +188,15 @@ router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { description, estimatedHours, products, total_amount, status, items } = req.body;
+        if (status === 'sent') {
+            console.warn(`[WARN] PUT /api/quotes/${id} satt status='sent' direkte. Bruk POST /api/quotes/${id}/mark-as-sent for korrekt sent-flyt. sent_to_customer/sent_date settes IKKE av denne ruten.`);
+        }
+        if (status === 'accepted') {
+            console.warn(`[WARN] PUT /api/quotes/${id} satt status='accepted' direkte. Bruk POST /api/quotes/${id}/mark-accepted.`);
+        }
+        if (status === 'rejected_customer') {
+            console.warn(`[WARN] PUT /api/quotes/${id} satt status='rejected_customer' direkte. Bruk POST /api/quotes/${id}/mark-rejected-customer.`);
+        }
         
         console.log('PUT /api/quotes/:id request:', {
             quoteId: id,
@@ -221,7 +238,12 @@ router.put('/:id', async (req, res) => {
         const completeQuoteResult = await pool.query(`
             SELECT q.*, q.items::jsonb as items_data,
                    o.customer_name, o.customer_data,
-                   COALESCE(o.customer_name, 'Ukjent kunde') as customer_name
+                   COALESCE(o.customer_name, 'Ukjent kunde') as customer_name,
+                   COALESCE(
+                     (SELECT array_agg(sr.id ORDER BY sr.id)
+                        FROM service_reports sr WHERE sr.order_id = q.order_id),
+                     ARRAY[]::varchar[]
+                   ) AS report_ids
             FROM quotes q 
             LEFT JOIN orders o ON q.order_id = o.id
             WHERE q.id = $1
@@ -387,6 +409,96 @@ router.get('/:id/pdf', async (req, res) => {
         if (generator) {
             await generator.close();
         }
+    }
+});
+
+router.post('/:quoteId/mark-as-sent', async (req, res) => {
+    const { quoteId } = req.params;
+    const pool = await db.getTenantConnection(req.tenantId);
+
+    try {
+        const existing = await pool.query(
+            'SELECT 1 FROM quotes WHERE id = $1',
+            [quoteId]
+        );
+        if (existing.rows.length === 0) {
+            return res.status(404).json({ error: 'Tilbud ikke funnet' });
+        }
+
+        const result = await pool.query(
+            'UPDATE quotes SET status = $1, sent_to_customer = true, sent_date = CURRENT_TIMESTAMP WHERE id = $2 RETURNING sent_date',
+            ['sent', quoteId]
+        );
+
+        return res.status(200).json({
+            success: true,
+            quoteId,
+            status: 'sent',
+            sent_to_customer: true,
+            sent_date: result.rows[0].sent_date
+        });
+    } catch (error) {
+        console.error(`mark-as-sent failed for ${quoteId}:`, error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.post('/:quoteId/mark-accepted', async (req, res) => {
+    const { quoteId } = req.params;
+    const pool = await db.getTenantConnection(req.tenantId);
+
+    try {
+        const existing = await pool.query(
+            'SELECT 1 FROM quotes WHERE id = $1',
+            [quoteId]
+        );
+        if (existing.rows.length === 0) {
+            return res.status(404).json({ error: 'Tilbud ikke funnet' });
+        }
+
+        const result = await pool.query(
+            'UPDATE quotes SET status = $1, approved_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING approved_at',
+            ['accepted', quoteId]
+        );
+
+        return res.status(200).json({
+            success: true,
+            quoteId,
+            status: 'accepted',
+            approved_at: result.rows[0].approved_at
+        });
+    } catch (error) {
+        console.error(`mark-accepted failed for ${quoteId}:`, error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.post('/:quoteId/mark-rejected-customer', async (req, res) => {
+    const { quoteId } = req.params;
+    const pool = await db.getTenantConnection(req.tenantId);
+
+    try {
+        const existing = await pool.query(
+            'SELECT 1 FROM quotes WHERE id = $1',
+            [quoteId]
+        );
+        if (existing.rows.length === 0) {
+            return res.status(404).json({ error: 'Tilbud ikke funnet' });
+        }
+
+        await pool.query(
+            'UPDATE quotes SET status = $1 WHERE id = $2',
+            ['rejected_customer', quoteId]
+        );
+
+        return res.status(200).json({
+            success: true,
+            quoteId,
+            status: 'rejected_customer'
+        });
+    } catch (error) {
+        console.error(`mark-rejected-customer failed for ${quoteId}:`, error);
+        return res.status(500).json({ error: 'Internal server error' });
     }
 });
 
