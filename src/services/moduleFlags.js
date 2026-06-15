@@ -29,6 +29,8 @@ function getDefaultModuleFlags() {
     enable_hms_sja: true,
     enable_hms_ros: true,
     enable_notifications: false,
+    // Avvik til omsetning v1: false skjuler manuell tilbudsknapp i tekniker-ordrevisning
+    show_manual_quote_button: true,
   };
 }
 

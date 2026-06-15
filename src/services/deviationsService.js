@@ -81,6 +81,7 @@ async function processReportDeviations(pool, tenantId, reportContext) {
           checklistItemLabel: label,
           severity,
           comment: itemData.avvikComment || itemData.comment || null,
+          outcome: normalizeOutcome(itemData.outcome),
           reportId,
           technicianId
         });
@@ -132,7 +133,7 @@ async function processReportDeviations(pool, tenantId, reportContext) {
 async function createOrUpdateDeviation(pool, params) {
   const {
     equipmentId, checklistItemId, checklistItemLabel,
-    severity, comment, reportId, technicianId
+    severity, comment, outcome, reportId, technicianId
   } = params;
 
   // Sjekk om det finnes en åpen deviation for denne (equipment, item)
@@ -148,9 +149,12 @@ async function createOrUpdateDeviation(pool, params) {
     await addObservation(pool, deviationId, reportId, technicianId, comment, severity);
     await pool.query(
       `UPDATE deviations
-       SET current_summary = $1, current_severity = $2
-       WHERE id = $3`,
-      [comment, severity, deviationId]
+       SET current_summary = $1,
+           current_severity = $2,
+           outcome = CASE WHEN outcome_handled_at IS NULL AND $3::varchar IS NOT NULL
+                          THEN $3 ELSE outcome END
+       WHERE id = $4`,
+      [comment, severity, outcome, deviationId]
     );
     return { action: 'updated', deviationId };
   }
@@ -163,10 +167,10 @@ async function createOrUpdateDeviation(pool, params) {
       `INSERT INTO deviations
          (equipment_id, checklist_item_id, checklist_item_label,
           status, current_severity, current_summary,
-          opened_in_report_id)
-       VALUES ($1, $2, $3, 'open', $4, $5, $6)
+          opened_in_report_id, outcome)
+       VALUES ($1, $2, $3, 'open', $4, $5, $6, $7)
        RETURNING id`,
-      [equipmentId, checklistItemId, checklistItemLabel, severity, comment, reportId]
+      [equipmentId, checklistItemId, checklistItemLabel, severity, comment, reportId, outcome]
     );
     const deviationId = insertResult.rows[0].id;
     await addObservation(pool, deviationId, reportId, technicianId, comment, severity);
@@ -185,8 +189,13 @@ async function createOrUpdateDeviation(pool, params) {
         const deviationId = retry.rows[0].id;
         await addObservation(pool, deviationId, reportId, technicianId, comment, severity);
         await pool.query(
-          `UPDATE deviations SET current_summary = $1, current_severity = $2 WHERE id = $3`,
-          [comment, severity, deviationId]
+          `UPDATE deviations
+           SET current_summary = $1,
+               current_severity = $2,
+               outcome = CASE WHEN outcome_handled_at IS NULL AND $3::varchar IS NOT NULL
+                              THEN $3 ELSE outcome END
+           WHERE id = $4`,
+          [comment, severity, outcome, deviationId]
         );
         return { action: 'updated', deviationId };
       }
@@ -343,6 +352,14 @@ function normalizeSeverity(raw) {
   return 'medium';
 }
 
+const VALID_OUTCOMES = new Set(['fixed_on_site', 'wants_quote', 'not_applicable']);
+
+function normalizeOutcome(raw) {
+  if (!raw) return null;
+  const lower = String(raw).toLowerCase().trim();
+  return VALID_OUTCOMES.has(lower) ? lower : null;
+}
+
 // ---------------------------------------------------------------------------
 // Eksporter
 // ---------------------------------------------------------------------------
@@ -354,4 +371,5 @@ module.exports = {
   closeOpenDeviationIfAny,
   linkImagesToObservations,
   normalizeSeverity,
+  normalizeOutcome,
 };

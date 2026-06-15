@@ -3,9 +3,15 @@
 const { launchBrowserSafely } = require('../utils/safePuppeteer');
 const nodeFetch = globalThis.fetch || require('node-fetch');
 
+function formatOrderDescription(orderDescription, tripletexOrderId) {
+  return orderDescription
+    || (tripletexOrderId ? 'Tripletex #' + tripletexOrderId : null)
+    || '—';
+}
+
 function generateDeviationsCsv(deviations) {
   const BOM = '\uFEFF';
-  const HEADERS = ['id','equipmentName','checklistItemLabel','status','severity','openedAt','daysOpen','assignedToName','deadline','observationCount','closedAt','closureMode','closureComment'];
+  const HEADERS = ['id','equipmentName','checklistItemLabel','status','severity','openedAt','daysOpen','assignedToName','deadline','observationCount','closedAt','closureMode','closureComment','Kunde','Beskrivelse','Utført av','Tripletex prosjektnr'];
 
   function escapeField(value) {
     if (value === null || value === undefined) return '';
@@ -43,7 +49,11 @@ function generateDeviationsCsv(deviations) {
       d.observationCount,
       formatDate(d.closedAt),
       d.closureMode,
-      d.closureComment
+      d.closureComment,
+      d.customerName || '',
+      formatOrderDescription(d.orderDescription, d.tripletexOrderId),
+      d.performedByName || '',
+      d.tripletexOrderId ? String(d.tripletexOrderId) : ''
     ];
     rows.push(fields.map(escapeField).join(','));
   }
@@ -129,6 +139,10 @@ async function generateDeviationsPdf(deviations, tenantSettings = {}, options = 
           <span>Åpnet: ${formatDateNorsk(dev.openedAt)}</span>
           ${dev.deadline ? `<span>Deadline: ${formatDateNorsk(dev.deadline)}</span>` : ''}
           ${dev.assignedToName ? `<span>Tildelt: ${escapeHtml(dev.assignedToName)}</span>` : ''}
+          ${dev.customerName ? `<span>Kunde: ${escapeHtml(dev.customerName)}</span>` : ''}
+          <span>Beskrivelse: ${escapeHtml(formatOrderDescription(dev.orderDescription, dev.tripletexOrderId))}</span>
+          ${dev.performedByName ? `<span>Utført av: ${escapeHtml(dev.performedByName)}</span>` : ''}
+          ${dev.tripletexOrderId ? `<span>Tripletex prosjektnr: ${escapeHtml(String(dev.tripletexOrderId))}</span>` : ''}
         </div>
         ${observations.length > 0 ? `
           <div class="dev-obs">
