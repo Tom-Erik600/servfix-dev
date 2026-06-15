@@ -277,47 +277,70 @@ async function renderHeader() {
 }
 
 function renderCustomerInfo() {
-    // Hent besøksadresse fra customer_data (fysisk adresse)
-    const visitAddress = pageState.customer.physicalAddress || 
-                        pageState.order.customer_data?.physicalAddress || 
-                        'Ikke registrert';
-    
-    // Avtalenummer - sjekk flere mulige kilder
-    const agreementNumber = pageState.order.agreement_number || 
-                           pageState.order.customer_data?.agreementNumber || 
-                           pageState.customer.agreementNumber || 
-                           'Ikke satt';
-    
-    // Service type og beskrivelse fra ordre
-    const serviceType = pageState.order.service_type || 'Generell service';
+    const street = pageState.order.service_address_street;
+    let visitAddress;
+    if (street && street.trim()) {
+        const tail = [pageState.order.service_address_postal_code,
+                      pageState.order.service_address_city]
+                     .filter(Boolean).join(' ').trim();
+        visitAddress = [street.trim(), tail].filter(Boolean).join(', ');
+    } else {
+        visitAddress = pageState.customer.physicalAddress ||
+                       pageState.order.customer_data?.physicalAddress ||
+                       'Ikke registrert';
+    }
+
+    const customerName = pageState.customer?.name ||
+                         pageState.order.customer_name ||
+                         'Ikke registrert';
+
+    // Kontaktperson + telefon — null betyr at raden skjules helt (ingen 'Ikke registrert'-placeholder).
+    const contact = pageState.order.customer_data?.contact ||
+                    pageState.customer.contact ||
+                    null;
+    const phone = pageState.order.customer_data?.contactPhone ||
+                  pageState.customer.phone ||
+                  pageState.order.customer_data?.phone ||
+                  null;
+
     const description = pageState.order.description || 'Ingen beskrivelse';
-    
+
+    const equipmentCount = Array.isArray(pageState.selectedEquipmentIds)
+        ? pageState.selectedEquipmentIds.length
+        : (pageState.equipment?.length || 0);
+
+    const phoneCell = phone
+        ? `<a href="tel:${escapeHTML(phone)}">${escapeHTML(phone)}</a>`
+        : null;
+
     const customerHTML = `
-        <div class="section-header"><h3>👤 Kundeinformasjon</h3></div>
+        <div class="section-header"><h3>📋 Ordreinformasjon</h3></div>
         <div class="customer-card-grid">
             <div class="info-row">
-                <span class="label">Kundenavn</span> 
-                <span class="value">${escapeHTML(pageState.customer.name)}</span>
+                <span class="label">Kundenavn</span>
+                <span class="value">${escapeHTML(customerName)}</span>
             </div>
+            ${contact ? `
             <div class="info-row">
-                <span class="label">Besøksadresse</span> 
+                <span class="label">Kontaktperson</span>
+                <span class="value">${escapeHTML(contact)}</span>
+            </div>` : ''}
+            ${phoneCell ? `
+            <div class="info-row">
+                <span class="label">Telefon</span>
+                <span class="value">${phoneCell}</span>
+            </div>` : ''}
+            <div class="info-row">
+                <span class="label">Besøksadresse</span>
                 <span class="value">${escapeHTML(visitAddress)}</span>
             </div>
             <div class="info-row">
-                <span class="label">Ordrenummer</span> 
-                <span class="value">${escapeHTML(pageState.order.orderNumber)}</span>
-            </div>
-            <div class="info-row">
-                <span class="label">Avtalenummer</span> 
-                <span class="value">${escapeHTML(agreementNumber)}</span>
-            </div>
-            <div class="info-row">
-                <span class="label">Servicetype</span> 
-                <span class="value">${escapeHTML(serviceType)}</span>
+                <span class="label">Anlegg</span>
+                <span class="value">${equipmentCount} stk</span>
             </div>
             <div class="info-row full-width">
-                <span class="label">Beskrivelse</span> 
-                <span class="value">${escapeHTML(description)}</span>
+                <span class="label">Beskrivelse</span>
+                <span class="value" style="font-size: 13px; color: #6b7280;">${escapeHTML(description)}</span>
             </div>
         </div>`;
     document.getElementById('customer-info').innerHTML = customerHTML;
