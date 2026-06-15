@@ -529,9 +529,9 @@
 }
 
 .status-sent {
-    background: linear-gradient(135deg, #dbeafe, #bfdbfe);
-    color: #1e40af;
-    border-color: #3b82f6;
+    background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+    color: #065f46;
+    border-color: #10b981;
 }
 
 .status-accepted {

@@ -18,6 +18,16 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('📋 Tilbud lastet:', allQuotes.length);
             
             renderQuotes(allQuotes);
+
+            const openQuoteId = new URLSearchParams(window.location.search).get('openQuote');
+            if (openQuoteId) {
+                const target = allQuotes.find(q => q.id === openQuoteId);
+                if (target) {
+                    selectQuote(openQuoteId);
+                    openEditModal(target);
+                }
+                window.history.replaceState({}, '', window.location.pathname);
+            }
         } catch (error) {
             console.error('Feil ved lasting av tilbud:', error);
             showToast('Kunne ikke laste tilbud', 'error');
@@ -41,13 +51,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="quote-item ${selectedQuoteId === quote.id ? 'selected' : ''}" 
                  data-quote-id="${quote.id}">
                 <div class="quote-header">
-                    <span class="quote-title">${(quote.description || 'Uten beskrivelse').substring(0, 40)}${(quote.description || '').length > 40 ? '...' : ''}</span>
+                    <span class="quote-title">${quote.customer?.name || 'Ukjent'}</span>
                     <span class="quote-status status-${quote.status}">${getStatusText(quote.status)}</span>
                 </div>
-                <div class="quote-meta">
-                    <strong>Kunde:</strong> ${quote.customer?.name || 'Ukjent'} | 
-                    <strong>Ordre:</strong> ${quote.order?.order_number || quote.order_id}
-                </div>
+                ${quote.created_at ? `
+                    <div class="quote-date">${new Date(quote.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                ` : ''}
                 <div class="quote-description">
                     ${(quote.description || 'Ingen beskrivelse').length > 80 ? (quote.description || '').substring(0, 80) + '...' : (quote.description || 'Ingen beskrivelse')}
                 </div>
@@ -136,7 +145,7 @@ document.addEventListener('DOMContentLoaded', function() {
     detailsContent.innerHTML = `
         <div class="quote-details-header-modern">
             <div class="quote-title-section">
-                <h2 class="quote-title-main">Tilbud #${quote.id}</h2>
+                <h2 class="quote-title-main">${quote.customer?.name || 'Ukjent kunde'}${quote.order_description ? ` – ${quote.order_description}` : ''}</h2>
                 ${quote.status === 'sent' && quote.sent_date ? `
                     <div class="sent-status-badge">
                         <span class="sent-icon">✉️</span>
@@ -159,9 +168,27 @@ document.addEventListener('DOMContentLoaded', function() {
                         ✉️ Send til kunde
                     </button>
                 ` : ''}
+                ${quote.status === 'pending' || quote.status === 'rejected' ? `
+                    <button class="btn-modern btn-mark-sent" onclick="markQuoteAsSent('${quote.id}')">
+                        ✓ Marker som sendt
+                    </button>
+                ` : ''}
+                ${quote.sent_to_customer === true && quote.status === 'sent' ? `
+                    <button class="btn-modern btn-send" onclick="acceptQuote('${quote.id}')">
+                        ✅ Godkjent av kunde
+                    </button>
+                    <button class="btn-modern btn-reject-customer" onclick="rejectQuoteByCustomer('${quote.id}')">
+                        ❌ Avvist av kunde
+                    </button>
+                ` : ''}
                 ${quote.status !== 'accepted' && quote.status !== 'rejected_customer' ? `
                     <button class="btn-modern btn-reject" onclick="rejectQuote('${quote.id}')">
                         ❌ Avvis
+                    </button>
+                ` : ''}
+                ${quote.order_id && quote.report_ids && quote.report_ids.length > 0 ? `
+                    <button type="button" class="btn-modern btn-preview" onclick="viewServiceReportForQuote('${quote.id}')">
+                        📄 Se servicerapport
                     </button>
                 ` : ''}
             </div>
@@ -177,10 +204,19 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         </div>
         
-        <div class="detail-section">
-            <span class="detail-label">Ordre</span>
-            <div class="detail-value">${quote.order?.order_number || `Ordre #${quote.order_id}`}</div>
-        </div>
+        ${quote.created_at ? `
+            <div class="detail-section">
+                <span class="detail-label">Opprettet</span>
+                <div class="detail-value">${new Date(quote.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+            </div>
+        ` : ''}
+
+        ${quote.status === 'accepted' && quote.approved_at ? `
+            <div class="detail-section">
+                <span class="detail-label">Godkjent av kunde</span>
+                <div class="detail-value">${new Date(quote.approved_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+            </div>
+        ` : ''}
         
         <div class="detail-section">
             <span class="detail-label">Beskrivelse</span>
@@ -275,6 +311,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Setup PDF download button
             viewPdfBtn.onclick = async () => {
+                const originalHtml = viewPdfBtn.innerHTML;
+                viewPdfBtn.disabled = true;
+                viewPdfBtn.innerHTML = '⏳ Genererer...';
+                showToast('Genererer PDF...', 'info');
                 try {
                     const response = await fetch(`/api/quotes/${quoteId}/pdf`, {
                         credentials: 'include'
@@ -294,6 +334,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 } catch (error) {
                     console.error('PDF download error:', error);
                     showToast('Kunne ikke laste ned PDF', 'error');
+                } finally {
+                    viewPdfBtn.disabled = false;
+                    viewPdfBtn.innerHTML = originalHtml;
                 }
             };
 
@@ -350,6 +393,64 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 };
 
+window.markQuoteAsSent = async function(quoteId) {
+    if (!confirm('Marker tilbudet som sendt til kunde? (Ingen e-post sendes)')) return;
+    try {
+        const response = await fetch(`/api/quotes/${quoteId}/mark-as-sent`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || `Serverfeil: ${response.status}`);
+        }
+        showToast('Tilbud markert som sendt', 'success');
+        await loadData();
+    } catch (error) {
+        console.error('Error marking quote as sent:', error);
+        showToast('Feil: ' + error.message, 'error');
+    }
+};
+
+window.acceptQuote = async function(quoteId) {
+    if (!confirm('Marker tilbudet som godkjent av kunde?')) return;
+    try {
+        const response = await fetch(`/api/quotes/${quoteId}/mark-accepted`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || `Serverfeil: ${response.status}`);
+        }
+        showToast('Tilbud godkjent av kunde', 'success');
+        await loadData();
+    } catch (error) {
+        console.error('Error accepting quote:', error);
+        showToast('Feil: ' + error.message, 'error');
+    }
+};
+
+window.rejectQuoteByCustomer = async function(quoteId) {
+    const quote = allQuotes.find(q => q.id === quoteId);
+    if (!confirm(`Marker tilbudet som avvist av ${quote?.customer?.name || 'kunde'}?`)) return;
+    try {
+        const response = await fetch(`/api/quotes/${quoteId}/mark-rejected-customer`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || `Serverfeil: ${response.status}`);
+        }
+        showToast('Tilbud avvist av kunde', 'success');
+        await loadData();
+    } catch (error) {
+        console.error('Error rejecting quote by customer:', error);
+        showToast('Feil: ' + error.message, 'error');
+    }
+};
+
     window.rejectQuote = async function(quoteId) {
         const quote = allQuotes.find(q => q.id === quoteId);
         if (!quote) return; 
@@ -372,6 +473,14 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Feil ved oppdatering:', error);
             showToast('Kunne ikke oppdatere tilbud', 'error');
         }
+    };
+    window.viewServiceReportForQuote = function(quoteId) {
+        const quote = allQuotes.find(q => q.id === quoteId);
+        if (!quote || !quote.report_ids || quote.report_ids.length === 0) {
+            showToast('Ingen servicerapport funnet for denne ordren', 'error');
+            return;
+        }
+        window.open(`/api/admin/reports/${quote.report_ids[0]}/pdf`, '_blank');
     };
 
     // Edit Quote Functions
@@ -406,6 +515,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         formContainer.innerHTML = `
             <form id="edit-quote-form">
+                <div id="edit-quote-error" style="display:none; background:#FEF2F2; border:1px solid #FCA5A5; color:#B91C1C; padding:10px 12px; border-radius:6px; margin-bottom:12px; font-size:14px;"></div>
                 <div class="form-group">
                     <label for="edit-description">Beskrivelse</label>
                     <textarea id="edit-description" class="form-control" rows="3" required>${quote.description || ''}</textarea>
@@ -420,18 +530,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     <label for="edit-total-amount">Total pris eks. MVA (kr)</label>
                     <input type="number" id="edit-total-amount" class="form-control" min="0" step="0.01" value="${quote.total_amount || 0}">
                     <small style="color: #6b7280;">Dette er total pris eks. MVA (inkluderer både arbeid og materialer)</small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="edit-status">Status</label>
-                    <select id="edit-status" class="form-control">
-                        <option value="pending" ${quote.status === 'pending' ? 'selected' : ''}>Venter</option>
-                        <option value="sent" ${quote.status === 'sent' ? 'selected' : ''}>Sendt</option>
-                        <option value="accepted" ${quote.status === 'accepted' ? 'selected' : ''}>Godkjent</option>
-                        <option value="rejected" ${quote.status === 'rejected' ? 'selected' : ''}>Avvist</option>
-                        <option value="rejected_admin" ${quote.status === 'rejected_admin' ? 'selected' : ''}>Avvist av admin</option>
-                        <option value="rejected_customer" ${quote.status === 'rejected_customer' ? 'selected' : ''}>Avvist av kunde</option>
-                    </select>
                 </div>
                 
                 <div class="form-group">
@@ -454,6 +552,24 @@ document.addEventListener('DOMContentLoaded', function() {
                         <strong>Total estimert pris: <span id="total-estimate">kr 0</span></strong>
                     </div>
                 </div>
+                
+                ${quote.sent_to_customer === true ? `
+                    <div class="form-group">
+                        <label>Status</label>
+                        <div class="sent-readonly-badge">
+                            ✉️ Sendt ${quote.sent_date ? new Date(quote.sent_date).toLocaleDateString('no-NO', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                        </div>
+                    </div>
+                ` : `
+                    <div class="form-group">
+                        <label for="edit-status">Status</label>
+                        <select id="edit-status" class="form-control">
+                            <option value="pending" ${quote.status === 'pending' ? 'selected' : ''}>Venter</option>
+                            <option value="rejected" ${quote.status === 'rejected' ? 'selected' : ''}>Avvist</option>
+                            <option value="rejected_admin" ${quote.status === 'rejected_admin' ? 'selected' : ''}>Avvist av admin</option>
+                        </select>
+                    </div>
+                `}
             </form>
         `;
 
@@ -543,10 +659,14 @@ document.addEventListener('DOMContentLoaded', function() {
             saveBtn.innerHTML = '💾 Lagrer...';
             saveBtn.disabled = true;
 
+            const errBanner = document.getElementById('edit-quote-error');
+            if (errBanner) { errBanner.style.display = 'none'; errBanner.textContent = ''; }
+
             try {
                 const description = document.getElementById('edit-description')?.value?.trim();
                 const estimatedHours = parseFloat(document.getElementById('edit-estimated-hours')?.value) || 0;
-                const status = document.getElementById('edit-status')?.value;
+                const statusEl = document.getElementById('edit-status');
+                const status = statusEl ? statusEl.value : (quote.status || 'pending');
                 
                 const products = [];
                 document.querySelectorAll('.product-item').forEach(item => {
@@ -610,9 +730,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 showToast('Tilbudet ble oppdatert!', 'success');
                 closeEditModal();
                 await loadData();
+                if (selectedQuoteId) {
+                    const updatedQuote = allQuotes.find(q => q.id === selectedQuoteId);
+                    if (updatedQuote) displayQuoteDetails(updatedQuote);
+                }
 
             } catch (error) {
                 console.error('Feil ved lagring av tilbud:', error);
+                if (errBanner) {
+                    errBanner.textContent = `Lagring feilet: ${error.message}`;
+                    errBanner.style.display = 'block';
+                }
                 showToast(`Lagring feilet: ${error.message}`, 'error');
             } finally {
                 saveBtn.innerHTML = originalBtnText;
