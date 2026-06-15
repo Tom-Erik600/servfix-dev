@@ -12,11 +12,11 @@
     "express-session": "^1.17.3",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.5",
-
     "pg": "^8.11.0",
     "puppeteer": "^24.15.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "jest": "^30.3.0",
     "nodemon": "^3.0.0",
     "supertest": "^7.2.2"
@@ -29,6 +29,9 @@
     "test:pdf-integrity": "jest tests/checklist-roundtrip.test.js tests/pdf-image-count.test.js",
     "verify:pdf-integrity": "npm run test:pdf-integrity",
     "cloud-proxy": "C:\\tools\\cloud-sql-proxy.x64.exe --port 5432 servfix-production:europe-north1:servfix-db",
-    "cloud-proxy-test": "C:\\tools\\cloud-sql-proxy.x64.exe --port 5433 servfix-test:europe-north1:servfix-test-db"
+    "cloud-proxy-test": "C:\\tools\\cloud-sql-proxy.x64.exe --port 5433 servfix-test:europe-north1:servfix-test-db",
+    "test:e2e": "playwright test --config=tests/e2e/playwright.config.ts",
+    "test:e2e:headed": "playwright test --config=tests/e2e/playwright.config.ts --headed",
+    "test:e2e:debug": "playwright test --config=tests/e2e/playwright.config.ts --debug"
   }
 }
