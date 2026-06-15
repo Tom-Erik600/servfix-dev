@@ -1,0 +1,4 @@
+.auth-state.json
+.env.e2e
+test-results/
+playwright-report/
