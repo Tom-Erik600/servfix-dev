@@ -80,11 +80,11 @@ describe('GET /api/admin/deviations/export — CSV', () => {
     expect(res.text.charCodeAt(0)).toBe(0xFEFF);
   });
 
-  test('header-rad har eksakt 13 brief-kolonner i riktig rekkefølge', async () => {
+  test('header-rad har eksakt 17 brief-kolonner i riktig rekkefølge', async () => {
     setQueryResponses([{ rows: [{ total: 2 }] }, { rows: MOCK_DEVIATIONS }]);
     const res = await request(makeApp()).get('/api/admin/deviations/export?format=csv');
     const firstLine = res.text.split(/\r?\n/)[0].replace(/^\uFEFF/, '');
-    expect(firstLine.split(',')).toEqual(['id','equipmentName','checklistItemLabel','status','severity','openedAt','daysOpen','assignedToName','deadline','observationCount','closedAt','closureMode','closureComment']);
+    expect(firstLine.split(',')).toEqual(['id','equipmentName','checklistItemLabel','status','severity','openedAt','daysOpen','assignedToName','deadline','observationCount','closedAt','closureMode','closureComment','Kunde','Beskrivelse','Utført av','Tripletex prosjektnr']);
   });
 
   test('escaper intern komma med double-quote wrap', async () => {

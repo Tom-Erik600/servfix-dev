@@ -33,6 +33,7 @@ const { loadModuleFlags } = require('../src/services/moduleFlags');
 const {
   processReportDeviations,
   normalizeSeverity,
+  normalizeOutcome,
   createOrUpdateDeviation,
   closeOpenDeviationIfAny,
   linkImagesToObservations
@@ -425,5 +426,132 @@ describe('linkImagesToObservations()', () => {
 
     const count = await linkImagesToObservations(pool, 'rpt-1');
     expect(count).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeOutcome (Avvik til omsetning v1)
+// ---------------------------------------------------------------------------
+
+describe('normalizeOutcome()', () => {
+  test('gyldige verdier returneres as-is', () => {
+    expect(normalizeOutcome('fixed_on_site')).toBe('fixed_on_site');
+    expect(normalizeOutcome('wants_quote')).toBe('wants_quote');
+    expect(normalizeOutcome('not_applicable')).toBe('not_applicable');
+  });
+
+  test('null/undefined/tom → null', () => {
+    expect(normalizeOutcome(null)).toBeNull();
+    expect(normalizeOutcome(undefined)).toBeNull();
+    expect(normalizeOutcome('')).toBeNull();
+  });
+
+  test('ugyldig verdi → null', () => {
+    expect(normalizeOutcome('foo')).toBeNull();
+    expect(normalizeOutcome('FIXED')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// outcome skrives additivt ved opprettelse / oppdatering
+// ---------------------------------------------------------------------------
+
+describe('createOrUpdateDeviation() — outcome', () => {
+  test('INSERT inkluderer outcome-verdien', async () => {
+    let insertParams = null;
+    const pool = {
+      query: jest.fn(async (sql, params) => {
+        if (sql.includes('SELECT id FROM deviations')) return { rows: [] };
+        if (sql.includes('INSERT INTO deviations')) {
+          insertParams = params;
+          return { rows: [{ id: 1 }] };
+        }
+        if (sql.includes('INSERT INTO deviation_observations')) return { rows: [] };
+        return { rows: [] };
+      })
+    };
+
+    const result = await createOrUpdateDeviation(pool, {
+      equipmentId: 42, checklistItemId: 'item_x', checklistItemLabel: 'Test',
+      severity: 'medium', comment: 'Avvik', outcome: 'wants_quote',
+      reportId: 'rpt-1', technicianId: 'tech-1'
+    });
+
+    expect(result.action).toBe('created');
+    expect(insertParams).toContain('wants_quote');
+  });
+
+  test('UPDATE av eksisterende respekterer admin-kvittering (CASE outcome_handled_at IS NULL)', async () => {
+    let updateSql = null;
+    const pool = {
+      query: jest.fn(async (sql, params) => {
+        if (sql.includes('SELECT id FROM deviations')) return { rows: [{ id: 5 }] };
+        if (sql.includes('INSERT INTO deviation_observations')) return { rows: [] };
+        if (sql.includes('UPDATE deviations')) { updateSql = sql; return { rows: [] }; }
+        return { rows: [] };
+      })
+    };
+
+    const result = await createOrUpdateDeviation(pool, {
+      equipmentId: 42, checklistItemId: 'item_y', checklistItemLabel: 'Test',
+      severity: 'medium', comment: 'Avvik', outcome: 'fixed_on_site',
+      reportId: 'rpt-2', technicianId: 'tech-1'
+    });
+
+    expect(result.action).toBe('updated');
+    expect(updateSql).toContain('outcome_handled_at IS NULL');
+  });
+});
+
+describe('processReportDeviations() — outcome write-through', () => {
+  test("avvik med outcome 'wants_quote' sender outcome til INSERT", async () => {
+    loadModuleFlags.mockResolvedValue(FLAGS_ON);
+    let insertParams = null;
+    const pool = {
+      query: jest.fn(async (sql, params) => {
+        if (sql.includes('FROM equipment e')) return { rows: [] };
+        if (sql.includes('SELECT id FROM deviations')) return { rows: [] };
+        if (sql.includes('INSERT INTO deviations')) { insertParams = params; return { rows: [{ id: 1 }] }; }
+        if (sql.includes('INSERT INTO deviation_observations')) return { rows: [] };
+        if (sql.includes('UPDATE avvik_images')) return { rows: [] };
+        return { rows: [] };
+      })
+    };
+
+    const ctx = {
+      ...BASE_CONTEXT,
+      checklistData: {
+        checklist: { 'item_q': { status: 'avvik', avvikComment: 'Trenger tilbud', outcome: 'wants_quote' } }
+      }
+    };
+
+    const result = await processReportDeviations(pool, 'varingtest', ctx);
+    expect(result.created).toBe(1);
+    expect(insertParams).toContain('wants_quote');
+  });
+
+  test('ugyldig outcome i checklist normaliseres til null', async () => {
+    loadModuleFlags.mockResolvedValue(FLAGS_ON);
+    let insertParams = null;
+    const pool = {
+      query: jest.fn(async (sql, params) => {
+        if (sql.includes('FROM equipment e')) return { rows: [] };
+        if (sql.includes('SELECT id FROM deviations')) return { rows: [] };
+        if (sql.includes('INSERT INTO deviations')) { insertParams = params; return { rows: [{ id: 2 }] }; }
+        if (sql.includes('INSERT INTO deviation_observations')) return { rows: [] };
+        if (sql.includes('UPDATE avvik_images')) return { rows: [] };
+        return { rows: [] };
+      })
+    };
+
+    const ctx = {
+      ...BASE_CONTEXT,
+      checklistData: {
+        checklist: { 'item_bad': { status: 'avvik', avvikComment: 'x', outcome: 'tullball' } }
+      }
+    };
+
+    await processReportDeviations(pool, 'varingtest', ctx);
+    expect(insertParams[insertParams.length - 1]).toBeNull();
   });
 });
