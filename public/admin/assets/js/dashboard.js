@@ -9,12 +9,13 @@ let dashboardTechnicians = [];
 async function loadDashboardData() {
     try {
         // Hent data fra API
-        const [ordersResponse, customersResponse, techniciansResponse, reportsResponse, quotesResponse] = await Promise.all([
+        const [ordersResponse, customersResponse, techniciansResponse, reportsResponse, quotesResponse, worklistResponse] = await Promise.all([
             fetch('/api/admin/orders', { credentials: 'include' }),
             fetch('/api/admin/customers', { credentials: 'include' }),
             fetch('/api/admin/technicians', { credentials: 'include' }),
             fetch('/api/admin/reports', { credentials: 'include' }),
-            fetch('/api/quotes', { credentials: 'include' })
+            fetch('/api/quotes', { credentials: 'include' }),
+            fetch('/api/admin/deviations/worklist', { credentials: 'include' })
         ]);
         
         if (!ordersResponse.ok || !customersResponse.ok || !techniciansResponse.ok || !reportsResponse.ok) {
@@ -33,6 +34,11 @@ async function loadDashboardData() {
             console.error("Klarte ikke å hente tilbudsdata:", quotesResponse.statusText);
         }
 
+        let worklistData = { orders: [] };
+        if (worklistResponse && worklistResponse.ok) {
+            worklistData = await worklistResponse.json().catch(() => ({ orders: [] }));
+        }
+
         // Handle both array and object responses
         const ordersArray = Array.isArray(orders) ? orders : (orders.data || orders.orders || []);
         const customersArray = Array.isArray(customers) ? customers : (customers.data || customers.customers || []);
@@ -45,20 +51,21 @@ async function loadDashboardData() {
             console.warn('⚠️ Ingen ordre funnet! Sjekk at det finnes ordre i databasen.');
         }
         
-        populateDashboard(ordersArray, customersArray, techniciansArray, reportsArray, quotes);
+        populateDashboard(ordersArray, customersArray, techniciansArray, reportsArray, quotes, worklistData);
     } catch (error) {
         console.error("Klarte ikke å laste data for dashbordet:", error);
         showErrorState();
     }
 }
 
-function populateDashboard(orders, customers, technicians, reports, quotes) {
+function populateDashboard(orders, customers, technicians, reports, quotes, worklistData) {
     // Sjekk at vi har gyldige arrays
     orders = orders || [];
     customers = customers || [];
     technicians = technicians || [];
     reports = reports || [];
     quotes = quotes || [];
+    worklistData = worklistData || { orders: [] };
     
     // Lagre globalt for modal-tilgang
     dashboardOrders = orders;
@@ -82,7 +89,7 @@ function populateDashboard(orders, customers, technicians, reports, quotes) {
         }
     });
 
-    populateKpiCards(orders, technicians, reports, quotes);
+    populateKpiCards(orders, technicians, reports, quotes, worklistData);
     populateTodaysTable(orders, customerMap, technicianMap);
     populateWeeklyTable(orders, customerMap, technicianMap);
     populateUnfinishedTable(orders, customerMap, technicianMap); // NY
@@ -133,7 +140,7 @@ function renderDeleteButton(order, orderNumber, customerName) {
     return '';
 }
 
-function populateKpiCards(orders, technicians, reports, quotes) {
+function populateKpiCards(orders, technicians, reports, quotes, worklistData) {
     const today = new Date().toISOString().slice(0, 10);
     const now = new Date();
     const startOfWeek = getStartOfWeek(now);
@@ -242,12 +249,21 @@ function populateKpiCards(orders, technicians, reports, quotes) {
         ? quotes.filter(q => q.status === 'pending' || q.status === 'sent').length
         : 0;
 
+    const tilbudHosKunde = Array.isArray(quotes)
+        ? quotes.filter(q => q.sent_to_customer === true && q.status === 'sent').length
+        : 0;
+    const avvikUhåndtert = (worklistData && Array.isArray(worklistData.orders))
+        ? worklistData.orders.length
+        : 0;
+
     // Oppdater HTML-elementene
     updateKpiElement('kpi-oppdrag-idag', oppdragIDag);
     updateKpiElement('kpi-fullfort-uke', fullfortUke);
     updateKpiElement('kpi-rapporter-ikke-sendt', rapporterIkkeSendt);
     updateKpiElement('kpi-tilbud-venter', tilbudVenter);
     updateKpiElement('kpi-venter-fakturering', venterFakturering);
+    updateKpiElement('kpi-tilbud-hos-kunde', tilbudHosKunde);
+    updateKpiElement('kpi-avvik-uhåndtert', avvikUhåndtert);
 }
 
 function makeKpiCardsClickable() {
@@ -300,6 +316,23 @@ function makeKpiCardsClickable() {
         faktureringKort.addEventListener('mouseleave', () => {
             faktureringKort.style.backgroundColor = '';
         });
+    }
+
+    const tilbudHosKundeKort = document.querySelector('#kpi-tilbud-hos-kunde')?.closest('.kpi-card');
+    if (tilbudHosKundeKort) {
+        tilbudHosKundeKort.style.cursor = 'pointer';
+        tilbudHosKundeKort.classList.add('clickable');
+        tilbudHosKundeKort.addEventListener('click', () => { window.location.href = '/admin/tilbud.html'; });
+        tilbudHosKundeKort.addEventListener('mouseenter', () => { tilbudHosKundeKort.style.backgroundColor = '#f8fafc'; });
+        tilbudHosKundeKort.addEventListener('mouseleave', () => { tilbudHosKundeKort.style.backgroundColor = ''; });
+    }
+    const avvikKort = document.querySelector('#kpi-avvik-uhåndtert')?.closest('.kpi-card');
+    if (avvikKort) {
+        avvikKort.style.cursor = 'pointer';
+        avvikKort.classList.add('clickable');
+        avvikKort.addEventListener('click', () => { window.location.href = '/admin/avvik.html'; });
+        avvikKort.addEventListener('mouseenter', () => { avvikKort.style.backgroundColor = '#f8fafc'; });
+        avvikKort.addEventListener('mouseleave', () => { avvikKort.style.backgroundColor = ''; });
     }
 }
 
